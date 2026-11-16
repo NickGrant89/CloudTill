@@ -12,6 +12,11 @@
   --danger: #a33b2d;
   --font: "DM Sans", system-ui, sans-serif;
   --display: "Fraunces", Georgia, serif;
+  --mobile-topbar-h: 56px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
 }
 
 * {
@@ -22,6 +27,7 @@ html,
 body,
 #root {
   height: 100%;
+  height: 100dvh;
   margin: 0;
 }
 
@@ -32,6 +38,7 @@ body {
     linear-gradient(180deg, #f7f8f6 0%, var(--bg) 40%),
     var(--bg);
   -webkit-font-smoothing: antialiased;
+  overflow: hidden;
 }
 
 button,
@@ -50,6 +57,7 @@ button {
   background: var(--accent);
   color: #fff;
   font-weight: 600;
+  touch-action: manipulation;
 }
 
 button.secondary {
@@ -64,12 +72,15 @@ button.danger {
 
 .login {
   min-height: 100%;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
-  padding: 24px;
+  padding: max(24px, var(--safe-top)) max(24px, var(--safe-right)) max(24px, var(--safe-bottom))
+    max(24px, var(--safe-left));
   background:
     radial-gradient(800px 400px at 20% 0%, #cfd9d2, transparent 60%),
     var(--bg);
+  overflow: auto;
 }
 
 .login-card {
@@ -114,18 +125,25 @@ button.danger {
 }
 
 .shell {
-  display: grid;
-  grid-template-columns: 240px 1fr;
+  display: flex;
+  flex-direction: column;
   height: 100%;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
 }
 
-@media (max-width: 860px) {
-  .shell {
-    grid-template-columns: 1fr;
-  }
-  .sidebar {
-    display: none;
-  }
+.shell-body {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mobile-topbar,
+.nav-backdrop {
+  display: none;
 }
 
 .sidebar {
@@ -136,6 +154,18 @@ button.danger {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .sidebar .brand {
@@ -156,6 +186,7 @@ button.danger {
   color: var(--sidebar-ink);
   font-weight: 500;
   border-radius: 10px;
+  flex-shrink: 0;
 }
 
 .nav-btn.active,
@@ -165,7 +196,9 @@ button.danger {
 
 .main {
   overflow: auto;
-  padding: 24px 28px 40px;
+  min-height: 0;
+  padding: 24px 28px max(40px, calc(24px + var(--safe-bottom)));
+  -webkit-overflow-scrolling: touch;
 }
 
 .page-head {
@@ -218,11 +251,13 @@ button.danger {
   border: 1px solid var(--line);
   border-radius: 14px;
   overflow: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
+  min-width: 520px;
 }
 
 th,
@@ -258,6 +293,7 @@ tr:last-child td {
   border: 1px solid var(--line);
   padding: 0 12px;
   background: #fff;
+  max-width: 100%;
 }
 
 .badge {
@@ -314,10 +350,110 @@ tr:last-child td {
   padding: 12px 8px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   font-size: 0.9rem;
+  flex-shrink: 0;
 }
 
 .top-user button {
   width: 100%;
   margin-top: 10px;
   background: rgba(255, 255, 255, 0.1);
+}
+
+@media (max-width: 860px) {
+  .shell-body {
+    grid-template-columns: 1fr;
+  }
+
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    flex-shrink: 0;
+    min-height: calc(var(--mobile-topbar-h) + var(--safe-top));
+    padding: var(--safe-top) max(12px, var(--safe-right)) 10px max(12px, var(--safe-left));
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .menu-toggle {
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    background: var(--sidebar);
+    font-size: 1.15rem;
+    line-height: 1;
+  }
+
+  .mobile-topbar-copy {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .mobile-brand {
+    font-family: var(--display);
+    font-size: 1.05rem;
+    line-height: 1.1;
+  }
+
+  .mobile-page {
+    color: var(--muted);
+    font-size: 0.82rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mobile-signout {
+    min-height: 40px;
+    padding: 0 12px;
+  }
+
+  .nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: rgba(18, 24, 21, 0.45);
+  }
+
+  .nav-backdrop[hidden] {
+    display: none;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(300px, 86vw);
+    z-index: 50;
+    transform: translateX(-105%);
+    transition: transform 0.22s ease;
+    padding-top: max(18px, var(--safe-top));
+    padding-bottom: max(16px, var(--safe-bottom));
+    padding-left: max(16px, var(--safe-left));
+    box-shadow: 12px 0 40px rgba(0, 0, 0, 0.28);
+  }
+
+  .shell.nav-open .sidebar {
+    transform: translateX(0);
+  }
+
+  .main {
+    padding: 16px max(16px, var(--safe-right)) max(28px, calc(16px + var(--safe-bottom)))
+      max(16px, var(--safe-left));
+  }
+
+  .page-head h2 {
+    font-size: 1.45rem;
+  }
+
+  .cards {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
 }

@@ -242,14 +242,14 @@ export function LowStockToast({ onOpenInventory }: { onOpenInventory?: () => voi
     <div
       style={{
         position: "fixed",
-        right: 20,
-        bottom: 20,
-        zIndex: 40,
+        right: "max(16px, env(safe-area-inset-right, 0px))",
+        bottom: "max(16px, env(safe-area-inset-bottom, 0px))",
+        zIndex: 35,
+        maxWidth: "min(340px, calc(100vw - 32px))",
         background: "#1a2420",
         color: "#f4f0e8",
         padding: "14px 16px",
         borderRadius: 14,
-        maxWidth: 340,
         boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
       }}
     >

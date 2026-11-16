@@ -16,9 +16,14 @@ export function App() {
   const [user, setUser] = useState<User | null>(null);
   const [storeName, setStoreName] = useState("");
   const [page, setPage] = useState<PageId>("dashboard");
+  const [navOpen, setNavOpen] = useState(false);
   const [email, setEmail] = useState("owner@cloudtill.demo");
   const [pin, setPin] = useState("1234");
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    setNavOpen(false);
+  }, [page]);
 
   useEffect(() => {
     const token = getToken();
@@ -109,40 +114,80 @@ export function App() {
     { id: "settings", label: "Settings" },
   ];
 
+  const pageLabel = nav.find((n) => n.id === page)?.label ?? "Back office";
+
   return (
-    <div className="shell">
-      <aside className="sidebar">
-        <div className="brand">CloudTill</div>
-        <p className="sub">{storeName}</p>
-        {nav.map((n) => (
-          <button
-            key={n.id}
-            type="button"
-            className={`nav-btn ${page === n.id ? "active" : ""}`}
-            onClick={() => setPage(n.id)}
-          >
-            {n.label}
-          </button>
-        ))}
-        <div className="top-user">
-          <div>
-            {user.name}
-            <div style={{ color: "#9aaba1" }}>{user.role}</div>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setToken(null);
-              setUser(null);
-            }}
-          >
-            Sign out
-          </button>
+    <div className={`shell${navOpen ? " nav-open" : ""}`}>
+      <header className="mobile-topbar">
+        <button
+          type="button"
+          className="menu-toggle"
+          aria-label={navOpen ? "Close menu" : "Open menu"}
+          aria-expanded={navOpen}
+          aria-controls="bo-sidebar"
+          onClick={() => setNavOpen((open) => !open)}
+        >
+          <span aria-hidden="true">{navOpen ? "✕" : "☰"}</span>
+        </button>
+        <div className="mobile-topbar-copy">
+          <div className="mobile-brand">CloudTill</div>
+          <div className="mobile-page">{pageLabel}</div>
         </div>
-      </aside>
-      <main className="main">
-        <Pages page={page} />
-      </main>
+        <button
+          type="button"
+          className="secondary mobile-signout"
+          onClick={() => {
+            setToken(null);
+            setUser(null);
+          }}
+        >
+          Out
+        </button>
+      </header>
+
+      <div
+        className="nav-backdrop"
+        hidden={!navOpen}
+        onClick={() => setNavOpen(false)}
+        aria-hidden="true"
+      />
+
+      <div className="shell-body">
+        <aside id="bo-sidebar" className="sidebar" aria-label="Back office navigation">
+          <div className="brand">CloudTill</div>
+          <p className="sub">{storeName}</p>
+          <nav className="sidebar-nav">
+            {nav.map((n) => (
+              <button
+                key={n.id}
+                type="button"
+                className={`nav-btn ${page === n.id ? "active" : ""}`}
+                onClick={() => setPage(n.id)}
+              >
+                {n.label}
+              </button>
+            ))}
+          </nav>
+          <div className="top-user">
+            <div>
+              {user.name}
+              <div style={{ color: "#9aaba1" }}>{user.role}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setToken(null);
+                setUser(null);
+              }}
+            >
+              Sign out
+            </button>
+          </div>
+        </aside>
+        <main className="main">
+          <Pages page={page} />
+        </main>
+      </div>
       <LowStockToast onOpenInventory={() => setPage("inventory")} />
     </div>
   );
