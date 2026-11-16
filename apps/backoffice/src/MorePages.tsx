@@ -229,6 +229,14 @@ export function TimeClockPage() {
   );
 }
 
+interface ModifierSet {
+  name: string;
+  minSelect: number;
+  maxSelect: number;
+  options: { name: string; priceCents: number }[];
+  assignments: { groupId: string; itemId: string; itemName: string }[];
+}
+
 export function ModifierEditor({
   itemId,
   itemName,
@@ -247,42 +255,50 @@ export function ModifierEditor({
       modifiers: { id: string; name: string; priceCents: number; active: boolean }[];
     }[]
   >([]);
-  const [groupForm, setGroupForm] = useState({ name: "", minSelect: "0", maxSelect: "1" });
-  const [modForm, setModForm] = useState({ groupId: "", name: "", price: "0" });
+  const [sets, setSets] = useState<ModifierSet[]>([]);
+  const [picked, setPicked] = useState("");
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState("");
 
   async function load() {
-    setGroups(await api(`/catalog/items/${itemId}/modifiers`));
+    const [nextGroups, nextSets] = await Promise.all([
+      api<typeof groups>(`/catalog/items/${itemId}/modifiers`),
+      api<ModifierSet[]>("/catalog/modifier-sets"),
+    ]);
+    setGroups(nextGroups);
+    setSets(nextSets);
+    setReady(true);
   }
 
   useEffect(() => {
-    void load();
+    void load().catch((err) => setError(err instanceof Error ? err.message : "Could not load modifiers"));
   }, [itemId]);
 
-  async function addGroup(e: React.FormEvent) {
-    e.preventDefault();
-    await api(`/catalog/items/${itemId}/modifier-groups`, {
-      method: "POST",
-      body: JSON.stringify({
-        name: groupForm.name,
-        minSelect: parseInt(groupForm.minSelect, 10),
-        maxSelect: parseInt(groupForm.maxSelect, 10),
-      }),
-    });
-    setGroupForm({ name: "", minSelect: "0", maxSelect: "1" });
-    await load();
-  }
+  const available = sets.filter(
+    (set) => !groups.some((group) => group.name.toLowerCase() === set.name.toLowerCase())
+  );
 
-  async function addMod(e: React.FormEvent) {
+  async function addExisting(e: React.FormEvent) {
     e.preventDefault();
-    await api(`/catalog/modifier-groups/${modForm.groupId}/modifiers`, {
-      method: "POST",
-      body: JSON.stringify({
-        name: modForm.name,
-        priceCents: Math.round(parseFloat(modForm.price || "0") * 100),
-      }),
-    });
-    setModForm({ ...modForm, name: "", price: "0" });
-    await load();
+    const set = sets.find((entry) => entry.name === picked);
+    if (!set) return;
+    setError("");
+    try {
+      await api("/catalog/modifier-sets", {
+        method: "POST",
+        body: JSON.stringify({
+          name: set.name,
+          minSelect: set.minSelect,
+          maxSelect: set.maxSelect,
+          options: set.options,
+          itemIds: [itemId],
+        }),
+      });
+      setPicked("");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not add modifier");
+    }
   }
 
   return (
@@ -295,13 +311,13 @@ export function ModifierEditor({
           Close
         </button>
       </div>
+      {error && <p className="error">{error}</p>}
+      {groups.length === 0 && <p style={{ color: "var(--muted)" }}>No modifiers on this item yet.</p>}
       {groups.map((g) => (
         <div key={g.id} style={{ marginBottom: 14 }}>
-          <strong>
-            {g.name}
-          </strong>{" "}
+          <strong>{g.name}</strong>{" "}
           <span style={{ color: "var(--muted)" }}>
-            (min {g.minSelect} · max {g.maxSelect})
+            {g.minSelect > 0 ? "Required" : "Optional"} · {g.maxSelect > 1 ? "pick many" : "pick one"}
           </span>
           <button
             type="button"
@@ -311,65 +327,339 @@ export function ModifierEditor({
               void api(`/catalog/modifier-groups/${g.id}`, { method: "DELETE" }).then(load)
             }
           >
-            Delete group
+            Remove
           </button>
           <ul>
             {g.modifiers
               .filter((m) => m.active)
               .map((m) => (
                 <li key={m.id}>
-                  {m.name} · {money(m.priceCents)}{" "}
-                  <button
-                    type="button"
-                    className="secondary"
-                    style={{ minHeight: 28 }}
-                    onClick={() =>
-                      void api(`/catalog/modifiers/${m.id}`, { method: "DELETE" }).then(load)
-                    }
-                  >
-                    Remove
-                  </button>
+                  {m.name}
+                  {m.priceCents ? ` +${money(m.priceCents)}` : ""}
                 </li>
               ))}
           </ul>
         </div>
       ))}
-      <form onSubmit={(e) => void addGroup(e)} className="grid-2">
+      <form onSubmit={(e) => void addExisting(e)} className="grid-2">
         <div className="field">
-          <label>New group name</label>
-          <input required value={groupForm.name} onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })} />
-        </div>
-        <div className="field">
-          <label>Min / max</label>
-          <div style={{ display: "flex", gap: 8 }}>
-            <input value={groupForm.minSelect} onChange={(e) => setGroupForm({ ...groupForm, minSelect: e.target.value })} />
-            <input value={groupForm.maxSelect} onChange={(e) => setGroupForm({ ...groupForm, maxSelect: e.target.value })} />
-          </div>
-        </div>
-        <button type="submit">Add group</button>
-      </form>
-      <form onSubmit={(e) => void addMod(e)} style={{ marginTop: 12 }} className="grid-2">
-        <div className="field">
-          <label>Group</label>
-          <select required value={modForm.groupId} onChange={(e) => setModForm({ ...modForm, groupId: e.target.value })}>
-            <option value="">Select…</option>
-            {groups.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
+          <label>Add a modifier</label>
+          <select required value={picked} onChange={(e) => setPicked(e.target.value)}>
+            <option value="">
+              {!ready ? "Loading…" : sets.length === 0 ? "No modifiers yet" : available.length ? "Select a modifier…" : "Already on this item"}
+            </option>
+            {available.map((set) => (
+              <option key={set.name} value={set.name}>
+                {set.name}
               </option>
             ))}
           </select>
         </div>
-        <div className="field">
-          <label>Modifier name</label>
-          <input required value={modForm.name} onChange={(e) => setModForm({ ...modForm, name: e.target.value })} />
-        </div>
-        <div className="field">
-          <label>Price ($)</label>
-          <input value={modForm.price} onChange={(e) => setModForm({ ...modForm, price: e.target.value })} />
-        </div>
-        <button type="submit">Add modifier</button>
+        <button type="submit" disabled={!available.length}>
+          Add to {itemName}
+        </button>
       </form>
+    </div>
+  );
+}
+
+export function ModifierLibrary({
+  items,
+  onChange,
+}: {
+  items: { id: string; name: string }[];
+  onChange: () => void;
+}) {
+  const [sets, setSets] = useState<ModifierSet[]>([]);
+  const [selected, setSelected] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState("");
+  const [required, setRequired] = useState(true);
+  const [pickMany, setPickMany] = useState(false);
+  const [options, setOptions] = useState([
+    { name: "", price: "0.00" },
+    { name: "", price: "0.00" },
+  ]);
+  const [itemIds, setItemIds] = useState<string[]>([]);
+  const [createItemIds, setCreateItemIds] = useState<string[]>([]);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  async function load(selectName?: string) {
+    const next = await api<ModifierSet[]>("/catalog/modifier-sets");
+    setSets(next);
+    const nameToKeep = selectName ?? selected;
+    const match = next.find((set) => set.name === nameToKeep);
+    if (match) {
+      setSelected(match.name);
+      setItemIds(match.assignments.map((assignment) => assignment.itemId));
+    } else if (nameToKeep) {
+      setSelected("");
+      setItemIds([]);
+    }
+    return next;
+  }
+
+  useEffect(() => {
+    void load().catch((err) => setError(err instanceof Error ? err.message : "Could not load modifiers"));
+  }, []);
+
+  function toggle(list: string[], id: string, setList: (next: string[]) => void) {
+    setList(list.includes(id) ? list.filter((itemId) => itemId !== id) : [...list, id]);
+  }
+
+  async function createSet(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setNotice("");
+    const cleaned = options
+      .map((option) => ({ name: option.name.trim(), priceCents: Math.round(parseFloat(option.price || "0") * 100) }))
+      .filter((option) => option.name);
+    if (!cleaned.length) {
+      setError("Add at least one option.");
+      return;
+    }
+    if (!createItemIds.length) {
+      setError("Choose at least one item.");
+      return;
+    }
+    try {
+      const result = await api<{ created: { itemName: string }[]; skipped: string[] }>("/catalog/modifier-sets", {
+        method: "POST",
+        body: JSON.stringify({
+          name: name.trim(),
+          minSelect: required ? 1 : 0,
+          maxSelect: pickMany ? Math.max(cleaned.length, 1) : 1,
+          options: cleaned,
+          itemIds: createItemIds,
+        }),
+      });
+      const createdName = name.trim();
+      setName("");
+      setOptions([
+        { name: "", price: "0.00" },
+        { name: "", price: "0.00" },
+      ]);
+      setCreating(false);
+      setCreateItemIds([]);
+      setNotice(
+        result.skipped.length
+          ? `Assigned to ${result.created.length}. Already on ${result.skipped.join(", ")}.`
+          : `Assigned to ${result.created.map((row) => row.itemName).join(", ")}.`
+      );
+      await load(createdName);
+      onChange();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create modifiers");
+    }
+  }
+
+  function chooseSet(name: string) {
+    setSelected(name);
+    setError("");
+    setNotice("");
+    const set = sets.find((entry) => entry.name === name);
+    setItemIds(set ? set.assignments.map((assignment) => assignment.itemId) : []);
+  }
+
+  async function saveAssignment(e: React.FormEvent) {
+    e.preventDefault();
+    const set = sets.find((entry) => entry.name === selected);
+    if (!set) {
+      setError("Select a modifier.");
+      return;
+    }
+    setError("");
+    setNotice("");
+    const current = new Set(set.assignments.map((assignment) => assignment.itemId));
+    const next = new Set(itemIds);
+    const toAdd = itemIds.filter((id) => !current.has(id));
+    const toRemove = set.assignments.filter((assignment) => !next.has(assignment.itemId));
+    if (!toAdd.length && !toRemove.length) {
+      setNotice(`${set.name} is already set that way.`);
+      return;
+    }
+    try {
+      if (toAdd.length) {
+        await api("/catalog/modifier-sets", {
+          method: "POST",
+          body: JSON.stringify({
+            name: set.name,
+            minSelect: set.minSelect,
+            maxSelect: set.maxSelect,
+            options: set.options,
+            itemIds: toAdd,
+          }),
+        });
+      }
+      for (const assignment of toRemove) {
+        await api(`/catalog/modifier-groups/${assignment.groupId}`, { method: "DELETE" });
+      }
+      setNotice(`${set.name} updated.`);
+      await load(set.name);
+      onChange();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not assign modifiers");
+    }
+  }
+
+  async function unassign(groupId: string) {
+    setError("");
+    try {
+      await api(`/catalog/modifier-groups/${groupId}`, { method: "DELETE" });
+      await load();
+      onChange();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not remove modifiers");
+    }
+  }
+
+  const selectedSet = sets.find((set) => set.name === selected);
+
+  return (
+    <div className="modifier-layout">
+      <aside className="modifier-menu" aria-label="Modifier menus">
+        <div className="modifier-menu-head">
+          <strong>Menus</strong>
+          <button type="button" className="secondary" onClick={() => setCreating((open) => !open)}>
+            {creating ? "Close" : "New"}
+          </button>
+        </div>
+        {sets.length === 0 && <p className="modifier-menu-empty">No modifiers yet</p>}
+        {sets.map((set) => (
+          <button
+            key={set.name}
+            type="button"
+            className={`modifier-menu-btn${selected === set.name ? " active" : ""}`}
+            onClick={() => {
+              setCreating(false);
+              chooseSet(set.name);
+            }}
+          >
+            <span>{set.name}</span>
+            <span className="modifier-menu-meta">{set.assignments.length}</span>
+          </button>
+        ))}
+      </aside>
+
+      <div className="panel-box modifier-detail">
+        {error && <p className="error">{error}</p>}
+        {notice && <p style={{ color: "var(--ok, #2f6f4e)" }}>{notice}</p>}
+
+        {creating ? (
+          <form onSubmit={(e) => void createSet(e)}>
+            <h3 style={{ marginTop: 0 }}>New modifier</h3>
+            <div className="grid-2">
+              <div className="field">
+                <label>Name</label>
+                <input required value={name} placeholder="Size, Milk, Extras" onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div className="field">
+                <label>How it works</label>
+                <div style={{ display: "flex", gap: 16, minHeight: 42, alignItems: "center" }}>
+                  <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} />
+                    Required
+                  </label>
+                  <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input type="checkbox" checked={pickMany} onChange={(e) => setPickMany(e.target.checked)} />
+                    Allow more than one
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div className="field">
+              <label>Options</label>
+              {options.map((option, index) => (
+                <div key={index} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                  <input
+                    placeholder="Option name"
+                    value={option.name}
+                    onChange={(e) =>
+                      setOptions((rows) => rows.map((row, i) => (i === index ? { ...row, name: e.target.value } : row)))
+                    }
+                  />
+                  <input
+                    style={{ maxWidth: 120 }}
+                    placeholder="0.00"
+                    value={option.price}
+                    onChange={(e) =>
+                      setOptions((rows) => rows.map((row, i) => (i === index ? { ...row, price: e.target.value } : row)))
+                    }
+                  />
+                </div>
+              ))}
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setOptions((rows) => [...rows, { name: "", price: "0.00" }])}
+              >
+                Add option
+              </button>
+            </div>
+            <div className="field">
+              <label>Assign to items</label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {items.map((item) => (
+                  <label key={item.id} className="badge" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={createItemIds.includes(item.id)}
+                      onChange={() => toggle(createItemIds, item.id, setCreateItemIds)}
+                    />
+                    {item.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <button type="submit">Create and assign</button>
+          </form>
+        ) : selectedSet ? (
+          <form onSubmit={(e) => void saveAssignment(e)}>
+            <h3 style={{ marginTop: 0 }}>{selectedSet.name}</h3>
+            <p style={{ color: "var(--muted)", marginTop: 0 }}>
+              {selectedSet.minSelect > 0 ? "Required" : "Optional"} · {selectedSet.maxSelect > 1 ? "pick many" : "pick one"}
+              {" · "}
+              {selectedSet.options
+                .map((option) => `${option.name}${option.priceCents ? ` +${money(option.priceCents)}` : ""}`)
+                .join(" · ")}
+            </p>
+            <div className="field">
+              <label>Items</label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {items.map((item) => (
+                  <label key={item.id} className="badge" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={itemIds.includes(item.id)}
+                      onChange={() => toggle(itemIds, item.id, setItemIds)}
+                    />
+                    {item.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+              {selectedSet.assignments.map((assignment) => (
+                <button
+                  key={assignment.groupId}
+                  type="button"
+                  className="secondary"
+                  style={{ minHeight: 32 }}
+                  onClick={() => void unassign(assignment.groupId)}
+                >
+                  {assignment.itemName} ×
+                </button>
+              ))}
+            </div>
+            <button type="submit">Save {selectedSet.name}</button>
+          </form>
+        ) : (
+          <p style={{ color: "var(--muted)", margin: 0 }}>
+            Select a modifier from the left menu, or create a new one.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

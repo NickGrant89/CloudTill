@@ -209,6 +209,86 @@ catalogRouter.delete("/items/:id", requireRole("owner", "manager"), async (req, 
   res.status(204).end();
 });
 
+catalogRouter.get("/modifier-sets", async (req: AuthedRequest, res) => {
+  const groups = await prisma.modifierGroup.findMany({
+    where: { item: { storeId: req.user!.storeId, active: true } },
+    include: {
+      modifiers: { where: { active: true } },
+      item: { select: { id: true, name: true } },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  const byName = new Map<
+    string,
+    {
+      name: string;
+      minSelect: number;
+      maxSelect: number;
+      options: { name: string; priceCents: number }[];
+      assignments: { groupId: string; itemId: string; itemName: string }[];
+    }
+  >();
+
+  for (const group of groups) {
+    const assignment = { groupId: group.id, itemId: group.item.id, itemName: group.item.name };
+    const existing = byName.get(group.name.toLowerCase());
+    if (!existing) {
+      byName.set(group.name.toLowerCase(), {
+        name: group.name,
+        minSelect: group.minSelect,
+        maxSelect: group.maxSelect,
+        options: group.modifiers.map((modifier) => ({ name: modifier.name, priceCents: modifier.priceCents })),
+        assignments: [assignment],
+      });
+    } else {
+      existing.assignments.push(assignment);
+    }
+  }
+
+  res.json([...byName.values()]);
+});
+
+catalogRouter.post("/modifier-sets", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const body = z
+    .object({
+      name: z.string().min(1),
+      minSelect: z.number().int().min(0).default(0),
+      maxSelect: z.number().int().min(1).default(1),
+      options: z.array(z.object({ name: z.string().min(1), priceCents: z.number().int() })).min(1),
+      itemIds: z.array(z.string()).min(1),
+    })
+    .parse(req.body);
+
+  const items = await prisma.item.findMany({
+    where: { id: { in: body.itemIds }, storeId: req.user!.storeId, active: true },
+    include: { modifierGroups: { select: { name: true } } },
+  });
+
+  const created: { groupId: string; itemId: string; itemName: string }[] = [];
+  const skipped: string[] = [];
+  for (const item of items) {
+    if (item.modifierGroups.some((group) => group.name.toLowerCase() === body.name.toLowerCase())) {
+      skipped.push(item.name);
+      continue;
+    }
+    const group = await prisma.modifierGroup.create({
+      data: {
+        itemId: item.id,
+        name: body.name.trim(),
+        minSelect: Math.min(body.minSelect, body.maxSelect),
+        maxSelect: body.maxSelect,
+        modifiers: {
+          create: body.options.map((option) => ({ name: option.name.trim(), priceCents: option.priceCents })),
+        },
+      },
+    });
+    created.push({ groupId: group.id, itemId: item.id, itemName: item.name });
+  }
+
+  res.status(201).json({ created, skipped });
+});
+
 catalogRouter.get("/items/:id/modifiers", async (req, res) => {
   const groups = await prisma.modifierGroup.findMany({
     where: { itemId: req.params.id },

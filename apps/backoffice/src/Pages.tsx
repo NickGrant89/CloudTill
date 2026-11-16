@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { api, getToken, money } from "./api";
-import { GiftCardsPage, ModifierEditor, TimeClockPage } from "./MorePages";
+import { GiftCardsPage, ModifierEditor, ModifierLibrary, TimeClockPage } from "./MorePages";
 import { KitchenPage, PrintersPage } from "./KitchenPrinters";
 import { EodPage, LabelsPage, StocktakePage } from "./ExtrasPages";
 
 export type PageId =
   | "dashboard"
   | "catalog"
+  | "modifiers"
   | "inventory"
   | "stocktake"
   | "customers"
@@ -29,6 +30,8 @@ export function Pages({ page }: { page: PageId }) {
       return <Dashboard />;
     case "catalog":
       return <CatalogPage />;
+    case "modifiers":
+      return <ModifiersPage />;
     case "inventory":
       return <InventoryPage />;
     case "stocktake":
@@ -197,7 +200,7 @@ function CatalogPage() {
       <div className="page-head">
         <div>
           <h2>Catalog</h2>
-          <p>Items, variants, categories, modifiers, kits, SKU / barcode, stock toggle</p>
+          <p>Items, variants, categories, kits, SKU / barcode, stock toggle</p>
         </div>
         <button type="button" onClick={() => setShowForm((v) => !v)}>
           {showForm ? "Close" : "Add item"}
@@ -309,6 +312,38 @@ function CatalogPage() {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function ModifiersPage() {
+  const [items, setItems] = useState<{ id: string; name: string }[]>([]);
+  const [error, setError] = useState("");
+
+  async function load() {
+    const rows = await api<
+      {
+        id: string;
+        name: string;
+      }[]
+    >("/catalog/items");
+    setItems(rows.map((item) => ({ id: item.id, name: item.name })));
+  }
+
+  useEffect(() => {
+    void load().catch((err) => setError(err instanceof Error ? err.message : "Could not load catalog"));
+  }, []);
+
+  return (
+    <div>
+      <div className="page-head">
+        <div>
+          <h2>Modifiers</h2>
+          <p>Create modifier menus and assign them to items from the left list</p>
+        </div>
+      </div>
+      {error && <p className="error">{error}</p>}
+      <ModifierLibrary items={items} onChange={() => void load()} />
     </div>
   );
 }
