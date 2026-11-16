@@ -11,6 +11,10 @@ async function main() {
   await prisma.ticket.deleteMany();
   await prisma.cashEvent.deleteMany();
   await prisma.shift.deleteMany();
+  await prisma.giftCardLedger.deleteMany();
+  await prisma.giftCard.deleteMany();
+  await prisma.timeClockEntry.deleteMany();
+  await prisma.inventoryTransfer.deleteMany();
   await prisma.inventoryMovement.deleteMany();
   await prisma.inventoryLevel.deleteMany();
   await prisma.kitComponent.deleteMany();
@@ -366,8 +370,10 @@ async function main() {
       { storeId: store.id, name: "Card", type: "card", opensDrawer: false },
       { storeId: store.id, name: "Other", type: "other", opensDrawer: false },
       { storeId: store.id, name: "Store Credit", type: "store_credit", opensDrawer: false },
+      { storeId: store.id, name: "Gift Card", type: "gift_card", opensDrawer: false },
       { storeId: store2.id, name: "Cash", type: "cash", opensDrawer: true },
       { storeId: store2.id, name: "Card", type: "card", opensDrawer: false },
+      { storeId: store2.id, name: "Gift Card", type: "gift_card", opensDrawer: false },
     ],
   });
 
@@ -518,11 +524,127 @@ async function main() {
     ],
   });
 
+  // Store-to-store transfer (croissant → downtown)
+  const fromLevel = await prisma.inventoryLevel.findUniqueOrThrow({
+    where: { storeId_variantId: { storeId: store.id, variantId: croissant.variant.id } },
+  });
+  await prisma.inventoryLevel.update({
+    where: { id: fromLevel.id },
+    data: { quantity: fromLevel.quantity - 5 },
+  });
+  const toCroissant = await prisma.inventoryLevel.findUnique({
+    where: { storeId_variantId: { storeId: store2.id, variantId: croissant.variant.id } },
+  });
+  if (toCroissant) {
+    await prisma.inventoryLevel.update({
+      where: { id: toCroissant.id },
+      data: { quantity: toCroissant.quantity + 5 },
+    });
+  }
+  await prisma.inventoryTransfer.create({
+    data: {
+      fromStoreId: store.id,
+      toStoreId: store2.id,
+      variantId: croissant.variant.id,
+      quantity: 5,
+      status: "completed",
+      note: "Restock downtown pastry case",
+      employeeId: manager.id,
+    },
+  });
+  await prisma.inventoryMovement.createMany({
+    data: [
+      {
+        storeId: store.id,
+        variantId: croissant.variant.id,
+        type: "transfer",
+        quantity: -5,
+        note: "Transfer to downtown",
+        employeeId: manager.id,
+      },
+      {
+        storeId: store2.id,
+        variantId: croissant.variant.id,
+        type: "transfer",
+        quantity: 5,
+        note: "Transfer from café",
+        employeeId: manager.id,
+      },
+    ],
+  });
+
+  await prisma.giftCard.create({
+    data: {
+      storeId: store.id,
+      code: "GC-DEMO50",
+      initialCents: 5000,
+      balanceCents: 5000,
+      customerId: customers[0].id,
+      status: "active",
+      ledger: {
+        create: {
+          type: "issue",
+          amountCents: 5000,
+          balanceAfter: 5000,
+          note: "Welcome gift card",
+          employeeId: owner.id,
+        },
+      },
+    },
+  });
+  await prisma.giftCard.create({
+    data: {
+      storeId: store.id,
+      code: "GC-PARTIAL",
+      initialCents: 2500,
+      balanceCents: 1800,
+      status: "active",
+      ledger: {
+        create: [
+          {
+            type: "issue",
+            amountCents: 2500,
+            balanceAfter: 2500,
+            note: "Issued",
+            employeeId: manager.id,
+          },
+          {
+            type: "redeem",
+            amountCents: -700,
+            balanceAfter: 1800,
+            note: "Prior redeem",
+            employeeId: cashier.id,
+          },
+        ],
+      },
+    },
+  });
+
+  // Time clock: cashier currently clocked in; manager closed yesterday shift
+  await prisma.timeClockEntry.create({
+    data: {
+      storeId: store.id,
+      employeeId: cashier.id,
+      clockIn: new Date(Date.now() - 3 * 3600000),
+      note: "Front counter",
+    },
+  });
+  await prisma.timeClockEntry.create({
+    data: {
+      storeId: store.id,
+      employeeId: manager.id,
+      clockIn: new Date(Date.now() - 26 * 3600000),
+      clockOut: new Date(Date.now() - 18 * 3600000),
+      note: "Open / close",
+    },
+  });
+
   console.log("Seeded CloudTill demo:");
   console.log("  Store:", store.name);
   console.log("  owner@cloudtill.demo PIN 1234");
   console.log("  manager@cloudtill.demo PIN 2222");
   console.log("  cashier@cloudtill.demo PIN 1111");
+  console.log("  Gift cards: GC-DEMO50 ($50), GC-PARTIAL ($18)");
 }
 
 main()

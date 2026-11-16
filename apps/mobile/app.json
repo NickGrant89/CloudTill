@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "CloudTill",
+    "slug": "cloudtill",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#1a2420"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "demo.cloudtill.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1a2420"
+      },
+      "package": "demo.cloudtill.mobile"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "extra": {
+      "apiUrl": "http://127.0.0.1:4000/api"
+    }
+  }
+}

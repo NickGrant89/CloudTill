@@ -24,12 +24,16 @@ model Store {
   customers          Customer[]
   inventoryLevels    InventoryLevel[]
   inventoryMovements InventoryMovement[]
+  transfersOut       InventoryTransfer[] @relation("TransferFrom")
+  transfersIn        InventoryTransfer[] @relation("TransferTo")
   shifts             Shift[]
   tickets            Ticket[]
   sales              Sale[]
   taxes              Tax[]
   paymentTypes       PaymentType[]
   settings           Setting[]
+  giftCards          GiftCard[]
+  timeEntries        TimeClockEntry[]
 }
 
 model Register {
@@ -56,9 +60,10 @@ model Employee {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  store  Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  shifts Shift[]
-  sales  Sale[]
+  store       Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  shifts      Shift[]
+  sales       Sale[]
+  timeEntries TimeClockEntry[]
 }
 
 model Category {
@@ -183,9 +188,10 @@ model Customer {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  store   Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  tickets Ticket[]
-  sales   Sale[]
+  store     Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  tickets   Ticket[]
+  sales     Sale[]
+  giftCards GiftCard[]
 }
 
 model Tax {
@@ -334,12 +340,70 @@ model SaleLine {
 }
 
 model SalePayment {
-  id              String @id @default(cuid())
+  id              String  @id @default(cuid())
   saleId          String
   paymentTypeId   String
   paymentTypeName String
   amountCents     Int
   tenderedCents   Int?
+  giftCardCode    String?
 
   sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+}
+
+model InventoryTransfer {
+  id           String   @id @default(cuid())
+  fromStoreId  String
+  toStoreId    String
+  variantId    String
+  quantity     Float
+  status       String   @default("completed") // pending | completed | cancelled
+  note         String?
+  employeeId   String?
+  createdAt    DateTime @default(now())
+
+  fromStore Store @relation("TransferFrom", fields: [fromStoreId], references: [id], onDelete: Cascade)
+  toStore   Store @relation("TransferTo", fields: [toStoreId], references: [id], onDelete: Cascade)
+}
+
+model GiftCard {
+  id             String   @id @default(cuid())
+  storeId        String
+  code           String   @unique
+  initialCents   Int
+  balanceCents   Int
+  customerId     String?
+  status         String   @default("active") // active | disabled
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  store    Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer Customer?        @relation(fields: [customerId], references: [id])
+  ledger   GiftCardLedger[]
+}
+
+model GiftCardLedger {
+  id           String   @id @default(cuid())
+  giftCardId   String
+  type         String // issue | redeem | reload | adjust
+  amountCents  Int // signed: + credit, - debit
+  balanceAfter Int
+  saleId       String?
+  note         String?
+  employeeId   String?
+  createdAt    DateTime @default(now())
+
+  giftCard GiftCard @relation(fields: [giftCardId], references: [id], onDelete: Cascade)
+}
+
+model TimeClockEntry {
+  id         String    @id @default(cuid())
+  storeId    String
+  employeeId String
+  clockIn    DateTime  @default(now())
+  clockOut   DateTime?
+  note       String?
+
+  store    Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 }

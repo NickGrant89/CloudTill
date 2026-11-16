@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
+import { loadReceiptData, renderReceipt } from "../receipts.js";
 
 export const salesRouter = Router();
 salesRouter.use(requireAuth);
@@ -170,4 +171,46 @@ salesRouter.post("/:id/refund", requireRole("owner", "manager"), async (req: Aut
     include: { lines: true, payments: true, employee: true, customer: true },
   });
   res.json(mapSale(updated));
+});
+
+salesRouter.get("/:id/receipt", async (req, res) => {
+  const format = (typeof req.query.format === "string" ? req.query.format : "text") as
+    | "text"
+    | "html"
+    | "escpos"
+    | "escpos-base64";
+  const data = await loadReceiptData(req.params.id);
+  const rendered = renderReceipt(data, format);
+  if (format === "escpos") {
+    res.setHeader("Content-Type", rendered.contentType);
+    res.setHeader("Content-Disposition", `attachment; filename="${data.receiptNumber}.bin"`);
+    return res.send(rendered.body);
+  }
+  if (format === "escpos-base64") {
+    res.type("json").send(rendered.body);
+    return;
+  }
+  if (format === "html") {
+    res.type("html").send(rendered.body);
+    return;
+  }
+  res.type("text").send(rendered.body);
+});
+
+salesRouter.post("/:id/print", async (req: AuthedRequest, res) => {
+  const body = z
+    .object({
+      format: z.enum(["text", "html", "escpos-base64"]).default("escpos-base64"),
+      openDrawer: z.boolean().optional(),
+    })
+    .parse(req.body ?? {});
+  const data = await loadReceiptData(req.params.id);
+  const rendered = renderReceipt(data, body.format);
+  res.json({
+    saleId: req.params.id,
+    receiptNumber: data.receiptNumber,
+    format: body.format,
+    openDrawer: body.openDrawer ?? false,
+    payload: body.format === "escpos-base64" ? JSON.parse(String(rendered.body)) : rendered.body,
+  });
 });

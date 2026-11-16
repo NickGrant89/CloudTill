@@ -5,6 +5,7 @@
   "description": "CloudTill — Loyverse-parity cloud POS (web-first)",
   "scripts": {
     "dev": "pnpm -r --parallel --filter @cloudtill/api --filter @cloudtill/pos --filter @cloudtill/backoffice run dev",
+    "dev:mobile": "npm --prefix apps/mobile start",
     "dev:api": "pnpm --filter @cloudtill/api dev",
     "dev:pos": "pnpm --filter @cloudtill/pos dev",
     "dev:bo": "pnpm --filter @cloudtill/backoffice dev",

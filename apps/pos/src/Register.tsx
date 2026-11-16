@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, money } from "./api";
+import { api, getToken, money } from "./api";
 import type { SessionRegister, SessionStore, SessionUser } from "./App";
 
 interface Category {
@@ -97,7 +97,7 @@ type Modal =
   | { type: "customers" }
   | { type: "discount" }
   | { type: "tip" }
-  | { type: "receipt"; text: string; changeCents: number }
+  | { type: "receipt"; text: string; changeCents: number; saleId: string }
   | { type: "shift" }
   | { type: "message"; title: string; body: string };
 
@@ -114,22 +114,26 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [held, setHeld] = useState<Ticket[]>([]);
   const [payAmounts, setPayAmounts] = useState<Record<string, number>>({});
+  const [giftCardCode, setGiftCardCode] = useState("GC-DEMO50");
   const [selectedMods, setSelectedMods] = useState<Record<string, Modifier[]>>({});
   const [busy, setBusy] = useState(false);
+  const [clockedIn, setClockedIn] = useState(false);
 
   const loadCatalog = useCallback(async () => {
-    const [cats, its, pts, sett, curShift] = await Promise.all([
+    const [cats, its, pts, sett, curShift, clock] = await Promise.all([
       api<Category[]>("/catalog/categories"),
       api<Item[]>("/catalog/items"),
       api<PaymentType[]>("/pos/payment-types"),
       api<{ receipt: { header: string; footer: string }; tipPresetsPercent: number[] }>("/settings"),
       api<{ id: string; openingFloatCents: number } | null>(`/shifts/current?registerId=${registerId}`),
+      api<{ clockedIn: boolean }>("/time-clock/status"),
     ]);
     setCategories(cats);
     setItems(its);
     setPaymentTypes(pts);
     setSettings(sett);
     setShift(curShift);
+    setClockedIn(clock.clockedIn);
   }, [registerId]);
 
   const ensureTicket = useCallback(async () => {
@@ -286,6 +290,22 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     setModal({ type: "pay" });
   }
 
+  async function toggleClock() {
+    try {
+      if (clockedIn) await api("/time-clock/clock-out", { method: "POST", body: "{}" });
+      else await api("/time-clock/clock-in", { method: "POST", body: "{}" });
+      const status = await api<{ clockedIn: boolean }>("/time-clock/status");
+      setClockedIn(status.clockedIn);
+      setModal({
+        type: "message",
+        title: "Time clock",
+        body: status.clockedIn ? "Clocked in." : "Clocked out.",
+      });
+    } catch (e) {
+      setModal({ type: "message", title: "Time clock", body: e instanceof Error ? e.message : "Failed" });
+    }
+  }
+
   async function completePay() {
     if (!ticket) return;
     const payments = Object.entries(payAmounts)
@@ -296,6 +316,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
           paymentTypeId,
           amountCents,
           tenderedCents: pt?.type === "cash" ? amountCents : undefined,
+          giftCardCode: pt?.type === "gift_card" ? giftCardCode : undefined,
         };
       });
     if (!payments.length) return;
@@ -303,6 +324,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     try {
       const result = await api<{
         sale: {
+          id: string;
           receiptNumber: string;
           totalCents: number;
           taxCents: number;
@@ -347,7 +369,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
         .filter(Boolean)
         .join("\n");
       setTicket(null);
-      setModal({ type: "receipt", text, changeCents: result.changeCents });
+      setModal({ type: "receipt", text, changeCents: result.changeCents, saleId: s.id });
       void loadCatalog();
     } catch (e) {
       setModal({ type: "message", title: "Payment failed", body: e instanceof Error ? e.message : "Error" });
@@ -405,6 +427,9 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
           ))}
         </select>
         <span style={{ flex: 1 }} />
+        <button type="button" onClick={() => void toggleClock()}>
+          {clockedIn ? "Clock out" : "Clock in"}
+        </button>
         <button type="button" onClick={() => setModal({ type: "shift" })}>
           {shift ? "Shift open" : "Open shift"}
         </button>
@@ -652,6 +677,14 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
                     Exact
                   </button>
                 </div>
+                {pt.type === "gift_card" && (payAmounts[pt.id] ?? 0) > 0 && (
+                  <input
+                    style={{ marginTop: 8 }}
+                    placeholder="Gift card code"
+                    value={giftCardCode}
+                    onChange={(e) => setGiftCardCode(e.target.value.toUpperCase())}
+                  />
+                )}
               </div>
             ))}
             <div className="modal-actions">
@@ -737,8 +770,44 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             {modal.changeCents > 0 && <p>Change due: {money(modal.changeCents)}</p>}
             <pre className="receipt">{modal.text}</pre>
             <div className="modal-actions">
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => {
+                  void fetch(`/api/sales/${modal.saleId}/receipt?format=html`, {
+                    headers: { Authorization: `Bearer ${getToken()}` },
+                  })
+                    .then((r) => r.text())
+                    .then((html) => {
+                      const w = window.open("", "_blank");
+                      if (w) {
+                        w.document.write(html);
+                        w.document.close();
+                      }
+                    });
+                }}
+              >
+                Print HTML
+              </button>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() =>
+                  void api<{ payload: { data: string; textPreview: string } }>(`/sales/${modal.saleId}/print`, {
+                    method: "POST",
+                    body: JSON.stringify({ format: "escpos-base64" }),
+                  }).then((r) => {
+                    const a = document.createElement("a");
+                    a.href = URL.createObjectURL(new Blob([r.payload.data], { type: "text/plain" }));
+                    a.download = `receipt.escpos.b64`;
+                    a.click();
+                  })
+                }
+              >
+                ESC/POS
+              </button>
               <button type="button" className="btn primary" onClick={() => setModal(null)}>
-                Done / reprint later from sales
+                Done
               </button>
             </div>
           </div>

@@ -208,3 +208,87 @@ catalogRouter.delete("/items/:id", requireRole("owner", "manager"), async (req, 
   await prisma.item.update({ where: { id: req.params.id }, data: { active: false } });
   res.status(204).end();
 });
+
+catalogRouter.get("/items/:id/modifiers", async (req, res) => {
+  const groups = await prisma.modifierGroup.findMany({
+    where: { itemId: req.params.id },
+    include: { modifiers: true },
+    orderBy: { name: "asc" },
+  });
+  res.json(groups);
+});
+
+catalogRouter.post("/items/:id/modifier-groups", requireRole("owner", "manager"), async (req, res) => {
+  const body = z
+    .object({
+      name: z.string().min(1),
+      minSelect: z.number().int().optional(),
+      maxSelect: z.number().int().optional(),
+      modifiers: z
+        .array(z.object({ name: z.string(), priceCents: z.number().int().default(0) }))
+        .optional(),
+    })
+    .parse(req.body);
+  const group = await prisma.modifierGroup.create({
+    data: {
+      itemId: req.params.id,
+      name: body.name,
+      minSelect: body.minSelect ?? 0,
+      maxSelect: body.maxSelect ?? 1,
+      modifiers: body.modifiers?.length
+        ? { create: body.modifiers.map((m) => ({ name: m.name, priceCents: m.priceCents })) }
+        : undefined,
+    },
+    include: { modifiers: true },
+  });
+  res.status(201).json(group);
+});
+
+catalogRouter.patch("/modifier-groups/:id", requireRole("owner", "manager"), async (req, res) => {
+  const body = z
+    .object({
+      name: z.string().optional(),
+      minSelect: z.number().int().optional(),
+      maxSelect: z.number().int().optional(),
+    })
+    .parse(req.body);
+  const group = await prisma.modifierGroup.update({
+    where: { id: req.params.id },
+    data: body,
+    include: { modifiers: true },
+  });
+  res.json(group);
+});
+
+catalogRouter.delete("/modifier-groups/:id", requireRole("owner", "manager"), async (req, res) => {
+  await prisma.modifier.deleteMany({ where: { groupId: req.params.id } });
+  await prisma.modifierGroup.delete({ where: { id: req.params.id } });
+  res.status(204).end();
+});
+
+catalogRouter.post("/modifier-groups/:id/modifiers", requireRole("owner", "manager"), async (req, res) => {
+  const body = z
+    .object({ name: z.string().min(1), priceCents: z.number().int().default(0) })
+    .parse(req.body);
+  const mod = await prisma.modifier.create({
+    data: { groupId: req.params.id, name: body.name, priceCents: body.priceCents },
+  });
+  res.status(201).json(mod);
+});
+
+catalogRouter.patch("/modifiers/:id", requireRole("owner", "manager"), async (req, res) => {
+  const body = z
+    .object({
+      name: z.string().optional(),
+      priceCents: z.number().int().optional(),
+      active: z.boolean().optional(),
+    })
+    .parse(req.body);
+  const mod = await prisma.modifier.update({ where: { id: req.params.id }, data: body });
+  res.json(mod);
+});
+
+catalogRouter.delete("/modifiers/:id", requireRole("owner", "manager"), async (req, res) => {
+  await prisma.modifier.update({ where: { id: req.params.id }, data: { active: false } });
+  res.status(204).end();
+});

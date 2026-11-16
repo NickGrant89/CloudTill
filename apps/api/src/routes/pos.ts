@@ -195,6 +195,7 @@ posRouter.post("/tickets/:id/pay", async (req: AuthedRequest, res) => {
             paymentTypeId: z.string(),
             amountCents: z.number().int().positive(),
             tenderedCents: z.number().int().optional(),
+            giftCardCode: z.string().optional(),
           })
         )
         .min(1),
@@ -232,7 +233,8 @@ posRouter.post("/tickets/:id/pay", async (req: AuthedRequest, res) => {
   });
   const ptMap = new Map(paymentTypes.map((p) => [p.id, p]));
 
-  // Store credit deduction
+  // Store credit + gift card deduction (validate first)
+  const { redeemGiftCard } = await import("./giftcards.js");
   for (const p of body.payments) {
     const pt = ptMap.get(p.paymentTypeId);
     if (pt?.type === "store_credit" && ticket.customerId) {
@@ -240,6 +242,23 @@ posRouter.post("/tickets/:id/pay", async (req: AuthedRequest, res) => {
       if (cust.storeCreditCents < p.amountCents) {
         return res.status(400).json({ error: "Insufficient store credit" });
       }
+    }
+    if (pt?.type === "gift_card") {
+      if (!p.giftCardCode) return res.status(400).json({ error: "Gift card code required" });
+      const card = await prisma.giftCard.findFirst({
+        where: { storeId: ticket.storeId, code: p.giftCardCode.toUpperCase(), status: "active" },
+      });
+      if (!card) return res.status(400).json({ error: "Gift card not found" });
+      if (card.balanceCents < p.amountCents) {
+        return res.status(400).json({ error: "Insufficient gift card balance" });
+      }
+    }
+  }
+
+  for (const p of body.payments) {
+    const pt = ptMap.get(p.paymentTypeId);
+    if (pt?.type === "store_credit" && ticket.customerId) {
+      const cust = await prisma.customer.findUniqueOrThrow({ where: { id: ticket.customerId } });
       await prisma.customer.update({
         where: { id: cust.id },
         data: { storeCreditCents: cust.storeCreditCents - p.amountCents },
@@ -290,11 +309,25 @@ posRouter.post("/tickets/:id/pay", async (req: AuthedRequest, res) => {
           paymentTypeName: ptMap.get(p.paymentTypeId)?.name ?? "Payment",
           amountCents: p.amountCents,
           tenderedCents: p.tenderedCents,
+          giftCardCode: p.giftCardCode?.toUpperCase(),
         })),
       },
     },
     include: { lines: true, payments: true, employee: true, customer: true },
   });
+
+  for (const p of body.payments) {
+    const pt = ptMap.get(p.paymentTypeId);
+    if (pt?.type === "gift_card" && p.giftCardCode) {
+      await redeemGiftCard({
+        storeId: ticket.storeId,
+        code: p.giftCardCode,
+        amountCents: p.amountCents,
+        employeeId: req.user!.sub,
+        saleId: sale.id,
+      });
+    }
+  }
 
   // Inventory
   for (const line of ticket.lines) {

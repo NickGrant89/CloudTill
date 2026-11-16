@@ -123,3 +123,126 @@ inventoryRouter.get("/history", async (req: AuthedRequest, res) => {
   });
   res.json(movements);
 });
+
+inventoryRouter.get("/transfers", async (req: AuthedRequest, res) => {
+  const transfers = await prisma.inventoryTransfer.findMany({
+    where: {
+      OR: [{ fromStoreId: req.user!.storeId }, { toStoreId: req.user!.storeId }],
+    },
+    include: {
+      fromStore: true,
+      toStore: true,
+    },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+  const variantIds = [...new Set(transfers.map((t) => t.variantId))];
+  const variants = await prisma.variant.findMany({
+    where: { id: { in: variantIds } },
+    include: { item: true },
+  });
+  const vMap = new Map(variants.map((v) => [v.id, v]));
+  res.json(
+    transfers.map((t) => ({
+      id: t.id,
+      fromStoreId: t.fromStoreId,
+      fromStoreName: t.fromStore.name,
+      toStoreId: t.toStoreId,
+      toStoreName: t.toStore.name,
+      variantId: t.variantId,
+      itemName: vMap.get(t.variantId)?.item.name ?? t.variantId,
+      sku: vMap.get(t.variantId)?.sku ?? "",
+      quantity: t.quantity,
+      status: t.status,
+      note: t.note,
+      employeeId: t.employeeId,
+      createdAt: t.createdAt.toISOString(),
+    }))
+  );
+});
+
+inventoryRouter.post("/transfers", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const body = z
+    .object({
+      fromStoreId: z.string(),
+      toStoreId: z.string(),
+      variantId: z.string(),
+      quantity: z.number().positive(),
+      note: z.string().optional(),
+    })
+    .parse(req.body);
+
+  if (body.fromStoreId === body.toStoreId) {
+    return res.status(400).json({ error: "from and to stores must differ" });
+  }
+
+  const fromLevel = await prisma.inventoryLevel.findUnique({
+    where: { storeId_variantId: { storeId: body.fromStoreId, variantId: body.variantId } },
+  });
+  if (!fromLevel || fromLevel.quantity < body.quantity) {
+    return res.status(400).json({ error: "Insufficient stock at source store" });
+  }
+
+  await prisma.inventoryLevel.update({
+    where: { id: fromLevel.id },
+    data: { quantity: fromLevel.quantity - body.quantity },
+  });
+
+  const toLevel = await prisma.inventoryLevel.findUnique({
+    where: { storeId_variantId: { storeId: body.toStoreId, variantId: body.variantId } },
+  });
+  if (toLevel) {
+    await prisma.inventoryLevel.update({
+      where: { id: toLevel.id },
+      data: { quantity: toLevel.quantity + body.quantity },
+    });
+  } else {
+    await prisma.inventoryLevel.create({
+      data: { storeId: body.toStoreId, variantId: body.variantId, quantity: body.quantity },
+    });
+  }
+
+  await prisma.inventoryMovement.createMany({
+    data: [
+      {
+        storeId: body.fromStoreId,
+        variantId: body.variantId,
+        type: "transfer",
+        quantity: -body.quantity,
+        note: body.note ?? `Transfer to ${body.toStoreId}`,
+        employeeId: req.user!.sub,
+      },
+      {
+        storeId: body.toStoreId,
+        variantId: body.variantId,
+        type: "transfer",
+        quantity: body.quantity,
+        note: body.note ?? `Transfer from ${body.fromStoreId}`,
+        employeeId: req.user!.sub,
+      },
+    ],
+  });
+
+  const transfer = await prisma.inventoryTransfer.create({
+    data: {
+      fromStoreId: body.fromStoreId,
+      toStoreId: body.toStoreId,
+      variantId: body.variantId,
+      quantity: body.quantity,
+      status: "completed",
+      note: body.note,
+      employeeId: req.user!.sub,
+    },
+    include: { fromStore: true, toStore: true },
+  });
+
+  res.status(201).json({
+    id: transfer.id,
+    fromStoreName: transfer.fromStore.name,
+    toStoreName: transfer.toStore.name,
+    variantId: transfer.variantId,
+    quantity: transfer.quantity,
+    status: transfer.status,
+    createdAt: transfer.createdAt.toISOString(),
+  });
+});

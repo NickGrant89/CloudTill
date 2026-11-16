@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, money } from "./api";
+import { api, getToken, money } from "./api";
+import { GiftCardsPage, ModifierEditor, TimeClockPage } from "./MorePages";
 
 export type PageId =
   | "dashboard"
@@ -11,6 +12,8 @@ export type PageId =
   | "sales"
   | "reports"
   | "shifts"
+  | "giftcards"
+  | "timeclock"
   | "settings";
 
 export function Pages({ page }: { page: PageId }) {
@@ -33,6 +36,10 @@ export function Pages({ page }: { page: PageId }) {
       return <ReportsPage />;
     case "shifts":
       return <ShiftsPage />;
+    case "giftcards":
+      return <GiftCardsPage />;
+    case "timeclock":
+      return <TimeClockPage />;
     case "settings":
       return <SettingsPage />;
   }
@@ -112,12 +119,13 @@ function CatalogPage() {
       isComposite: boolean;
       categoryId: string | null;
       variants: { sku: string; barcode: string | null; priceCents: number; trackStock: boolean; stockQty: number }[];
-      modifierGroups: { name: string; modifiers: { name: string }[] }[];
+      modifierGroups: { id: string; name: string; modifiers: { name: string }[] }[];
     }[]
   >([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [q, setQ] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [editMods, setEditMods] = useState<{ id: string; name: string } | null>(null);
   const [form, setForm] = useState({
     name: "",
     categoryId: "",
@@ -232,6 +240,10 @@ function CatalogPage() {
         <span style={{ color: "var(--muted)" }}>{filtered.length} items</span>
       </div>
 
+      {editMods && (
+        <ModifierEditor itemId={editMods.id} itemName={editMods.name} onClose={() => { setEditMods(null); void load(); }} />
+      )}
+
       <div className="table-wrap">
         <table>
           <thead>
@@ -241,7 +253,8 @@ function CatalogPage() {
               <th>Barcode</th>
               <th>Price</th>
               <th>Stock</th>
-              <th>Extras</th>
+              <th>Modifiers</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -264,6 +277,15 @@ function CatalogPage() {
                       ? item.modifierGroups.map((g) => g.name).join(", ")
                       : "—"}
                   </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => setEditMods({ id: item.id, name: item.name })}
+                    >
+                      Edit modifiers
+                    </button>
+                  </td>
                 </tr>
               );
             })}
@@ -284,22 +306,50 @@ function InventoryPage() {
       lowStock: number;
       isLow: boolean;
       storeName: string;
+      storeId: string;
       variantId: string;
       trackStock: boolean;
     }[]
   >([]);
   const [history, setHistory] = useState<{ type: string; quantity: number; note: string | null; createdAt: string; variantId: string }[]>([]);
+  const [transfers, setTransfers] = useState<
+    {
+      id: string;
+      fromStoreName: string;
+      toStoreName: string;
+      itemName: string;
+      sku: string;
+      quantity: number;
+      status: string;
+      createdAt: string;
+      note: string | null;
+    }[]
+  >([]);
+  const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
   const [lowOnly, setLowOnly] = useState(false);
   const [receive, setReceive] = useState({ variantId: "", quantity: "10", note: "" });
+  const [xfer, setXfer] = useState({ fromStoreId: "", toStoreId: "", variantId: "", quantity: "5", note: "" });
 
   async function load() {
-    const [lv, hist] = await Promise.all([
+    const [lv, hist, xfers, allStores] = await Promise.all([
       api<typeof levels>(`/inventory/levels${lowOnly ? "?low=1" : ""}`),
       api<typeof history>("/inventory/history"),
+      api<typeof transfers>("/inventory/transfers"),
+      api<{ id: string; name: string }[]>("/auth/stores"),
     ]);
     setLevels(lv);
     setHistory(hist);
+    setTransfers(xfers);
+    setStores(allStores);
     if (!receive.variantId && lv[0]) setReceive((r) => ({ ...r, variantId: lv[0].variantId }));
+    if (!xfer.fromStoreId && allStores[0]) {
+      setXfer((x) => ({
+        ...x,
+        fromStoreId: allStores[0].id,
+        toStoreId: allStores[1]?.id ?? allStores[0].id,
+        variantId: lv.find((l) => l.trackStock)?.variantId ?? "",
+      }));
+    }
   }
 
   useEffect(() => {
@@ -319,12 +369,31 @@ function InventoryPage() {
     await load();
   }
 
+  async function doTransfer(e: React.FormEvent) {
+    e.preventDefault();
+    await api("/inventory/transfers", {
+      method: "POST",
+      body: JSON.stringify({
+        fromStoreId: xfer.fromStoreId,
+        toStoreId: xfer.toStoreId,
+        variantId: xfer.variantId,
+        quantity: parseFloat(xfer.quantity),
+        note: xfer.note || undefined,
+      }),
+    });
+    await load();
+  }
+
+  const uniqueVariants = Array.from(
+    new Map(levels.filter((l) => l.trackStock).map((l) => [l.variantId, l])).values()
+  );
+
   return (
     <div>
       <div className="page-head">
         <div>
           <h2>Inventory</h2>
-          <p>Levels, receive, low stock, history · multi-store stub included in seed</p>
+          <p>Levels, receive, transfers, low stock, history</p>
         </div>
         <button type="button" className="secondary" onClick={() => setLowOnly((v) => !v)}>
           {lowOnly ? "Show all" : "Low stock only"}
@@ -337,7 +406,7 @@ function InventoryPage() {
           <div className="field">
             <label>Item</label>
             <select value={receive.variantId} onChange={(e) => setReceive({ ...receive, variantId: e.target.value })}>
-              {levels.filter((l) => l.trackStock).map((l) => (
+              {uniqueVariants.map((l) => (
                 <option key={l.variantId} value={l.variantId}>
                   {l.itemName} ({l.sku})
                 </option>
@@ -355,6 +424,82 @@ function InventoryPage() {
         </div>
         <button type="submit">Receive</button>
       </form>
+
+      <form className="panel-box" onSubmit={(e) => void doTransfer(e)}>
+        <h3>Store-to-store transfer</h3>
+        <div className="grid-2">
+          <div className="field">
+            <label>From</label>
+            <select value={xfer.fromStoreId} onChange={(e) => setXfer({ ...xfer, fromStoreId: e.target.value })}>
+              {stores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>To</label>
+            <select value={xfer.toStoreId} onChange={(e) => setXfer({ ...xfer, toStoreId: e.target.value })}>
+              {stores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>Item</label>
+            <select value={xfer.variantId} onChange={(e) => setXfer({ ...xfer, variantId: e.target.value })}>
+              {uniqueVariants.map((l) => (
+                <option key={l.variantId} value={l.variantId}>
+                  {l.itemName} ({l.sku})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>Quantity</label>
+            <input value={xfer.quantity} onChange={(e) => setXfer({ ...xfer, quantity: e.target.value })} />
+          </div>
+          <div className="field">
+            <label>Note</label>
+            <input value={xfer.note} onChange={(e) => setXfer({ ...xfer, note: e.target.value })} />
+          </div>
+        </div>
+        <button type="submit">Transfer</button>
+      </form>
+
+      <div className="table-wrap" style={{ marginBottom: 16 }}>
+        <table>
+          <thead>
+            <tr>
+              <th>When</th>
+              <th>From → To</th>
+              <th>Item</th>
+              <th>Qty</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {transfers.map((t) => (
+              <tr key={t.id}>
+                <td>{new Date(t.createdAt).toLocaleString()}</td>
+                <td>
+                  {t.fromStoreName} → {t.toStoreName}
+                </td>
+                <td>
+                  {t.itemName} ({t.sku})
+                </td>
+                <td>{t.quantity}</td>
+                <td>
+                  <span className="badge">{t.status}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       <div className="table-wrap" style={{ marginBottom: 16 }}>
         <table>
@@ -770,8 +915,12 @@ function SalesPage() {
             </thead>
             <tbody>
               {sales.map((s) => (
-                <tr key={s.id} style={{ cursor: "pointer" }} onClick={() => setSelected(s)}>
-                  <td>{s.receiptNumber}</td>
+                <tr key={s.id}>
+                  <td>
+                    <button type="button" className="secondary" onClick={() => setSelected(s)}>
+                      {s.receiptNumber}
+                    </button>
+                  </td>
                   <td>{s.employeeName}</td>
                   <td>{money(s.totalCents)}</td>
                   <td>
@@ -805,8 +954,49 @@ function SalesPage() {
                   .join("\n")}
               </pre>
               <div className="toolbar">
-                <button type="button" className="secondary" onClick={() => window.print()}>
-                  Reprint
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    const token = getToken();
+                    void fetch(`/api/sales/${selected.id}/receipt?format=html`, {
+                      headers: { Authorization: `Bearer ${token}` },
+                    })
+                      .then((r) => r.text())
+                      .then((html) => {
+                        const w = window.open("", "_blank");
+                        if (w) {
+                          w.document.write(html);
+                          w.document.close();
+                        }
+                      });
+                  }}
+                >
+                  Print HTML
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() =>
+                    void api<{ payload: { data: string; textPreview: string } }>(`/sales/${selected.id}/print`, {
+                      method: "POST",
+                      body: JSON.stringify({ format: "escpos-base64", openDrawer: false }),
+                    }).then((r) => {
+                      const blob = new Blob([r.payload.textPreview], { type: "text/plain" });
+                      const a = document.createElement("a");
+                      a.href = URL.createObjectURL(blob);
+                      a.download = `${selected.receiptNumber}-escpos-preview.txt`;
+                      a.click();
+                      // Also download raw base64 sidecar for bridges
+                      const raw = new Blob([r.payload.data], { type: "text/plain" });
+                      const b = document.createElement("a");
+                      b.href = URL.createObjectURL(raw);
+                      b.download = `${selected.receiptNumber}.escpos.b64`;
+                      b.click();
+                    })
+                  }
+                >
+                  ESC/POS download
                 </button>
                 {selected.status === "completed" && (
                   <>

@@ -135,7 +135,7 @@ settingsRouter.post("/payment-types", requireRole("owner", "manager"), async (re
   const body = z
     .object({
       name: z.string(),
-      type: z.enum(["cash", "card", "other", "store_credit"]),
+      type: z.enum(["cash", "card", "other", "store_credit", "gift_card"]),
       opensDrawer: z.boolean().optional(),
       enabled: z.boolean().optional(),
     })

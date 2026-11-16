@@ -229,3 +229,35 @@ export interface AppSettings {
 
 export const DEFAULT_CURRENCY = "USD";
 export const API_PREFIX = "/api";
+
+export * from "./receipt.js";
+
+export interface GiftCardDto {
+  id: string;
+  code: string;
+  balanceCents: MoneyCents;
+  initialCents: MoneyCents;
+  status: string;
+  customerId?: string | null;
+}
+
+export interface InventoryTransferDto {
+  id: string;
+  fromStoreId: string;
+  toStoreId: string;
+  variantId: string;
+  quantity: number;
+  status: string;
+  note?: string | null;
+  createdAt: string;
+}
+
+export interface TimeClockEntryDto {
+  id: string;
+  employeeId: string;
+  employeeName?: string;
+  storeId: string;
+  clockIn: string;
+  clockOut?: string | null;
+  note?: string | null;
+}

@@ -1,6 +1,6 @@
 # CloudTill
 
-Loyverse-parity **cloud POS** — web-first typed monorepo with a tablet-friendly register, desktop back office, and Express + Prisma API. SQLite by default (Postgres-ready via `DATABASE_URL`).
+Loyverse-parity **cloud POS** — web-first typed monorepo with a tablet-friendly register, desktop back office, Expo mobile scaffold, and Express + Prisma API. SQLite by default (Postgres-ready via `DATABASE_URL`).
 
 ## Quick start
 
@@ -15,11 +15,12 @@ pnpm db:seed
 pnpm dev
 ```
 
-| App | URL |
+| App | URL / command |
 | --- | --- |
 | API | http://localhost:4000/api/health |
 | POS register | http://localhost:5173 |
 | Back office | http://localhost:5174 |
+| Mobile (Expo) | `pnpm --filter @cloudtill/mobile start` — see `apps/mobile/README.md` |
 
 ## Demo logins
 
@@ -29,9 +30,10 @@ pnpm dev
 | Manager | `manager@cloudtill.demo` | `2222` |
 | Cashier | `cashier@cloudtill.demo` | `1111` |
 
-Seed store: **CloudTill Demo Café** (plus a second downtown store stub for multi-store inventory).
+Seed store: **CloudTill Demo Café** (plus **CloudTill Downtown** for multi-store inventory / transfers).
 
-Barcode examples: `1001001001` (Latte), `3003003001` (Croissant).
+- Barcodes: `1001001001` (Latte), `3003003001` (Croissant)
+- Gift cards: `GC-DEMO50` ($50), `GC-PARTIAL` ($18.00 remaining)
 
 ## Monorepo layout
 
@@ -39,7 +41,8 @@ Barcode examples: `1001001001` (Latte), `3003003001` (Croissant).
 apps/api          Express + Prisma API (SQLite / Postgres)
 apps/pos          Vite React tablet POS
 apps/backoffice   Vite React desktop back office
-packages/shared   Shared TypeScript types
+apps/mobile       Expo / React Native scaffold (shared API + @cloudtill/shared)
+packages/shared   Shared TypeScript types + ESC/POS receipt builders
 ```
 
 ## Loyverse feature map
@@ -54,44 +57,61 @@ packages/shared   Shared TypeScript types
 | Tips | Done | Presets + custom |
 | Customers on ticket | Done | Loyalty pts + store credit |
 | Cash / card / other / split pay | Done | Multi-tender checkout |
-| Cash drawer | Done | Auto on cash + manual open |
-| Receipts | Done | On-screen + reprint in sales |
+| Gift card tender | Done | Ledger + POS redeem (`gift_card` type) |
+| Cash drawer | Done | Auto on cash + manual open + ESC/POS kick bytes |
+| Receipts (HTML + ESC/POS) | Done | `/sales/:id/receipt` text/html/escpos; POS + BO print |
 | Shifts / pay in-out / close | Done | Expected vs counted cash |
 | Catalog (items, variants, categories, modifiers, kits, SKU/barcode, stock toggle) | Done | Kit: Breakfast Combo |
-| Inventory (levels, receive, low stock, history) | Done | Multi-store levels stub |
+| Modifier CRUD (back office) | Done | Groups + options per item |
+| Inventory (levels, receive, low stock, history) | Done | Multi-store levels |
+| Store-to-store transfers | Done | Inventory → Transfer form + history |
 | Customers (history, loyalty, credit) | Done | |
+| Gift card ledger | Done | Issue / reload / redeem / adjust |
 | Employees (roles, PIN) | Done | owner / manager / cashier |
-| Stores & registers | Done | Multi-store stub |
-| Sales history (void / refund / reprint) | Done | |
+| Time clock | Done | Clock in/out + timesheet (BO + POS + mobile) |
+| Stores & registers | Done | Multi-store |
+| Sales history (void / refund / reprint) | Done | HTML + ESC/POS download |
 | Reports (sales, item, category, employee, payments, taxes, shifts) | Done | Last-7-days default |
-| Settings (taxes, payment types, receipt, currency) | Done | |
+| Settings (taxes, payment types, receipt, currency) | Done | Includes gift card payment type |
+| Mobile wrap path | Done | Expo scaffold: login, catalog, clock, gift lookup |
 
-### Deferred / roadmap (mobile & depth)
+### Still deferred / next
 
-- **Native mobile apps** via Expo/React Native wrapping the same API (web-first preference)
-- Hardware: real cash drawer ESC/POS, receipt printers, barcode scanners (HID works today)
 - Online ordering / e‑commerce sync
-- Advanced inventory transfers between stores (levels stubbed today)
-- Employee time clock & timesheets
-- Gift cards as first-class ledger (store credit covers the common case)
-- Full modifier editing UI in back office (API + seed modifiers present; POS selection works)
+- Full native register checkout UI inside Expo (web POS remains primary register)
+- Physical printer SDK wiring (we emit ESC/POS bytes + drawer kick for bridges)
 - Postgres production deploy guide / Docker Compose
+
+## Receipt / ESC/POS pipeline
+
+```bash
+# After login, with Bearer token:
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:4000/api/sales/<saleId>/receipt?format=html"
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:4000/api/sales/<saleId>/receipt?format=escpos-base64"
+```
+
+Shared builders live in `@cloudtill/shared` (`buildReceiptText`, `buildReceiptHtml`, `buildEscPosBytes`).
 
 ## Scripts
 
 | Script | Purpose |
 | --- | --- |
+| `pnpm setup` | Install, `.env`, db push, seed |
 | `pnpm dev` | API + POS + back office |
+| `pnpm dev:mobile` | Expo start |
 | `pnpm db:seed` | Reset demo data |
 | `pnpm db:reset` | Recreate SQLite DB + seed |
-| `pnpm build` | Build all packages |
+| `pnpm build` | Build packages (shared + apps that support build) |
 
 ## Stack
 
 - TypeScript monorepo (pnpm workspaces)
 - API: Express, Zod, JWT PIN auth, Prisma
 - DB: SQLite (`file:./dev.db`) — set `DATABASE_URL` to Postgres for production
-- UI: React 19 + Vite, DM Sans / Fraunces
+- UI: React 19 + Vite (POS / BO); Expo RN scaffold (mobile)
+- Typography: DM Sans / Fraunces (web)
 
 ## License
 

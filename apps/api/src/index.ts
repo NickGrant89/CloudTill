@@ -10,6 +10,8 @@ import { employeesRouter } from "./routes/employees.js";
 import { salesRouter } from "./routes/sales.js";
 import { reportsRouter } from "./routes/reports.js";
 import { settingsRouter } from "./routes/settings.js";
+import { giftCardsRouter } from "./routes/giftcards.js";
+import { timeClockRouter } from "./routes/timeclock.js";
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -19,7 +21,7 @@ app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, service: "cloudtill-api", version: "0.1.0" });
+  res.json({ ok: true, service: "cloudtill-api", version: "0.2.0" });
 });
 
 app.use("/api/auth", authRouter);
@@ -32,6 +34,8 @@ app.use("/api/employees", employeesRouter);
 app.use("/api/sales", salesRouter);
 app.use("/api/reports", reportsRouter);
 app.use("/api/settings", settingsRouter);
+app.use("/api/gift-cards", giftCardsRouter);
+app.use("/api/time-clock", timeClockRouter);
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);
