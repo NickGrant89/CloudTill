@@ -5,8 +5,11 @@ Loyverse-parity **cloud POS** — web-first typed monorepo with a tablet-friendl
 ## Quick start
 
 ```bash
+pnpm setup   # install, .env, prisma db push, seed
+# or step-by-step:
 pnpm install
 pnpm --filter @cloudtill/shared build
+cp -n apps/api/.env.example apps/api/.env
 pnpm --filter @cloudtill/api exec prisma db push
 pnpm db:seed
 pnpm dev
