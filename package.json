@@ -1,0 +1,22 @@
+{
+  "name": "cloudtill",
+  "private": true,
+  "version": "0.1.0",
+  "description": "CloudTill — Loyverse-parity cloud POS (web-first)",
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter @cloudtill/api --filter @cloudtill/pos --filter @cloudtill/backoffice run dev",
+    "dev:api": "pnpm --filter @cloudtill/api dev",
+    "dev:pos": "pnpm --filter @cloudtill/pos dev",
+    "dev:bo": "pnpm --filter @cloudtill/backoffice dev",
+    "build": "pnpm -r run build",
+    "db:generate": "pnpm --filter @cloudtill/api db:generate",
+    "db:migrate": "pnpm --filter @cloudtill/api exec prisma db push",
+    "db:seed": "pnpm --filter @cloudtill/api db:seed",
+    "db:reset": "pnpm --filter @cloudtill/api db:reset",
+    "setup": "pnpm install && pnpm --filter @cloudtill/shared build && pnpm db:generate && pnpm db:migrate && pnpm db:seed"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.0"
+}
