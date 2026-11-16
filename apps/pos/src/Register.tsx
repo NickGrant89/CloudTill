@@ -99,7 +99,30 @@ type Modal =
   | { type: "tip" }
   | { type: "receipt"; text: string; changeCents: number; saleId: string }
   | { type: "shift" }
+  | { type: "board" }
+  | { type: "kitchen" }
   | { type: "message"; title: string; body: string };
+
+interface BoardTicket {
+  id: string;
+  name: string;
+  status: string;
+  source: string;
+  kitchenStatus: string | null;
+  lineCount: number;
+  lines: { name: string; quantity: number }[];
+  customerName: string | null;
+  note: string | null;
+}
+
+interface KitchenOrder {
+  id: string;
+  orderNumber: string;
+  customerName: string;
+  status: string;
+  totalCents: number;
+  lines: { name: string; quantity: number }[];
+}
 
 export function Register({ user, store, registers, registerId, onRegisterChange, onLogout }: Props) {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -118,15 +141,23 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   const [selectedMods, setSelectedMods] = useState<Record<string, Modifier[]>>({});
   const [busy, setBusy] = useState(false);
   const [clockedIn, setClockedIn] = useState(false);
+  const [favorites, setFavorites] = useState<Item[]>([]);
+  const [showFavorites, setShowFavorites] = useState(true);
+  const [board, setBoard] = useState<BoardTicket[]>([]);
+  const [kitchenOrders, setKitchenOrders] = useState<KitchenOrder[]>([]);
+  const [tipSuggestions, setTipSuggestions] = useState<
+    { label: string; tipCents: number; percent: number | null }[]
+  >([]);
 
   const loadCatalog = useCallback(async () => {
-    const [cats, its, pts, sett, curShift, clock] = await Promise.all([
+    const [cats, its, pts, sett, curShift, clock, favs] = await Promise.all([
       api<Category[]>("/catalog/categories"),
       api<Item[]>("/catalog/items"),
       api<PaymentType[]>("/pos/payment-types"),
       api<{ receipt: { header: string; footer: string }; tipPresetsPercent: number[] }>("/settings"),
       api<{ id: string; openingFloatCents: number } | null>(`/shifts/current?registerId=${registerId}`),
       api<{ clockedIn: boolean }>("/time-clock/status"),
+      api<Item[]>("/extras/favorites"),
     ]);
     setCategories(cats);
     setItems(its);
@@ -134,6 +165,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     setSettings(sett);
     setShift(curShift);
     setClockedIn(clock.clockedIn);
+    setFavorites(favs);
   }, [registerId]);
 
   const ensureTicket = useCallback(async () => {
@@ -370,6 +402,10 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
         .join("\n");
       setTicket(null);
       setModal({ type: "receipt", text, changeCents: result.changeCents, saleId: s.id });
+      void api("/printers/print-receipt", {
+        method: "POST",
+        body: JSON.stringify({ saleId: s.id, openDrawer: result.drawerOpened }),
+      }).catch(() => undefined);
       void loadCatalog();
     } catch (e) {
       setModal({ type: "message", title: "Payment failed", body: e instanceof Error ? e.message : "Error" });
@@ -427,6 +463,28 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
           ))}
         </select>
         <span style={{ flex: 1 }} />
+        <button
+          type="button"
+          onClick={() =>
+            void api<BoardTicket[]>("/extras/tickets-board").then((b) => {
+              setBoard(b);
+              setModal({ type: "board" });
+            })
+          }
+        >
+          Tickets
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            void api<KitchenOrder[]>("/kitchen/orders").then((k) => {
+              setKitchenOrders(k);
+              setModal({ type: "kitchen" });
+            })
+          }
+        >
+          Kitchen
+        </button>
         <button type="button" onClick={() => void toggleClock()}>
           {clockedIn ? "Clock out" : "Clock in"}
         </button>
@@ -454,22 +512,42 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             />
           </div>
           <div className="chip-row">
-            <button type="button" className={`chip ${categoryId === "all" ? "active" : ""}`} onClick={() => setCategoryId("all")}>
+            <button
+              type="button"
+              className={`chip ${showFavorites ? "active" : ""}`}
+              onClick={() => {
+                setShowFavorites(true);
+                setCategoryId("all");
+              }}
+            >
+              ★ Quick keys
+            </button>
+            <button
+              type="button"
+              className={`chip ${!showFavorites && categoryId === "all" ? "active" : ""}`}
+              onClick={() => {
+                setShowFavorites(false);
+                setCategoryId("all");
+              }}
+            >
               All
             </button>
             {categories.map((c) => (
               <button
                 key={c.id}
                 type="button"
-                className={`chip ${categoryId === c.id ? "active" : ""}`}
-                onClick={() => setCategoryId(c.id)}
+                className={`chip ${!showFavorites && categoryId === c.id ? "active" : ""}`}
+                onClick={() => {
+                  setShowFavorites(false);
+                  setCategoryId(c.id);
+                }}
               >
                 {c.name}
               </button>
             ))}
           </div>
           <div className="grid">
-            {filtered.map((item) => (
+            {(showFavorites && favorites.length ? favorites : filtered).map((item) => (
               <button
                 key={item.id}
                 type="button"
@@ -560,7 +638,17 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             <button type="button" onClick={() => setModal({ type: "discount" })}>
               Discount
             </button>
-            <button type="button" onClick={() => setModal({ type: "tip" })}>
+            <button
+              type="button"
+              onClick={() =>
+                void api<{ suggestions: { label: string; tipCents: number; percent: number | null }[] }>(
+                  `/extras/tip-suggestions?subtotalCents=${ticket?.subtotalCents ?? 0}`
+                ).then((r) => {
+                  setTipSuggestions(r.suggestions);
+                  setModal({ type: "tip" });
+                })
+              }
+            >
               Tip
             </button>
             <button
@@ -758,9 +846,95 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
         <TipModal
           total={ticket.subtotalCents}
           presets={settings?.tipPresetsPercent ?? [10, 15, 20]}
+          suggestions={tipSuggestions}
           onClose={() => setModal(null)}
           onApply={(cents) => void applyTip(cents)}
         />
+      )}
+
+      {modal?.type === "board" && (
+        <div className="modal-backdrop" onClick={() => setModal(null)}>
+          <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+            <h3>Open tickets board</h3>
+            {board.length === 0 && <p style={{ color: "var(--muted)" }}>No open or held tickets.</p>}
+            {board.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className="list-btn"
+                onClick={() =>
+                  void api<Ticket>(`/pos/tickets/${t.id}/recall`, { method: "POST" }).then((x) => {
+                    setTicket(x);
+                    setModal(null);
+                  })
+                }
+              >
+                <strong>
+                  {t.name} · {t.status}
+                </strong>
+                <div style={{ color: "var(--muted)" }}>
+                  {t.source}
+                  {t.kitchenStatus ? ` · kitchen ${t.kitchenStatus}` : ""} · {t.lineCount} lines
+                  {t.customerName ? ` · ${t.customerName}` : ""}
+                </div>
+                <div style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
+                  {t.lines.map((l) => `${l.quantity}×${l.name}`).join(", ")}
+                </div>
+              </button>
+            ))}
+            <div className="modal-actions">
+              <button type="button" className="btn ghost" onClick={() => setModal(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modal?.type === "kitchen" && (
+        <div className="modal-backdrop" onClick={() => setModal(null)}>
+          <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+            <h3>Kitchen / online orders</h3>
+            {kitchenOrders.length === 0 && <p style={{ color: "var(--muted)" }}>Queue empty.</p>}
+            {kitchenOrders.map((o) => (
+              <div key={o.id} className="list-btn" style={{ cursor: "default" }}>
+                <strong>
+                  {o.orderNumber} · {o.customerName}
+                </strong>
+                <div style={{ color: "var(--muted)" }}>
+                  {o.status} · {money(o.totalCents)} · {o.lines.map((l) => `${l.quantity}×${l.name}`).join(", ")}
+                </div>
+                <button
+                  type="button"
+                  className="btn primary"
+                  style={{ marginTop: 8 }}
+                  onClick={() =>
+                    void api(`/kitchen/orders/${o.id}`, {
+                      method: "PATCH",
+                      body: JSON.stringify({
+                        status:
+                          o.status === "pending" || o.status === "accepted"
+                            ? "preparing"
+                            : o.status === "preparing"
+                              ? "ready"
+                              : "completed",
+                      }),
+                    }).then(() =>
+                      api<KitchenOrder[]>("/kitchen/orders").then((k) => setKitchenOrders(k))
+                    )
+                  }
+                >
+                  Advance status
+                </button>
+              </div>
+            ))}
+            <div className="modal-actions">
+              <button type="button" className="btn ghost" onClick={() => setModal(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {modal?.type === "receipt" && (
@@ -897,28 +1071,39 @@ function DiscountModal({
 function TipModal({
   total,
   presets,
+  suggestions,
   onClose,
   onApply,
 }: {
   total: number;
   presets: number[];
+  suggestions: { label: string; tipCents: number; percent: number | null }[];
   onClose: () => void;
   onApply: (cents: number) => void;
 }) {
   const [custom, setCustom] = useState("");
+  const buttons =
+    suggestions.length > 0
+      ? suggestions
+      : [
+          ...presets.map((p) => ({
+            label: `${p}%`,
+            tipCents: Math.round((total * p) / 100),
+            percent: p,
+          })),
+          { label: "No tip", tipCents: 0, percent: 0 },
+        ];
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>Tip</h3>
+        <h3>Tip suggestions</h3>
         <div className="pay-grid">
-          {presets.map((p) => (
-            <button key={p} type="button" onClick={() => onApply(Math.round((total * p) / 100))}>
-              {p}% ({money(Math.round((total * p) / 100))})
+          {buttons.map((s) => (
+            <button key={s.label} type="button" onClick={() => onApply(s.tipCents)}>
+              {s.label}
+              {s.tipCents ? ` (${money(s.tipCents)})` : ""}
             </button>
           ))}
-          <button type="button" onClick={() => onApply(0)}>
-            No tip
-          </button>
         </div>
         <div className="field">
           <label>Custom ($)</label>

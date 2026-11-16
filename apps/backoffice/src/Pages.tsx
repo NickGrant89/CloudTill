@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { api, getToken, money } from "./api";
 import { GiftCardsPage, ModifierEditor, TimeClockPage } from "./MorePages";
+import { KitchenPage, PrintersPage } from "./KitchenPrinters";
+import { EodPage, LabelsPage, StocktakePage } from "./ExtrasPages";
 
 export type PageId =
   | "dashboard"
   | "catalog"
   | "inventory"
+  | "stocktake"
   | "customers"
   | "employees"
   | "stores"
@@ -14,6 +17,10 @@ export type PageId =
   | "shifts"
   | "giftcards"
   | "timeclock"
+  | "kitchen"
+  | "printers"
+  | "labels"
+  | "eod"
   | "settings";
 
 export function Pages({ page }: { page: PageId }) {
@@ -24,6 +31,8 @@ export function Pages({ page }: { page: PageId }) {
       return <CatalogPage />;
     case "inventory":
       return <InventoryPage />;
+    case "stocktake":
+      return <StocktakePage />;
     case "customers":
       return <CustomersPage />;
     case "employees":
@@ -40,6 +49,14 @@ export function Pages({ page }: { page: PageId }) {
       return <GiftCardsPage />;
     case "timeclock":
       return <TimeClockPage />;
+    case "kitchen":
+      return <KitchenPage />;
+    case "printers":
+      return <PrintersPage />;
+    case "labels":
+      return <LabelsPage />;
+    case "eod":
+      return <EodPage />;
     case "settings":
       return <SettingsPage />;
   }

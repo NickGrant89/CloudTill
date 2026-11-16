@@ -9,6 +9,7 @@ datasource db {
 
 model Store {
   id        String   @id @default(cuid())
+  slug      String   @unique @default("demo-cafe")
   name      String
   address   String?
   phone     String?
@@ -34,6 +35,9 @@ model Store {
   settings           Setting[]
   giftCards          GiftCard[]
   timeEntries        TimeClockEntry[]
+  onlineOrders       OnlineOrder[]
+  printers           PrinterDevice[]
+  printJobs          PrintJob[]
 }
 
 model Register {
@@ -267,6 +271,8 @@ model Ticket {
   customerId      String?
   name            String   @default("Ticket")
   status          String   @default("open") // open | held | paid | voided
+  source          String   @default("pos") // pos | online | mobile
+  kitchenStatus   String? // queued | preparing | ready | done
   discountCents   Int      @default(0)
   discountPercent Float    @default(0)
   tipCents        Int      @default(0)
@@ -274,10 +280,11 @@ model Ticket {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  store    Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  register Register     @relation(fields: [registerId], references: [id], onDelete: Cascade)
-  customer Customer?    @relation(fields: [customerId], references: [id])
-  lines    TicketLine[]
+  store        Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  register     Register      @relation(fields: [registerId], references: [id], onDelete: Cascade)
+  customer     Customer?     @relation(fields: [customerId], references: [id])
+  lines        TicketLine[]
+  onlineOrders OnlineOrder[]
 }
 
 model TicketLine {
@@ -406,4 +413,72 @@ model TimeClockEntry {
 
   store    Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model OnlineOrder {
+  id              String   @id @default(cuid())
+  storeId         String
+  ticketId        String?
+  orderNumber     String
+  customerName    String
+  customerPhone   String?
+  customerEmail   String?
+  fulfillment     String   @default("pickup") // pickup | dine_in
+  status          String   @default("pending") // pending | accepted | preparing | ready | completed | cancelled
+  note            String?
+  subtotalCents   Int      @default(0)
+  taxCents        Int      @default(0)
+  totalCents      Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  store  Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  ticket Ticket?           @relation(fields: [ticketId], references: [id])
+  lines  OnlineOrderLine[]
+}
+
+model OnlineOrderLine {
+  id             String @id @default(cuid())
+  orderId        String
+  variantId      String
+  name           String
+  quantity       Float  @default(1)
+  unitPriceCents Int
+  modifiersJson  String @default("[]")
+  note           String?
+
+  order OnlineOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model PrinterDevice {
+  id        String   @id @default(cuid())
+  storeId   String
+  name      String
+  driver    String   @default("mock") // mock | network | usb_bridge
+  host      String? // for network ESC/POS
+  port      Int?     @default(9100)
+  enabled   Boolean  @default(true)
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  store Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  jobs  PrintJob[]
+}
+
+model PrintJob {
+  id         String   @id @default(cuid())
+  storeId    String
+  printerId  String?
+  type       String // receipt | kitchen | drawer
+  status     String   @default("queued") // queued | printing | printed | failed
+  payloadB64 String
+  preview    String?
+  error      String?
+  saleId     String?
+  ticketId   String?
+  createdAt  DateTime @default(now())
+  printedAt  DateTime?
+
+  store   Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  printer PrinterDevice? @relation(fields: [printerId], references: [id])
 }

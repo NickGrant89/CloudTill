@@ -22,8 +22,9 @@ On a physical device, set `EXPO_PUBLIC_API_URL` to your machine LAN IP (e.g. `ht
 ## Included screens
 
 - PIN login (same employees as web)
-- Catalog list (shared `/catalog/items`)
+- **Full register checkout** — item grid, live ticket totals, cash/card/other pay, mock printer job
+- Kitchen / online order queue (advance status)
 - Time clock in/out
 - Gift card balance lookup
 
-Full register/checkout remains on the tablet web POS (`apps/pos`); this app is the native wrap path for floor staff workflows.
+Tablet web POS (`apps/pos`) remains the richest register UI; this Expo app is a working mobile register path against the same API.

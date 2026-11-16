@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, getToken, setToken } from "./api";
 import { Pages, type PageId } from "./Pages";
+import { LowStockToast } from "./ExtrasPages";
 
 interface User {
   id: string;
@@ -92,14 +93,19 @@ export function App() {
     { id: "dashboard", label: "Dashboard" },
     { id: "catalog", label: "Catalog" },
     { id: "inventory", label: "Inventory" },
+    { id: "stocktake", label: "Stocktake" },
     { id: "customers", label: "Customers" },
     { id: "giftcards", label: "Gift cards" },
+    { id: "kitchen", label: "Kitchen / online" },
     { id: "employees", label: "Employees" },
     { id: "timeclock", label: "Time clock" },
     { id: "stores", label: "Stores & registers" },
     { id: "sales", label: "Sales history" },
+    { id: "eod", label: "End of day" },
     { id: "reports", label: "Reports" },
     { id: "shifts", label: "Shifts" },
+    { id: "labels", label: "Barcode labels" },
+    { id: "printers", label: "Printers" },
     { id: "settings", label: "Settings" },
   ];
 
@@ -137,6 +143,7 @@ export function App() {
       <main className="main">
         <Pages page={page} />
       </main>
+      <LowStockToast onOpenInventory={() => setPage("inventory")} />
     </div>
   );
 }

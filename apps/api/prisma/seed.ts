@@ -4,6 +4,10 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
+  await prisma.printJob.deleteMany();
+  await prisma.printerDevice.deleteMany();
+  await prisma.onlineOrderLine.deleteMany();
+  await prisma.onlineOrder.deleteMany();
   await prisma.salePayment.deleteMany();
   await prisma.saleLine.deleteMany();
   await prisma.sale.deleteMany();
@@ -33,6 +37,7 @@ async function main() {
 
   const store = await prisma.store.create({
     data: {
+      slug: "demo-cafe",
       name: "CloudTill Demo Café",
       address: "100 Market Street, Demo City",
       phone: "+1 555-0100",
@@ -43,6 +48,7 @@ async function main() {
 
   const store2 = await prisma.store.create({
     data: {
+      slug: "downtown",
       name: "CloudTill Downtown (stub)",
       address: "22 Harbor Ave",
       currency: "USD",
@@ -276,7 +282,7 @@ async function main() {
     priceCents: 350,
     sku: "PAS-MUF",
     barcode: "3003003002",
-    stock: 18,
+    stock: 4, // below lowStock (8) — drives BO low-stock toast
   });
   await createItem({
     name: "Chocolate Cookie",
@@ -377,12 +383,13 @@ async function main() {
     ],
   });
 
+  // Favorites seeded after items exist — placeholder ids filled below
   await prisma.setting.createMany({
     data: [
       { storeId: store.id, key: "receipt.header", value: "CloudTill Demo Café" },
       { storeId: store.id, key: "receipt.footer", value: "Thank you! cloudtill.demo" },
       { storeId: store.id, key: "receipt.showTaxBreakdown", value: "true" },
-      { storeId: store.id, key: "tips.presets", value: JSON.stringify([10, 15, 20]) },
+      { storeId: store.id, key: "tips.presets", value: JSON.stringify([10, 15, 18, 20]) },
       { storeId: store.id, key: "loyalty.pointsPerDollar", value: "1" },
     ],
   });
@@ -639,12 +646,97 @@ async function main() {
     },
   });
 
+  await prisma.printerDevice.createMany({
+    data: [
+      {
+        storeId: store.id,
+        name: "Front Counter Mock",
+        driver: "mock",
+        isDefault: true,
+        enabled: true,
+      },
+      {
+        storeId: store.id,
+        name: "Kitchen Network (demo)",
+        driver: "network",
+        host: "127.0.0.1",
+        port: 9100,
+        isDefault: false,
+        enabled: true,
+      },
+    ],
+  });
+
+  // Sample online order → kitchen ticket
+  const onlineTicket = await prisma.ticket.create({
+    data: {
+      storeId: store.id,
+      registerId: reg1.id,
+      name: "Online OL-1001",
+      status: "held",
+      source: "online",
+      kitchenStatus: "queued",
+      note: "pickup · Taylor Guest · 555-2001",
+      lines: {
+        create: [
+          {
+            variantId: latte.variant.id,
+            name: "Latte",
+            quantity: 1,
+            unitPriceCents: 450,
+            modifiersJson: JSON.stringify([{ name: "Oat", priceCents: 75 }]),
+          },
+        ],
+      },
+    },
+  });
+  await prisma.onlineOrder.create({
+    data: {
+      storeId: store.id,
+      ticketId: onlineTicket.id,
+      orderNumber: "OL-1001",
+      customerName: "Taylor Guest",
+      customerPhone: "555-2001",
+      fulfillment: "pickup",
+      status: "pending",
+      note: "Extra hot",
+      subtotalCents: 525,
+      taxCents: 43,
+      totalCents: 568,
+      lines: {
+        create: [
+          {
+            variantId: latte.variant.id,
+            name: "Latte",
+            quantity: 1,
+            unitPriceCents: 450,
+            modifiersJson: JSON.stringify([{ name: "Oat", priceCents: 75 }]),
+          },
+        ],
+      },
+    },
+  });
+
+  await prisma.setting.upsert({
+    where: { storeId_key: { storeId: store.id, key: "pos.favorites" } },
+    create: {
+      storeId: store.id,
+      key: "pos.favorites",
+      value: JSON.stringify([latte.item.id, croissant.item.id, combo.id]),
+    },
+    update: {
+      value: JSON.stringify([latte.item.id, croissant.item.id, combo.id]),
+    },
+  });
+
   console.log("Seeded CloudTill demo:");
-  console.log("  Store:", store.name);
+  console.log("  Store:", store.name, `(slug: ${store.slug})`);
   console.log("  owner@cloudtill.demo PIN 1234");
   console.log("  manager@cloudtill.demo PIN 2222");
   console.log("  cashier@cloudtill.demo PIN 1111");
   console.log("  Gift cards: GC-DEMO50 ($50), GC-PARTIAL ($18)");
+  console.log("  Online order: OL-1001 (kitchen queue)");
+  console.log("  Favorites: Latte, Croissant, Breakfast Combo");
 }
 
 main()
