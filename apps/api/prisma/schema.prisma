@@ -423,9 +423,11 @@ model OnlineOrder {
   customerName    String
   customerPhone   String?
   customerEmail   String?
-  fulfillment     String   @default("pickup") // pickup | dine_in
+  fulfillment     String   @default("pickup") // pickup | dine_in | delivery
   status          String   @default("pending") // pending | accepted | preparing | ready | completed | cancelled
   note            String?
+  deliveryAddress String?
+  deliveryFeeCents Int     @default(0)
   subtotalCents   Int      @default(0)
   taxCents        Int      @default(0)
   totalCents      Int      @default(0)

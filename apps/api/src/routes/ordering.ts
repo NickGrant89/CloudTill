@@ -50,6 +50,11 @@ publicOrderingRouter.get("/stores/:slug/menu", async (req, res) => {
     tax,
     categories,
     items,
+    delivery: {
+      feeCents: 399,
+      freeAboveCents: 3000,
+      estimateMinutes: "35–50 min",
+    },
   });
 });
 
@@ -62,7 +67,10 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
       customerName: z.string().min(1),
       customerPhone: z.string().optional(),
       customerEmail: z.string().email().optional(),
-      fulfillment: z.enum(["pickup", "dine_in"]).default("pickup"),
+      fulfillment: z.enum(["pickup", "dine_in", "delivery"]).default("pickup"),
+      deliveryAddress: z.string().optional(),
+      deliveryUnit: z.string().optional(),
+      deliveryInstructions: z.string().optional(),
       note: z.string().optional(),
       lines: z
         .array(
@@ -78,6 +86,15 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
         .min(1),
     })
     .parse(req.body);
+
+  if (body.fulfillment === "delivery") {
+    if (!body.deliveryAddress?.trim()) {
+      return res.status(400).json({ error: "Delivery address is required" });
+    }
+    if (!body.customerPhone?.trim()) {
+      return res.status(400).json({ error: "Phone is required for delivery" });
+    }
+  }
 
   const register =
     (await prisma.register.findFirst({ where: { storeId: store.id, name: { contains: "Front" } } })) ??
@@ -116,10 +133,38 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
     });
   }
 
+  // Flat delivery fee stub — free over $30 subtotal
+  const DELIVERY_FEE_CENTS = 399;
+  const deliveryFeeCents =
+    body.fulfillment === "delivery" ? (subtotal >= 3000 ? 0 : DELIVERY_FEE_CENTS) : 0;
+  const deliveryEstimate =
+    body.fulfillment === "delivery" ? "35–50 min" : body.fulfillment === "dine_in" ? "15–25 min" : "10–20 min";
+  const deliveryAddressLine = [body.deliveryAddress?.trim(), body.deliveryUnit?.trim()]
+    .filter(Boolean)
+    .join(", ");
+
   const taxCents = tax ? calcTax(subtotal, tax.rateBps, tax.inclusive) : 0;
-  const totalCents = subtotal + (tax?.inclusive ? 0 : taxCents);
+  const totalCents = subtotal + (tax?.inclusive ? 0 : taxCents) + deliveryFeeCents;
   const count = await prisma.onlineOrder.count({ where: { storeId: store.id } });
   const orderNumber = `OL-${1000 + count + 1}`;
+
+  const orderNoteParts = [
+    body.note?.trim(),
+    body.fulfillment === "delivery" && body.deliveryInstructions?.trim()
+      ? `Delivery notes: ${body.deliveryInstructions.trim()}`
+      : null,
+  ].filter(Boolean);
+  const orderNote = orderNoteParts.length ? orderNoteParts.join(" · ") : null;
+
+  const ticketNote = [
+    body.fulfillment === "delivery" ? "DELIVERY" : body.fulfillment,
+    body.customerName,
+    body.customerPhone,
+    deliveryAddressLine || null,
+    orderNote,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const ticket = await prisma.ticket.create({
     data: {
@@ -129,7 +174,7 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
       status: "held",
       source: "online",
       kitchenStatus: "queued",
-      note: [body.fulfillment, body.customerName, body.customerPhone, body.note].filter(Boolean).join(" · "),
+      note: ticketNote,
       lines: {
         create: resolvedLines.map((l) => ({
           variantId: l.variantId,
@@ -153,7 +198,9 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
       customerEmail: body.customerEmail,
       fulfillment: body.fulfillment,
       status: "pending",
-      note: body.note,
+      note: orderNote,
+      deliveryAddress: body.fulfillment === "delivery" ? deliveryAddressLine || null : null,
+      deliveryFeeCents,
       subtotalCents: subtotal,
       taxCents,
       totalCents,
@@ -171,14 +218,21 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
     include: { lines: true },
   });
 
-  // Kitchen print job (mock)
+  // Kitchen print job (mock) — delivery clearly labeled for runners
   const kitchenText = [
     `KITCHEN · ${orderNumber}`,
+    body.fulfillment === "delivery" ? ">>> DELIVERY <<<" : body.fulfillment.toUpperCase(),
     body.customerName,
-    body.fulfillment.toUpperCase(),
+    body.customerPhone || null,
+    body.fulfillment === "delivery" && deliveryAddressLine ? `Addr: ${deliveryAddressLine}` : null,
+    body.fulfillment === "delivery" ? `ETA stub: ${deliveryEstimate}` : null,
     "----",
-    ...resolvedLines.map((l) => `${l.quantity} x ${l.name}`),
-    body.note ? `Note: ${body.note}` : null,
+    ...resolvedLines.map((l) => {
+      const mods = JSON.parse(l.modifiersJson || "[]") as { name: string }[];
+      const modLabel = mods.length ? ` (${mods.map((m) => m.name).join(", ")})` : "";
+      return `${l.quantity} x ${l.name}${modLabel}`;
+    }),
+    orderNote ? `Note: ${orderNote}` : null,
   ]
     .filter(Boolean)
     .join("\n");
@@ -203,6 +257,8 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
   res.status(201).json({
     order,
     ticketId: ticket.id,
+    deliveryFeeCents,
+    deliveryEstimate,
     message: "Order received — kitchen notified",
   });
 });

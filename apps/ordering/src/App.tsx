@@ -47,11 +47,22 @@ interface StoreInfo {
   phone: string | null;
 }
 
+type Fulfillment = "pickup" | "dine_in" | "delivery";
+
+interface DeliveryQuote {
+  feeCents: number;
+  freeAboveCents: number;
+  estimateMinutes: string;
+}
+
 interface PlacedOrder {
   orderNumber: string;
   totalCents: number;
-  fulfillment: "pickup" | "dine_in";
+  fulfillment: Fulfillment;
   customerName: string;
+  deliveryAddress?: string;
+  deliveryFeeCents?: number;
+  deliveryEstimate?: string;
 }
 
 interface OrderStatus {
@@ -82,17 +93,24 @@ function statusIndex(status: string) {
   return idx >= 0 ? idx : 0;
 }
 
+function fulfillmentLabel(fulfillment: string) {
+  if (fulfillment === "dine_in") return "Dine in";
+  if (fulfillment === "delivery") return "Delivery";
+  return "Pickup";
+}
+
 function statusCopy(status: string, fulfillment: string) {
-  const mode = fulfillment === "dine_in" ? "dine-in" : "pickup";
   switch (status) {
     case "pending":
       return "We’ve got your order — waiting for the café to accept it.";
     case "accepted":
       return "Accepted. The kitchen will start shortly.";
     case "preparing":
-      return "Being prepared now.";
+      return fulfillment === "delivery" ? "Being prepared for delivery." : "Being prepared now.";
     case "ready":
-      return mode === "pickup" ? "Ready for pickup." : "Ready — come to the counter.";
+      if (fulfillment === "delivery") return "Out for delivery — hang tight.";
+      if (fulfillment === "dine_in") return "Ready — come to the counter.";
+      return "Ready for pickup.";
     case "completed":
       return "All done. Thanks for ordering with CloudTill.";
     case "cancelled":
@@ -100,6 +118,11 @@ function statusCopy(status: string, fulfillment: string) {
     default:
       return "Tracking your order…";
   }
+}
+
+function quoteDeliveryFee(subtotal: number, quote: DeliveryQuote | null, fulfillment: Fulfillment) {
+  if (fulfillment !== "delivery" || !quote) return 0;
+  return subtotal >= quote.freeAboveCents ? 0 : quote.feeCents;
 }
 
 export function App() {
@@ -112,7 +135,11 @@ export function App() {
   const [cartOpen, setCartOpen] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [fulfillment, setFulfillment] = useState<"pickup" | "dine_in">("pickup");
+  const [fulfillment, setFulfillment] = useState<Fulfillment>("pickup");
+  const [deliveryQuote, setDeliveryQuote] = useState<DeliveryQuote | null>(null);
+  const [address, setAddress] = useState("");
+  const [unit, setUnit] = useState("");
+  const [deliveryInstructions, setDeliveryInstructions] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -139,6 +166,7 @@ export function App() {
           }))
         );
         setTaxRateBps(data.tax?.rateBps ?? 0);
+        if (data.delivery) setDeliveryQuote(data.delivery);
       })
       .catch((err) => setMenuError(err instanceof Error ? err.message : "Could not load menu"))
       .finally(() => setLoading(false));
@@ -175,7 +203,8 @@ export function App() {
   const cartCount = cart.reduce((sum, line) => sum + line.quantity, 0);
   const subtotal = cart.reduce((sum, line) => sum + lineTotal(line), 0);
   const tax = Math.round((subtotal * taxRateBps) / 10000);
-  const total = subtotal + tax;
+  const deliveryFee = quoteDeliveryFee(subtotal, deliveryQuote, fulfillment);
+  const total = subtotal + tax + deliveryFee;
 
   function openModifiers(item: Item) {
     const initial: Record<string, Modifier[]> = {};
@@ -264,6 +293,18 @@ export function App() {
   async function placeOrder(e: React.FormEvent) {
     e.preventDefault();
     if (!cart.length || !name.trim()) return;
+    if (fulfillment === "delivery") {
+      if (!address.trim()) {
+        setError("Add a delivery address.");
+        setCartOpen(true);
+        return;
+      }
+      if (!phone.trim()) {
+        setError("Phone is required for delivery.");
+        setCartOpen(true);
+        return;
+      }
+    }
     setBusy(true);
     setError("");
     try {
@@ -274,6 +315,10 @@ export function App() {
           customerName: name.trim(),
           customerPhone: phone || undefined,
           fulfillment,
+          deliveryAddress: fulfillment === "delivery" ? address.trim() : undefined,
+          deliveryUnit: fulfillment === "delivery" ? unit.trim() || undefined : undefined,
+          deliveryInstructions:
+            fulfillment === "delivery" ? deliveryInstructions.trim() || undefined : undefined,
           note: note || undefined,
           lines: cart.map((line) => ({
             variantId: line.variantId,
@@ -289,11 +334,15 @@ export function App() {
         totalCents: data.order.totalCents,
         fulfillment,
         customerName: name.trim(),
+        deliveryAddress: data.order.deliveryAddress ?? undefined,
+        deliveryFeeCents: data.deliveryFeeCents ?? data.order.deliveryFeeCents ?? 0,
+        deliveryEstimate: data.deliveryEstimate,
       });
       setLiveOrder(data.order);
       setCart([]);
       setCartOpen(false);
       setNote("");
+      setDeliveryInstructions("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Order failed");
     } finally {
@@ -307,26 +356,32 @@ export function App() {
     setError("");
   }
 
-  const desktopCart = (
-    <CartPanel
-      cart={cart}
-      subtotal={subtotal}
-      tax={tax}
-      total={total}
-      name={name}
-      phone={phone}
-      fulfillment={fulfillment}
-      note={note}
-      busy={busy}
-      error={error}
-      onName={setName}
-      onPhone={setPhone}
-      onNote={setNote}
-      onFulfillment={setFulfillment}
-      onQty={setQty}
-      onSubmit={(e) => void placeOrder(e)}
-    />
-  );
+  const cartPanelProps = {
+    cart,
+    subtotal,
+    tax,
+    deliveryFee,
+    deliveryQuote,
+    total,
+    name,
+    phone,
+    fulfillment,
+    address,
+    unit,
+    deliveryInstructions,
+    note,
+    busy,
+    error,
+    onName: setName,
+    onPhone: setPhone,
+    onNote: setNote,
+    onAddress: setAddress,
+    onUnit: setUnit,
+    onDeliveryInstructions: setDeliveryInstructions,
+    onFulfillment: setFulfillment,
+    onQty: setQty,
+    onSubmit: (e: React.FormEvent) => void placeOrder(e),
+  };
 
   if (placed) {
     const status = liveOrder?.status ?? "pending";
@@ -358,9 +413,15 @@ export function App() {
           </div>
           <p className="status-note">{statusCopy(status, placed.fulfillment)}</p>
           <p style={{ color: "var(--muted)", marginTop: 0 }}>
-            {placed.fulfillment === "pickup" ? "Pickup" : "Dine in"} · {placed.customerName}
+            {fulfillmentLabel(placed.fulfillment)} · {placed.customerName}
             {store?.name ? ` · ${store.name}` : ""}
           </p>
+          {placed.fulfillment === "delivery" && placed.deliveryAddress && (
+            <p style={{ color: "var(--muted)", marginTop: 8 }}>{placed.deliveryAddress}</p>
+          )}
+          {placed.fulfillment === "delivery" && placed.deliveryEstimate && (
+            <p style={{ color: "var(--muted)", marginTop: 4 }}>ETA stub · {placed.deliveryEstimate}</p>
+          )}
           <button type="button" onClick={resetToMenu} style={{ width: "100%", marginTop: 8 }}>
             Order something else
           </button>
@@ -379,7 +440,7 @@ export function App() {
         <div className="hero-inner">
           <h1 className="brand">CloudTill</h1>
           <p className="hero-kicker">{store?.name ?? "Demo Café"}</p>
-          <p className="hero-lead">Order ahead for pickup or dine-in. The kitchen gets your ticket the moment you place it.</p>
+          <p className="hero-lead">Order ahead for pickup, dine-in, or delivery. The kitchen gets your ticket the moment you place it.</p>
           <div className="fulfillment" role="group" aria-label="Fulfillment">
             <button
               type="button"
@@ -394,6 +455,13 @@ export function App() {
               onClick={() => setFulfillment("dine_in")}
             >
               Dine in
+            </button>
+            <button
+              type="button"
+              className={fulfillment === "delivery" ? "active" : ""}
+              onClick={() => setFulfillment("delivery")}
+            >
+              Delivery
             </button>
           </div>
           {(store?.address || store?.phone) && (
@@ -445,7 +513,9 @@ export function App() {
           </div>
         </section>
 
-        <aside className="desktop-cart cart">{desktopCart}</aside>
+        <aside className="desktop-cart cart">
+          <CartPanel {...cartPanelProps} />
+        </aside>
       </div>
 
       {cartCount > 0 && (
@@ -453,7 +523,7 @@ export function App() {
           <div className="summary">
             <strong>{money(total)}</strong>
             <span>
-              {cartCount} item{cartCount === 1 ? "" : "s"} · {fulfillment === "pickup" ? "Pickup" : "Dine in"}
+              {cartCount} item{cartCount === 1 ? "" : "s"} · {fulfillmentLabel(fulfillment)}
             </span>
           </div>
           <button type="button" onClick={() => setCartOpen(true)}>
@@ -473,25 +543,7 @@ export function App() {
                 Close
               </button>
             </div>
-            <CartPanel
-              cart={cart}
-              subtotal={subtotal}
-              tax={tax}
-              total={total}
-              name={name}
-              phone={phone}
-              fulfillment={fulfillment}
-              note={note}
-              busy={busy}
-              error={error}
-              hideTitle
-              onName={setName}
-              onPhone={setPhone}
-              onNote={setNote}
-              onFulfillment={setFulfillment}
-              onQty={setQty}
-              onSubmit={(e) => void placeOrder(e)}
-            />
+            <CartPanel {...cartPanelProps} hideTitle />
           </div>
         </>
       )}
@@ -551,10 +603,15 @@ function CartPanel({
   cart,
   subtotal,
   tax,
+  deliveryFee,
+  deliveryQuote,
   total,
   name,
   phone,
   fulfillment,
+  address,
+  unit,
+  deliveryInstructions,
   note,
   busy,
   error,
@@ -562,6 +619,9 @@ function CartPanel({
   onName,
   onPhone,
   onNote,
+  onAddress,
+  onUnit,
+  onDeliveryInstructions,
   onFulfillment,
   onQty,
   onSubmit,
@@ -569,10 +629,15 @@ function CartPanel({
   cart: CartLine[];
   subtotal: number;
   tax: number;
+  deliveryFee: number;
+  deliveryQuote: DeliveryQuote | null;
   total: number;
   name: string;
   phone: string;
-  fulfillment: "pickup" | "dine_in";
+  fulfillment: Fulfillment;
+  address: string;
+  unit: string;
+  deliveryInstructions: string;
   note: string;
   busy: boolean;
   error: string;
@@ -580,10 +645,17 @@ function CartPanel({
   onName: (value: string) => void;
   onPhone: (value: string) => void;
   onNote: (value: string) => void;
-  onFulfillment: (value: "pickup" | "dine_in") => void;
+  onAddress: (value: string) => void;
+  onUnit: (value: string) => void;
+  onDeliveryInstructions: (value: string) => void;
+  onFulfillment: (value: Fulfillment) => void;
   onQty: (key: string, next: number) => void;
   onSubmit: (e: React.FormEvent) => void;
 }) {
+  const freeDelivery = Boolean(
+    deliveryQuote && fulfillment === "delivery" && subtotal >= deliveryQuote.freeAboveCents
+  );
+
   return (
     <div>
       {!hideTitle && (
@@ -626,21 +698,34 @@ function CartPanel({
           <span>Tax</span>
           <span>{money(tax)}</span>
         </div>
+        {fulfillment === "delivery" && (
+          <div className="row">
+            <span>Delivery{freeDelivery ? " (free)" : ""}</span>
+            <span>{money(deliveryFee)}</span>
+          </div>
+        )}
         <div className="row grand">
           <span>Total</span>
           <span>{money(total)}</span>
         </div>
       </div>
 
+      {fulfillment === "delivery" && deliveryQuote && (
+        <p className="delivery-stub">
+          ETA stub · {deliveryQuote.estimateMinutes}
+          {!freeDelivery
+            ? ` · $${(deliveryQuote.feeCents / 100).toFixed(2)} fee (free over $${(deliveryQuote.freeAboveCents / 100).toFixed(0)})`
+            : " · free delivery unlocked"}
+        </p>
+      )}
+
       <form onSubmit={onSubmit}>
         <div className="field">
           <label>Fulfillment</label>
-          <select
-            value={fulfillment}
-            onChange={(e) => onFulfillment(e.target.value as "pickup" | "dine_in")}
-          >
+          <select value={fulfillment} onChange={(e) => onFulfillment(e.target.value as Fulfillment)}>
             <option value="pickup">Pickup</option>
             <option value="dine_in">Dine in</option>
+            <option value="delivery">Delivery</option>
           </select>
         </div>
         <div className="field">
@@ -648,9 +733,41 @@ function CartPanel({
           <input required value={name} onChange={(e) => onName(e.target.value)} placeholder="For the ticket" />
         </div>
         <div className="field">
-          <label>Phone</label>
-          <input value={phone} onChange={(e) => onPhone(e.target.value)} placeholder="Optional" inputMode="tel" />
+          <label>Phone{fulfillment === "delivery" ? " (required)" : ""}</label>
+          <input
+            required={fulfillment === "delivery"}
+            value={phone}
+            onChange={(e) => onPhone(e.target.value)}
+            placeholder={fulfillment === "delivery" ? "Driver contact" : "Optional"}
+            inputMode="tel"
+          />
         </div>
+        {fulfillment === "delivery" && (
+          <>
+            <div className="field">
+              <label>Address</label>
+              <input
+                required
+                value={address}
+                onChange={(e) => onAddress(e.target.value)}
+                placeholder="Street and number"
+                autoComplete="street-address"
+              />
+            </div>
+            <div className="field">
+              <label>Apt / unit</label>
+              <input value={unit} onChange={(e) => onUnit(e.target.value)} placeholder="Optional" />
+            </div>
+            <div className="field">
+              <label>Delivery instructions</label>
+              <textarea
+                value={deliveryInstructions}
+                onChange={(e) => onDeliveryInstructions(e.target.value)}
+                placeholder="Buzzer, gate code, leave at door…"
+              />
+            </div>
+          </>
+        )}
         <div className="field">
           <label>Note</label>
           <textarea value={note} onChange={(e) => onNote(e.target.value)} placeholder="Extra hot, no ice…" />
