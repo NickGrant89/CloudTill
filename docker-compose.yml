@@ -21,7 +21,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.api
     environment:
       DATABASE_URL: postgresql://cloudtill:cloudtill@db:5432/cloudtill?schema=public
       JWT_SECRET: ${JWT_SECRET:-cloudtill-docker-dev-secret-change-me}
