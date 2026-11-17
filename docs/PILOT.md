@@ -58,6 +58,15 @@ Tills are thin clients of the cloud catalog:
 4. Back online → badge **Sync N** / auto-sync every ~20s; sales POST to `/api/pos/offline-sales`.
 5. **Conflicts:** server wins catalog on refresh; client-queued sales are idempotent on `clientSaleId` (`note: offline:<id>`).
 
+### Durability extras (browser)
+
+- Requests **persistent storage** so the OS is less likely to evict the queue.
+- **Service worker** caches the till shell and can **background-sync** queued sales (Chromium) when connectivity returns — even if the tab was closed after queueing.
+- **Leave warning** if you close the tab while sales are still unsynced.
+- **Export** button (when Sync N shows) downloads a JSON backup of unsynced sales.
+
+Still true: clearing site data, or wiping the device *before* sync/export, can lose the queue. Once synced to the cloud, sales are durable.
+
 ## Billing / tiers (stub)
 
 | Plan | £/mo | Cloud features |

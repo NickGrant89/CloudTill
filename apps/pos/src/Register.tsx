@@ -3,6 +3,11 @@ import { api, getToken, loadCatalogSnapshot, money, OfflineError, saveCatalogSna
 import type { SessionRegister, SessionStore, SessionUser } from "./App";
 import { nanoid } from "./offline/id";
 import type { OfflineStatus } from "./offline/sync";
+import {
+  exportPendingSalesBackup,
+  installUnsyncedLeaveGuard,
+  requestPersistentStorage,
+} from "./offline/durable";
 import { refreshOfflineBadge, startOfflineSync, subscribeOfflineStatus, syncQueuedSales } from "./offline/sync";
 import {
   ensureLocalTicket,
@@ -173,6 +178,8 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     lastSyncAt: null,
     lastError: null,
   });
+  const offlineRef = useRef<OfflineStatus>(offline);
+  offlineRef.current = offline;
   const [taxRateBps, setTaxRateBps] = useState(825);
 
   function setCurrentTicket(next: Ticket | null) {
@@ -313,9 +320,12 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   useEffect(() => {
     const stop = startOfflineSync();
     const unsub = subscribeOfflineStatus(setOffline);
+    void requestPersistentStorage();
+    const stopGuard = installUnsyncedLeaveGuard(() => offlineRef.current?.pendingSales ?? 0);
     return () => {
       stop();
       unsub();
+      stopGuard();
     };
   }, []);
 
@@ -868,8 +878,8 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
           title={
             offline.online
               ? offline.pendingSales
-                ? `${offline.pendingSales} sale(s) waiting to sync`
-                : "Online · catalog follows server"
+                ? `${offline.pendingSales} sale(s) waiting to sync — click to sync, or Export backup`
+                : "Online · catalog follows server · storage persistence requested"
               : "Offline · sales queue locally; catalog from cache"
           }
           onClick={() => {
@@ -879,6 +889,20 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
         >
           {!offline.online ? "Offline" : offline.syncing ? "Syncing…" : offline.pendingSales ? `Sync ${offline.pendingSales}` : "Online"}
         </button>
+        {offline.pendingSales > 0 ? (
+          <button
+            type="button"
+            className="offline-export"
+            title="Download unsynced sales JSON in case this device is wiped before sync"
+            onClick={() => {
+              void exportPendingSalesBackup().then((result) => {
+                if (result) setCatalogError(`Saved backup of ${result.count} unsynced sale(s) — keep that file until Sync clears`);
+              });
+            }}
+          >
+            Export
+          </button>
+        ) : null}
         <div className={`toolbar-actions${tillPhase === "options" || tillPhase === "pay" || tillPhase === "done" ? " is-quiet" : ""}`}>
         <button
           type="button"

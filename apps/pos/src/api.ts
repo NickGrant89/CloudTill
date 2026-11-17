@@ -1,4 +1,4 @@
-import { cacheCatalog, readCatalogCache, type CachedCatalog } from "./offline/db";
+import { cacheCatalog, persistAuthToken, readCatalogCache, type CachedCatalog } from "./offline/db";
 import { isBrowserOnline } from "./offline/sync";
 
 const TOKEN_KEY = "purepos_pos_token";
@@ -10,6 +10,7 @@ export function getToken(): string | null {
 export function setToken(token: string | null) {
   if (token) localStorage.setItem(TOKEN_KEY, token);
   else localStorage.removeItem(TOKEN_KEY);
+  void persistAuthToken(token);
 }
 
 export class OfflineError extends Error {

@@ -7,6 +7,7 @@ import {
   type LocalTicket,
   type QueuedSale,
 } from "./db";
+import { requestBackgroundSaleSync } from "./durable";
 import { refreshOfflineBadge } from "./sync";
 
 export function emptyLocalTicket(registerId: string): LocalTicket {
@@ -99,6 +100,7 @@ export async function queueCompletedLocalSale(opts: {
   await enqueueSale(sale);
   await clearLocalTicket(opts.ticket.id);
   await refreshOfflineBadge();
+  void requestBackgroundSaleSync();
   const changeCents = paid - totals.totalCents;
   const text = [
     "OFFLINE SALE (queued)",

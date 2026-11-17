@@ -162,3 +162,8 @@ export async function removeQueuedSale(id: string): Promise<void> {
 export async function updateQueuedSale(sale: QueuedSale): Promise<void> {
   await idbPut("saleQueue", sale);
 }
+
+/** Auth token mirror for service-worker background sync (same IndexedDB). */
+export async function persistAuthToken(token: string | null): Promise<void> {
+  await idbSet("meta", "authToken", token);
+}

@@ -607,6 +607,21 @@ select:focus-visible {
   background: rgba(176, 120, 40, 0.55);
 }
 
+.offline-export {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(244, 240, 232, 0.22);
+  background: rgba(20, 36, 28, 0.45);
+  color: #f4f0e8;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
 .till-steps {
   display: flex;
   gap: 6px;
