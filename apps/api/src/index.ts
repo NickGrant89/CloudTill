@@ -15,6 +15,7 @@ import { timeClockRouter } from "./routes/timeclock.js";
 import { kitchenRouter, publicOrderingRouter } from "./routes/ordering.js";
 import { printersRouter } from "./routes/printers.js";
 import { extrasRouter } from "./routes/extras.js";
+import { importRouter } from "./routes/import.js";
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -43,6 +44,7 @@ app.use("/api/public", publicOrderingRouter);
 app.use("/api/kitchen", kitchenRouter);
 app.use("/api/printers", printersRouter);
 app.use("/api/extras", extrasRouter);
+app.use("/api/import", importRouter);
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);

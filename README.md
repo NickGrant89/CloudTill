@@ -56,6 +56,7 @@ docs/DEPLOY.md    Docker + Postgres guide
 | Shifts / cash mgmt | Done | |
 | Catalog, modifiers CRUD, kits | Done | |
 | Inventory, transfers, stocktake | Done | |
+| CSV import (items / customers / stock) | Done | BO **Import** · templates + preview |
 | Low-stock toast (BO) | Done | In-app push stub |
 | Customers / gift cards / employees / PIN | Done | |
 | Time clock | Done | |

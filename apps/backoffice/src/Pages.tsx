@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, getToken, money } from "./api";
 import { GiftCardsPage, ModifierEditor, ModifierLibrary, TimeClockPage } from "./MorePages";
 import { KitchenPage, PrintersPage } from "./KitchenPrinters";
-import { EodPage, LabelsPage, StocktakePage } from "./ExtrasPages";
+import { EodPage, ImportPage, LabelsPage, StocktakePage } from "./ExtrasPages";
 
 export type PageId =
   | "dashboard"
@@ -10,6 +10,7 @@ export type PageId =
   | "modifiers"
   | "inventory"
   | "stocktake"
+  | "import"
   | "customers"
   | "employees"
   | "stores"
@@ -36,6 +37,8 @@ export function Pages({ page }: { page: PageId }) {
       return <InventoryPage />;
     case "stocktake":
       return <StocktakePage />;
+    case "import":
+      return <ImportPage />;
     case "customers":
       return <CustomersPage />;
     case "employees":

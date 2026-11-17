@@ -100,6 +100,7 @@ export function App() {
     { id: "modifiers", label: "Modifiers" },
     { id: "inventory", label: "Inventory" },
     { id: "stocktake", label: "Stocktake" },
+    { id: "import", label: "Import" },
     { id: "customers", label: "Customers" },
     { id: "giftcards", label: "Gift cards" },
     { id: "kitchen", label: "Kitchen / online" },

@@ -224,6 +224,220 @@ export function EodPage() {
   );
 }
 
+type ImportKind = "items" | "customers" | "stock";
+
+type PreviewRow = {
+  line: number;
+  action: "create" | "update" | "skip" | "error";
+  summary: string;
+  issues: { level: "error" | "warning"; message: string }[];
+};
+
+type PreviewResult = {
+  kind: ImportKind;
+  notes: string;
+  total: number;
+  valid: number;
+  errors: number;
+  rows: PreviewRow[];
+};
+
+const IMPORT_KINDS: { id: ImportKind; label: string; blurb: string }[] = [
+  { id: "items", label: "Catalog items", blurb: "Name, category, SKU, price, stock" },
+  { id: "customers", label: "Customers", blurb: "Name, email, phone, credit, loyalty" },
+  { id: "stock", label: "Stock levels", blurb: "Set or receive qty by SKU / barcode" },
+];
+
+export function ImportPage() {
+  const [kind, setKind] = useState<ImportKind>("items");
+  const [csv, setCsv] = useState("");
+  const [preview, setPreview] = useState<PreviewResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  function downloadTemplate() {
+    const token = getToken();
+    void fetch(`/api/import/templates/${kind}.csv`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Template download failed");
+        const blob = await res.blob();
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `cloudtill-${kind}-template.csv`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "Download failed"));
+  }
+
+  async function onFile(file: File | null) {
+    if (!file) return;
+    const text = await file.text();
+    setCsv(text);
+    setPreview(null);
+    setMessage("");
+    setError("");
+  }
+
+  async function runPreview() {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await api<PreviewResult>("/import/preview", {
+        method: "POST",
+        body: JSON.stringify({ kind, csv }),
+      });
+      setPreview(result);
+      setMessage(
+        result.errors
+          ? `${result.valid} ready · ${result.errors} row error(s) to fix`
+          : `${result.valid} row(s) ready to import`
+      );
+    } catch (e) {
+      setPreview(null);
+      setError(e instanceof Error ? e.message : "Preview failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runApply() {
+    if (!preview || preview.errors > 0) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api<{
+        created?: number;
+        updated?: number;
+        categoriesCreated?: number;
+      }>("/import/apply", {
+        method: "POST",
+        body: JSON.stringify({ kind, csv }),
+      });
+      const bits = [
+        result.created != null ? `${result.created} created` : null,
+        result.updated != null ? `${result.updated} updated` : null,
+        result.categoriesCreated ? `${result.categoriesCreated} categories created` : null,
+      ].filter(Boolean);
+      setMessage(`Imported · ${bits.join(" · ")}`);
+      setPreview(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Import failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <div className="page-head">
+        <div>
+          <h2>Import</h2>
+          <p>CSV templates · validate · preview · apply</p>
+        </div>
+      </div>
+
+      <div className="panel-box" style={{ marginBottom: 16 }}>
+        <div className="chip-row" style={{ marginBottom: 12 }}>
+          {IMPORT_KINDS.map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              className={`chip ${kind === entry.id ? "active" : ""}`}
+              onClick={() => {
+                setKind(entry.id);
+                setPreview(null);
+                setMessage("");
+                setError("");
+              }}
+            >
+              {entry.label}
+            </button>
+          ))}
+        </div>
+        <p style={{ margin: "0 0 12px", color: "var(--muted)" }}>
+          {IMPORT_KINDS.find((entry) => entry.id === kind)?.blurb}
+        </p>
+        <div className="toolbar" style={{ marginBottom: 12 }}>
+          <button type="button" className="secondary" onClick={downloadTemplate}>
+            Download template
+          </button>
+          <label className="btn-file">
+            Choose CSV
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              hidden
+              onChange={(e) => void onFile(e.target.files?.[0] ?? null)}
+            />
+          </label>
+        </div>
+        <div className="field">
+          <label>CSV</label>
+          <textarea
+            rows={10}
+            value={csv}
+            placeholder="Paste CSV or choose a file…"
+            onChange={(e) => {
+              setCsv(e.target.value);
+              setPreview(null);
+            }}
+            style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "0.85rem" }}
+          />
+        </div>
+        <div className="toolbar">
+          <button type="button" disabled={busy || !csv.trim()} onClick={() => void runPreview()}>
+            {busy ? "Working…" : "Validate & preview"}
+          </button>
+          <button
+            type="button"
+            disabled={busy || !preview || preview.errors > 0}
+            onClick={() => void runApply()}
+          >
+            Import {preview && !preview.errors ? preview.valid : ""} rows
+          </button>
+        </div>
+        {message && <p className="badge" style={{ marginTop: 12 }}>{message}</p>}
+        {error && <p className="error" style={{ marginTop: 12 }}>{error}</p>}
+        {preview && <p style={{ marginTop: 10, color: "var(--muted)", fontSize: "0.88rem" }}>{preview.notes}</p>}
+      </div>
+
+      {preview && (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Line</th>
+                <th>Action</th>
+                <th>Summary</th>
+                <th>Issues</th>
+              </tr>
+            </thead>
+            <tbody>
+              {preview.rows.map((row) => (
+                <tr key={`${row.line}-${row.summary}`}>
+                  <td>{row.line}</td>
+                  <td>
+                    <span className={`badge ${row.action === "error" ? "warn" : ""}`}>{row.action}</span>
+                  </td>
+                  <td>{row.summary}</td>
+                  <td style={{ fontSize: "0.85rem", color: row.action === "error" ? "var(--danger)" : "var(--muted)" }}>
+                    {row.issues.map((issue) => issue.message).join(" · ") || "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function LowStockToast({ onOpenInventory }: { onOpenInventory?: () => void }) {
   const [alert, setAlert] = useState<{ count: number; pushStub: { title: string; body: string } } | null>(
     null
