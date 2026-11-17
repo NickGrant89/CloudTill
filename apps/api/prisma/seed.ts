@@ -38,7 +38,7 @@ async function main() {
   const store = await prisma.store.create({
     data: {
       slug: "demo-cafe",
-      name: "CloudTill Demo Café",
+      name: "PurePOS Demo Café",
       address: "100 Market Street, Demo City",
       phone: "+1 555-0100",
       currency: "GBP",
@@ -49,7 +49,7 @@ async function main() {
   const store2 = await prisma.store.create({
     data: {
       slug: "downtown",
-      name: "CloudTill Downtown (stub)",
+      name: "PurePOS Downtown (stub)",
       address: "22 Harbor Ave",
       currency: "GBP",
       timezone: "America/New_York",
@@ -72,7 +72,7 @@ async function main() {
     data: {
       storeId: store.id,
       name: "Alex Owner",
-      email: "owner@cloudtill.demo",
+      email: "owner@purepos.demo",
       pinHash: await pin("1234"),
       pinDisplay: "1234",
       role: "owner",
@@ -82,7 +82,7 @@ async function main() {
     data: {
       storeId: store.id,
       name: "Morgan Manager",
-      email: "manager@cloudtill.demo",
+      email: "manager@purepos.demo",
       pinHash: await pin("2222"),
       pinDisplay: "2222",
       role: "manager",
@@ -92,7 +92,7 @@ async function main() {
     data: {
       storeId: store.id,
       name: "Casey Cashier",
-      email: "cashier@cloudtill.demo",
+      email: "cashier@purepos.demo",
       pinHash: await pin("1111"),
       pinDisplay: "1111",
       role: "cashier",
@@ -386,8 +386,8 @@ async function main() {
   // Favorites seeded after items exist — placeholder ids filled below
   await prisma.setting.createMany({
     data: [
-      { storeId: store.id, key: "receipt.header", value: "CloudTill Demo Café" },
-      { storeId: store.id, key: "receipt.footer", value: "Thank you! cloudtill.demo" },
+      { storeId: store.id, key: "receipt.header", value: "PurePOS Demo Café" },
+      { storeId: store.id, key: "receipt.footer", value: "Thank you! purepos.co.uk" },
       { storeId: store.id, key: "receipt.showTaxBreakdown", value: "true" },
       { storeId: store.id, key: "tips.presets", value: JSON.stringify([10, 15, 18, 20]) },
       { storeId: store.id, key: "loyalty.pointsPerDollar", value: "1" },
@@ -738,11 +738,11 @@ async function main() {
     ],
   });
 
-  console.log("Seeded CloudTill demo:");
+  console.log("Seeded PurePOS demo:");
   console.log("  Store:", store.name, `(slug: ${store.slug})`);
-  console.log("  owner@cloudtill.demo PIN 1234");
-  console.log("  manager@cloudtill.demo PIN 2222");
-  console.log("  cashier@cloudtill.demo PIN 1111");
+  console.log("  owner@purepos.demo PIN 1234");
+  console.log("  manager@purepos.demo PIN 2222");
+  console.log("  cashier@purepos.demo PIN 1111");
   console.log("  Gift cards: GC-DEMO50 (£50), GC-PARTIAL (£18)");
   console.log("  Online order: OL-1001 (kitchen queue)");
   console.log("  Favorites: Latte, Croissant, Breakfast Combo");

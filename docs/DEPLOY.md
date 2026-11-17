@@ -1,4 +1,4 @@
-# CloudTill production deploy (Docker + Postgres)
+# PurePOS production deploy (Docker + Postgres)
 
 ## Quick path (Compose)
 
@@ -16,7 +16,7 @@ Compose starts:
 | `db` | 5432 | Postgres 16 (`cloudtill` / `cloudtill` / db `cloudtill`) |
 | `api` | 4000 | Prisma `db push` + seed + Express API |
 
-Demo logins after seed: `owner@cloudtill.demo` / `1234`, etc.
+Demo logins after seed: `owner@purepos.demo` / `1234`, etc.
 
 ### Point web apps at the API
 

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "CloudTill",
-    "slug": "cloudtill",
+    "name": "PurePOS",
+    "slug": "purepos",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -11,13 +11,13 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "demo.cloudtill.mobile"
+      "bundleIdentifier": "uk.purepos.mobile"
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#1a2420"
       },
-      "package": "demo.cloudtill.mobile"
+      "package": "uk.purepos.mobile"
     },
     "web": {
       "bundler": "metro"

@@ -1,6 +1,6 @@
-# CloudTill Mobile (Expo)
+# PurePOS Mobile (Expo)
 
-Web-first CloudTill ships a **mobile-ready Expo/React Native scaffold** that talks to the same API and imports `@cloudtill/shared` (roles + receipt helpers).
+Web-first PurePOS ships a **mobile-ready Expo/React Native scaffold** that talks to the same API and imports `@cloudtill/shared` (roles + receipt helpers).
 
 ## Run
 

@@ -1,6 +1,6 @@
 /** IndexedDB helpers for offline till cache + queues. */
 
-const DB_NAME = "cloudtill-pos";
+const DB_NAME = "purepos-pos";
 const DB_VERSION = 1;
 
 export type CachedCatalog = {

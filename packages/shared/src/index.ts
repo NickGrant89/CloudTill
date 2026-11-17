@@ -1,4 +1,6 @@
-/** Shared CloudTill domain types & constants */
+/** Shared PurePOS domain types & constants (repo may still be named CloudTill). */
+
+export * from "./brand.js";
 
 export const ROLES = ["owner", "manager", "cashier"] as const;
 export type Role = (typeof ROLES)[number];

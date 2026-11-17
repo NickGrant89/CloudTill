@@ -1,7 +1,7 @@
 import { cacheCatalog, readCatalogCache, type CachedCatalog } from "./offline/db";
 import { isBrowserOnline } from "./offline/sync";
 
-const TOKEN_KEY = "cloudtill_pos_token";
+const TOKEN_KEY = "purepos_pos_token";
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);

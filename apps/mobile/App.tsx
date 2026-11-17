@@ -87,7 +87,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [storeName, setStoreName] = useState("");
   const [registerId, setRegisterId] = useState("");
-  const [email, setEmail] = useState("cashier@cloudtill.demo");
+  const [email, setEmail] = useState("cashier@purepos.demo");
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -231,7 +231,7 @@ export default function App() {
     return (
       <SafeAreaView style={styles.root}>
         <StatusBar style="light" />
-        <Text style={styles.brand}>CloudTill</Text>
+        <Text style={styles.brand}>PurePOS</Text>
         <Text style={styles.sub}>Mobile register · Expo</Text>
         <TextInput style={styles.input} autoCapitalize="none" value={email} onChangeText={setEmail} placeholder="Email" />
         <TextInput style={styles.input} value={pin} onChangeText={setPin} placeholder="PIN" keyboardType="number-pad" secureTextEntry />
@@ -246,7 +246,7 @@ export default function App() {
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar style="light" />
-      <Text style={styles.brand}>CloudTill</Text>
+      <Text style={styles.brand}>PurePOS</Text>
       <Text style={styles.sub}>{storeName}</Text>
       <Text style={styles.hint}>{roleLabel}</Text>
       {receiptMsg ? <Text style={styles.ok}>Last sale: {receiptMsg}</Text> : null}

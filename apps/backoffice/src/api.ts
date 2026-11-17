@@ -1,4 +1,4 @@
-const TOKEN_KEY = "cloudtill_bo_token";
+const TOKEN_KEY = "purepos_bo_token";
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);

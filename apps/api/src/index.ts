@@ -40,12 +40,21 @@ app.get("/api/health", async (_req, res) => {
   }
   res.json({
     ok: database === "ok",
-    service: "cloudtill-api",
-    version: "0.5.0",
+    service: "purepos-api",
+    product: process.env.PRODUCT_NAME || "PurePOS",
+    legalName: process.env.PRODUCT_LEGAL || "PurePOS UK",
+    domain: process.env.PRODUCT_DOMAIN || "purepos.co.uk",
+    version: "0.5.1",
     database,
     storeCount,
     time: new Date().toISOString(),
-    pricingUrl: "/pricing.html",
+    pricingUrl: "/pricing",
+    urls: {
+      publicBase: process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`,
+      stagingBase: process.env.STAGING_BASE_URL || "https://staging.purepos.co.uk",
+      production: "https://purepos.co.uk",
+      productionNote: "Hosting currently suspended — use staging or localhost",
+    },
     env: {
       hasJwtSecret: Boolean(process.env.JWT_SECRET),
       host: HOST,
@@ -88,6 +97,6 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 });
 
 app.listen(PORT, HOST, () => {
-  console.log(`CloudTill API listening on http://${HOST}:${PORT}`);
+  console.log(`PurePOS API listening on http://${HOST}:${PORT}`);
   console.log(`Pricing page http://${HOST}:${PORT}/pricing`);
 });

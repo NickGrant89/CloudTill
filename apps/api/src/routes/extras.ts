@@ -203,7 +203,7 @@ extrasRouter.get("/eod.csv", async (req: AuthedRequest, res) => {
 extrasRouter.post("/eod-email", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
   const body = z
     .object({
-      to: z.string().email().default("owner@cloudtill.demo"),
+      to: z.string().email().default("owner@purepos.demo"),
       date: z.string().optional(),
     })
     .parse(req.body ?? {});
@@ -216,7 +216,7 @@ extrasRouter.post("/eod-email", requireRole("owner", "manager"), async (req: Aut
   const gross = sales.reduce((s, x) => s + x.totalCents, 0);
   const payload = {
     to: body.to,
-    subject: `CloudTill EOD ${day}`,
+    subject: `PurePOS EOD ${day}`,
     text: `End of day ${day}\nReceipts: ${sales.length}\nGross: $${(gross / 100).toFixed(2)}\nCSV available via GET /api/extras/eod.csv?date=${day}`,
     queued: true,
     provider: "stub",
@@ -302,7 +302,7 @@ extrasRouter.post("/demo-reset", requireRole("owner"), async (_req: AuthedReques
   });
   res.json({
     ok: true,
-    message: "Demo data reset. Log in again with owner@cloudtill.demo / 1234.",
+    message: "Demo data reset. Log in again with owner@purepos.demo / 1234.",
     health: "/api/health",
   });
 });

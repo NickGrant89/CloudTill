@@ -93,7 +93,7 @@ function Dashboard() {
       <div className="page-head">
         <div>
           <h2>Dashboard</h2>
-          <p>Last 7 days · CloudTill Demo Café</p>
+          <p>Last 7 days · PurePOS Demo Café</p>
         </div>
       </div>
       <div className="cards">
@@ -1306,7 +1306,10 @@ function SettingsPage() {
               </button>
             ))}
             <a className="ghost-link" href="http://localhost:4000/pricing" target="_blank" rel="noreferrer">
-              Public pricing
+              PurePOS pricing (local)
+            </a>
+            <a className="ghost-link" href="https://staging.purepos.co.uk/pricing" target="_blank" rel="noreferrer">
+              Staging
             </a>
           </div>
           <p style={{ marginTop: 10, fontSize: "0.88rem", color: "var(--muted)" }}>

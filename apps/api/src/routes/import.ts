@@ -28,7 +28,7 @@ const TEMPLATES: Record<
   { filename: string; headers: string[]; sample: string[][]; notes: string }
 > = {
   items: {
-    filename: "cloudtill-items-template.csv",
+    filename: "purepos-items-template.csv",
     headers: [
       "name",
       "category",
@@ -50,7 +50,7 @@ const TEMPLATES: Record<
     notes: "price/cost in pounds (e.g. 4.25). Matching key: sku (create or update).",
   },
   customers: {
-    filename: "cloudtill-customers-template.csv",
+    filename: "purepos-customers-template.csv",
     headers: ["name", "email", "phone", "note", "storeCredit", "loyaltyPoints"],
     sample: [
       ["Alex Patron", "alex@example.com", "+44 7700 900123", "Regular", "5.00", "120"],
@@ -59,7 +59,7 @@ const TEMPLATES: Record<
     notes: "storeCredit in pounds. Matching key: email when present, otherwise always create.",
   },
   stock: {
-    filename: "cloudtill-stock-template.csv",
+    filename: "purepos-stock-template.csv",
     headers: ["sku", "barcode", "quantity", "lowStock", "mode", "note"],
     sample: [
       ["COF-AMER", "", "50", "8", "set", "Weekly count"],

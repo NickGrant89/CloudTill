@@ -192,7 +192,7 @@ export function EodPage() {
   async function sendEmail() {
     const r = await api<{ to: string; subject: string; provider: string }>("/extras/eod-email", {
       method: "POST",
-      body: JSON.stringify({ date, to: "owner@cloudtill.demo" }),
+      body: JSON.stringify({ date, to: "owner@purepos.demo" }),
     });
     setEmailResult(`Queued stub email → ${r.to}: ${r.subject} (${r.provider})`);
   }
@@ -266,7 +266,7 @@ export function ImportPage() {
         const blob = await res.blob();
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
-        a.download = `cloudtill-${kind}-template.csv`;
+        a.download = `purepos-${kind}-template.csv`;
         a.click();
         URL.revokeObjectURL(a.href);
       })

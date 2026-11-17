@@ -503,7 +503,7 @@ export function App() {
   if (loading) {
     return (
       <div className="loading">
-        <p className="eyebrow">CloudTill</p>
+        <p className="eyebrow">PurePOS</p>
         <h1>Opening the menu…</h1>
       </div>
     );
@@ -517,7 +517,7 @@ export function App() {
     return (
       <div className="status-shell">
         <div className="status-card">
-          <p className="eyebrow">{store?.name ?? "CloudTill"}</p>
+          <p className="eyebrow">{store?.name ?? "PurePOS"}</p>
           <h1>{statusTitle(status, placed.fulfillment)}</h1>
           <p className="order-no">{placed.orderNumber}</p>
           <p className="status-note">{statusCopy(status, placed.fulfillment)}</p>

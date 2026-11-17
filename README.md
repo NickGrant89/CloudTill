@@ -1,6 +1,10 @@
-# CloudTill
+# PurePOS
 
-Loyverse-parity **cloud POS** — hosted multi-tenant SaaS by default (central API, back office, billing, and catalog), with **offline-capable POS tills** that queue sales locally and sync when back online. Not a boxed standalone install.
+**PurePOS UK** — Loyverse-parity **cloud POS** (product). Hosted multi-tenant SaaS by default (central API, back office, billing, and catalog), with **offline-capable POS tills** that queue sales locally and sync when back online. Not a boxed standalone install.
+
+- **Brand / domain:** PurePOS · [purepos.co.uk](https://purepos.co.uk) (production hosting currently suspended)
+- **Staging (pilots):** `https://staging.purepos.co.uk` (documented target) · local `localhost` ports below
+- **GitHub repo (unchanged for now):** [NickGrant89/CloudTill](https://github.com/NickGrant89/CloudTill)
 
 Web-first typed monorepo: tablet register, desktop back office, customer online ordering, Expo mobile register, printer drivers, Express + Prisma API. SQLite by default for pilots; Postgres via Docker Compose for hosted shape.
 
@@ -15,7 +19,7 @@ Web-first typed monorepo: tablet register, desktop back office, customer online 
 
 Conflict rules: **server wins catalog** on refresh; **client queues sales** until the cloud acks (`/api/pos/offline-sales`, idempotent `clientSaleId`).
 
-Pilot walkthrough: [docs/PILOT.md](docs/PILOT.md) · Pricing: http://localhost:4000/pricing
+Pilot walkthrough: [docs/PILOT.md](docs/PILOT.md) · Local pricing: http://localhost:4000/pricing
 
 ## Quick start
 
@@ -24,23 +28,25 @@ pnpm setup   # install, .env, prisma db push, seed
 pnpm dev     # API + POS + back office + online ordering
 ```
 
-| App | URL / command |
-| --- | --- |
-| API health | http://localhost:4000/api/health |
-| Pricing / trial stub | http://localhost:4000/pricing |
-| POS till (offline-capable) | http://localhost:5173 |
-| Back office (cloud control) | http://localhost:5174 |
-| Online ordering | http://localhost:5175 |
-| Mobile (Expo) | `cd apps/mobile && npm install && npx expo start` |
-| Docker (API + Postgres) | `docker compose up --build` — see [docs/DEPLOY.md](docs/DEPLOY.md) |
+| App | Local (dev) | Staging (documented) |
+| --- | --- | --- |
+| API health | http://localhost:4000/api/health | https://staging.purepos.co.uk/api/health |
+| Pricing / trial | http://localhost:4000/pricing | https://staging.purepos.co.uk/pricing |
+| POS till | http://localhost:5173 | https://staging.purepos.co.uk/pos |
+| Back office | http://localhost:5174 | https://staging.purepos.co.uk/bo |
+| Online ordering | http://localhost:5175 | https://staging.purepos.co.uk/order |
+| Mobile (Expo) | `cd apps/mobile && npm install && npx expo start` | — |
+| Docker (API + Postgres) | `docker compose up --build` — [docs/DEPLOY.md](docs/DEPLOY.md) | — |
+
+Set `PUBLIC_BASE_URL` / `STAGING_BASE_URL` in `apps/api/.env` when pointing tills at staging.
 
 ## Demo logins
 
 | Role | Email | PIN |
 | --- | --- | --- |
-| Owner | `owner@cloudtill.demo` | `1234` |
-| Manager | `manager@cloudtill.demo` | `2222` |
-| Cashier | `cashier@cloudtill.demo` | `1111` |
+| Owner | `owner@purepos.demo` | `1234` |
+| Manager | `manager@purepos.demo` | `2222` |
+| Cashier | `cashier@purepos.demo` | `1111` |
 
 - Stores: **demo-cafe** (slug), downtown stub  
 - Gift cards: `GC-DEMO50`, `GC-PARTIAL`  

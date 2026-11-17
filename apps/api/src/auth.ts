@@ -3,7 +3,7 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import type { Role } from "@cloudtill/shared";
 
-const JWT_SECRET = process.env.JWT_SECRET || "cloudtill-dev-secret";
+const JWT_SECRET = process.env.JWT_SECRET || "purepos-dev-secret";
 
 export interface JwtPayload {
   sub: string;

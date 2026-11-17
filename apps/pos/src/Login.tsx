@@ -72,7 +72,7 @@ export function Login({ onSuccess }: Props) {
   return (
     <div className="login">
       <div className="login-card">
-        <h1 className="brand">CloudTill</h1>
+        <h1 className="brand">PurePOS</h1>
         <p className="tag">Enter your PIN</p>
 
         {stores.length > 0 && (

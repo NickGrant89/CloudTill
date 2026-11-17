@@ -1,4 +1,4 @@
-# CloudTill API — production-ish image (Postgres via DATABASE_URL)
+# PurePOS API — production-ish image (Postgres via DATABASE_URL)
 FROM node:22-bookworm-slim AS deps
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate

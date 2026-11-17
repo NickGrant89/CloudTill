@@ -1,6 +1,9 @@
-# CloudTill pilot guide
+# PurePOS pilot guide
 
-**Packaging:** CloudTill is a **cloud-controlled SaaS** — central API, back office, billing, and catalog — with **offline-capable POS tills** that sync. Default deployment shape is **hosted multi-tenant**, not a boxed standalone server per shop.
+**Brand:** PurePOS UK · domain **purepos.co.uk** (production hosting suspended — use local or staging).  
+**Repo folder / GitHub:** still `CloudTill` / `NickGrant89/CloudTill` for now.
+
+**Packaging:** PurePOS is a **cloud-controlled SaaS** — central API, back office, billing, and catalog — with **offline-capable POS tills** that sync. Default deployment shape is **hosted multi-tenant**, not a boxed standalone server per shop.
 
 ## Quick start (this Mac)
 
@@ -12,16 +15,16 @@ pnpm dev                # API :4000 · POS :5173 · BO :5174 · Ordering :5175
 
 Or use the existing `cloudtill-dev` tmux session.
 
-| Surface | URL | Role |
+| Surface | Local | Staging (documented) |
 | --- | --- | --- |
-| Cloud API health | http://localhost:4000/api/health | Control plane |
-| Pricing / trial | http://localhost:4000/pricing | Public SaaS tiers |
-| POS till | http://localhost:5173 | Offline-capable client |
-| Back office | http://localhost:5174 | Cloud catalog + billing |
-| Online ordering | http://localhost:5175 | Customer web |
+| API health | http://localhost:4000/api/health | https://staging.purepos.co.uk/api/health |
+| Pricing / trial | http://localhost:4000/pricing | https://staging.purepos.co.uk/pricing |
+| POS till | http://localhost:5173 | https://staging.purepos.co.uk/pos |
+| Back office | http://localhost:5174 | https://staging.purepos.co.uk/bo |
+| Online ordering | http://localhost:5175 | https://staging.purepos.co.uk/order |
 
 Demo PINs: owner `1234` · manager `2222` · cashier `1111`  
-Emails: `owner@cloudtill.demo`, etc.
+Emails: `owner@purepos.demo`, etc.
 
 ## Env checklist
 
@@ -31,8 +34,9 @@ Copy `apps/api/.env.example` → `apps/api/.env`:
 | --- | --- | --- |
 | `DATABASE_URL` | `file:./dev.db` | Use Postgres in Compose / prod |
 | `JWT_SECRET` | change before shared deploy | Per-environment secret |
-| `PORT` | `4000` | Behind reverse proxy |
-| `HOST` | `0.0.0.0` | Bind for LAN tills |
+| `PORT` / `HOST` | `4000` / `0.0.0.0` | Behind reverse proxy |
+| `PUBLIC_BASE_URL` | `http://localhost:4000` | Local API origin |
+| `STAGING_BASE_URL` | `https://staging.purepos.co.uk` | Documented staging host |
 
 `GET /api/health` reports `ok`, DB status, store count, and whether `JWT_SECRET` is set.
 

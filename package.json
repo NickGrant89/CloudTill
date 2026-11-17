@@ -2,7 +2,7 @@
   "name": "cloudtill",
   "private": true,
   "version": "0.1.0",
-  "description": "CloudTill — Loyverse-parity cloud POS (web-first)",
+  "description": "PurePOS UK — cloud POS with offline tills (web-first). GitHub repo: CloudTill.",
   "scripts": {
     "dev": "pnpm -r --parallel --filter @cloudtill/api --filter @cloudtill/pos --filter @cloudtill/backoffice --filter @cloudtill/ordering run dev",
     "dev:mobile": "npm --prefix apps/mobile start",

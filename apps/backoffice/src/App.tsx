@@ -17,7 +17,7 @@ export function App() {
   const [storeName, setStoreName] = useState("");
   const [page, setPage] = useState<PageId>("dashboard");
   const [navOpen, setNavOpen] = useState(false);
-  const [email, setEmail] = useState("owner@cloudtill.demo");
+  const [email, setEmail] = useState("owner@purepos.demo");
   const [pin, setPin] = useState("1234");
   const [error, setError] = useState("");
 
@@ -60,7 +60,7 @@ export function App() {
     return (
       <div className="login">
         <div className="login-card">
-          <h1>CloudTill</h1>
+          <h1>PurePOS</h1>
           <p>Loading back office…</p>
         </div>
       </div>
@@ -71,13 +71,13 @@ export function App() {
     return (
       <div className="login">
         <form className="login-card" onSubmit={(e) => void login(e)}>
-          <h1>CloudTill</h1>
+          <h1>PurePOS</h1>
           <p>Back office · desktop management</p>
           <div className="field">
             <label>Email</label>
             <select value={email} onChange={(e) => setEmail(e.target.value)}>
-              <option value="owner@cloudtill.demo">owner@cloudtill.demo</option>
-              <option value="manager@cloudtill.demo">manager@cloudtill.demo</option>
+              <option value="owner@purepos.demo">owner@purepos.demo</option>
+              <option value="manager@purepos.demo">manager@purepos.demo</option>
             </select>
           </div>
           <div className="field">
@@ -132,7 +132,7 @@ export function App() {
           <span aria-hidden="true">{navOpen ? "✕" : "☰"}</span>
         </button>
         <div className="mobile-topbar-copy">
-          <div className="mobile-brand">CloudTill</div>
+          <div className="mobile-brand">PurePOS</div>
           <div className="mobile-page">{pageLabel}</div>
         </div>
         <button
@@ -156,7 +156,7 @@ export function App() {
 
       <div className="shell-body">
         <aside id="bo-sidebar" className="sidebar" aria-label="Back office navigation">
-          <div className="brand">CloudTill</div>
+          <div className="brand">PurePOS</div>
           <p className="sub">{storeName}</p>
           <nav className="sidebar-nav">
             {nav.map((n) => (

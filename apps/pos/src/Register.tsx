@@ -938,7 +938,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
               </>
             ) : (
               <>
-                <div className="brand-mini">CloudTill</div>
+                <div className="brand-mini">PurePOS</div>
                 <input
                   className="search"
                   placeholder="Search or scan barcode / SKU"

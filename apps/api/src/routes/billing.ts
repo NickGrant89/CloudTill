@@ -72,7 +72,7 @@ publicBillingRouter.post("/signup", async (req, res) => {
       monthlyGbp: plan.monthlyGbp,
     },
     nextSteps: [
-      "Open back office and sign in with owner@cloudtill.demo / 1234",
+      "Open back office and sign in with owner@purepos.demo / 1234",
       "Review Billing under Settings",
       "Run the POS till on this Mac at :5173",
     ],

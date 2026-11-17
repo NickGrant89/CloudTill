@@ -51,7 +51,7 @@ export function App() {
     return (
       <div className="login">
         <div className="login-card">
-          <h1 className="brand">CloudTill</h1>
+          <h1 className="brand">PurePOS</h1>
           <p className="tag">Loading register…</p>
         </div>
       </div>
