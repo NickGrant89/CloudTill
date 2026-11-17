@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, getToken, money } from "./api";
+import { api, getToken, loadCatalogSnapshot, money, OfflineError, saveCatalogSnapshot } from "./api";
 import type { SessionRegister, SessionStore, SessionUser } from "./App";
+import { nanoid } from "./offline/id";
+import type { OfflineStatus } from "./offline/sync";
+import { refreshOfflineBadge, startOfflineSync, subscribeOfflineStatus, syncQueuedSales } from "./offline/sync";
+import {
+  ensureLocalTicket,
+  persistLocalTicket,
+  queueCompletedLocalSale,
+  withTotals,
+} from "./offline/ticket";
+import { readLocalTicket, type LocalTicket } from "./offline/db";
 
 interface Category {
   id: string;
@@ -156,10 +166,40 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   const [mobilePane, setMobilePane] = useState<"items" | "ticket">("items");
   const [modifierItem, setModifierItem] = useState<Item | null>(null);
   const [modifierGroupId, setModifierGroupId] = useState("");
+  const [offline, setOffline] = useState<OfflineStatus>({
+    online: true,
+    pendingSales: 0,
+    syncing: false,
+    lastSyncAt: null,
+    lastError: null,
+  });
+  const [taxRateBps, setTaxRateBps] = useState(825);
 
   function setCurrentTicket(next: Ticket | null) {
     ticketRef.current = next;
     setTicket(next);
+  }
+
+  function isLocalTicket(t: Ticket | null | undefined): boolean {
+    return Boolean(t?.id.startsWith("local-"));
+  }
+
+  function localToTicket(local: LocalTicket): Ticket {
+    const totaled = withTotals(local, taxRateBps);
+    return {
+      id: totaled.id,
+      name: totaled.name,
+      status: totaled.status,
+      customerId: totaled.customerId,
+      customer: totaled.customer ?? null,
+      lines: totaled.lines,
+      discountCents: totaled.discountCents,
+      discountPercent: totaled.discountPercent,
+      tipCents: totaled.tipCents,
+      subtotalCents: totaled.subtotalCents,
+      taxCents: totaled.taxCents,
+      totalCents: totaled.totalCents,
+    };
   }
 
   function fail(title: string, error: unknown) {
@@ -184,7 +224,11 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
       api<Category[]>("/catalog/categories"),
       api<Item[]>("/catalog/items"),
       api<PaymentType[]>("/pos/payment-types"),
-      api<{ receipt: { header: string; footer: string }; tipPresetsPercent: number[] }>("/settings"),
+      api<{
+        receipt: { header: string; footer: string };
+        tipPresetsPercent: number[];
+        taxes?: { rateBps: number; enabled: boolean; inclusive: boolean }[];
+      }>("/settings"),
       api<{ id: string; openingFloatCents: number } | null>(`/shifts/current?registerId=${registerId}`),
       api<{ clockedIn: boolean }>("/time-clock/status"),
       api<Item[]>("/extras/favorites"),
@@ -192,47 +236,100 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     if (cats.status === "fulfilled") setCategories(cats.value);
     if (its.status === "fulfilled") setItems(its.value);
     if (pts.status === "fulfilled") setPaymentTypes(pts.value);
-    if (sett.status === "fulfilled") setSettings(sett.value);
+    if (sett.status === "fulfilled") {
+      setSettings(sett.value);
+      const tax = sett.value.taxes?.find((t) => t.enabled) ?? sett.value.taxes?.[0];
+      if (tax) setTaxRateBps(tax.rateBps);
+    }
     if (curShift.status === "fulfilled") setShift(curShift.value);
     if (clock.status === "fulfilled") setClockedIn(clock.value.clockedIn);
     if (favs.status === "fulfilled") setFavorites(favs.value);
-    const broken = [cats, its, pts].find((result) => result.status === "rejected");
-    setCatalogError(
-      broken?.status === "rejected"
-        ? broken.reason instanceof Error
-          ? broken.reason.message
-          : "Could not load the register"
-        : ""
-    );
+
+    const catalogOk = cats.status === "fulfilled" && its.status === "fulfilled" && pts.status === "fulfilled";
+    if (catalogOk) {
+      // Server wins catalog when online — refresh IndexedDB snapshot for offline use.
+      await saveCatalogSnapshot({
+        categories: cats.status === "fulfilled" ? cats.value : [],
+        items: its.status === "fulfilled" ? its.value : [],
+        paymentTypes: pts.status === "fulfilled" ? pts.value : [],
+        settings: sett.status === "fulfilled" ? sett.value : null,
+        favorites: favs.status === "fulfilled" ? favs.value : [],
+      });
+      setCatalogError("");
+    } else {
+      const cached = await loadCatalogSnapshot();
+      if (cached) {
+        setCategories(cached.categories as Category[]);
+        setItems(cached.items as Item[]);
+        setPaymentTypes(cached.paymentTypes as PaymentType[]);
+        if (cached.settings) setSettings(cached.settings as typeof settings);
+        if (cached.favorites) setFavorites(cached.favorites as Item[]);
+        setCatalogError("Offline · using cached catalog (server wins when back online)");
+      } else {
+        const broken = [cats, its, pts].find((result) => result.status === "rejected");
+        setCatalogError(
+          broken?.status === "rejected"
+            ? broken.reason instanceof Error
+              ? broken.reason.message
+              : "Could not load the register"
+            : ""
+        );
+      }
+    }
     setMenuReady(true);
   }, [registerId]);
 
   const ensureTicket = useCallback(async () => {
     if (ticketRef.current) return ticketRef.current;
     if (creatingRef.current) return creatingRef.current;
-    const pending = api<Ticket>("/pos/tickets", {
-      method: "POST",
-      body: JSON.stringify({ registerId, name: "Sale" }),
-    })
-      .then((created) => {
+    const pending = (async () => {
+      try {
+        const created = await api<Ticket>("/pos/tickets", {
+          method: "POST",
+          body: JSON.stringify({ registerId, name: "Sale" }),
+        });
         ticketRef.current = created;
         setTicket(created);
         return created;
-      })
-      .finally(() => {
-        creatingRef.current = null;
-      });
+      } catch (error) {
+        if (!(error instanceof OfflineError)) throw error;
+        const local = await ensureLocalTicket(registerId);
+        const created = localToTicket(local);
+        ticketRef.current = created;
+        setTicket(created);
+        return created;
+      }
+    })().finally(() => {
+      creatingRef.current = null;
+    });
     creatingRef.current = pending;
     return pending;
-  }, [registerId]);
+  }, [registerId, taxRateBps]);
 
   useEffect(() => {
     void loadCatalog();
   }, [loadCatalog]);
 
   useEffect(() => {
+    const stop = startOfflineSync();
+    const unsub = subscribeOfflineStatus(setOffline);
+    return () => {
+      stop();
+      unsub();
+    };
+  }, []);
+
+  useEffect(() => {
     setCurrentTicket(null);
     creatingRef.current = null;
+    void (async () => {
+      try {
+        const local = await readLocalTicket(registerId);
+        if (local?.lines.length) setCurrentTicket(localToTicket(local));
+      } catch {
+        /* ignore */
+      }
+    })();
   }, [registerId]);
 
   const filtered = useMemo(() => {
@@ -294,6 +391,30 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     try {
       await enqueue(async () => {
         const t = await ensureTicket();
+        if (isLocalTicket(t) || !offline.online) {
+          const local = await ensureLocalTicket(registerId);
+          const existing = local.lines.find(
+            (line) =>
+              line.variantId === variant.id &&
+              JSON.stringify(line.modifiers) === JSON.stringify(modifiers)
+          );
+          if (existing) existing.quantity += 1;
+          else {
+            local.lines.push({
+              key: `L-${nanoid(8)}`,
+              variantId: variant.id,
+              name: item.name,
+              quantity: 1,
+              unitPriceCents: variant.priceCents,
+              discountCents: 0,
+              modifiers,
+            });
+          }
+          const saved = await persistLocalTicket(local);
+          setCurrentTicket(localToTicket(saved));
+          setModal(null);
+          return;
+        }
         const updated = await api<Ticket>(`/pos/tickets/${t.id}/lines`, {
           method: "POST",
           body: JSON.stringify({ variantId: variant.id, quantity: 1, modifiers }),
@@ -303,6 +424,27 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
       });
       return true;
     } catch (error) {
+      if (error instanceof OfflineError) {
+        try {
+          const local = await ensureLocalTicket(registerId);
+          local.lines.push({
+            key: `L-${nanoid(8)}`,
+            variantId: variant.id,
+            name: item.name,
+            quantity: 1,
+            unitPriceCents: variant.priceCents,
+            discountCents: 0,
+            modifiers,
+          });
+          const saved = await persistLocalTicket(local);
+          setCurrentTicket(localToTicket(saved));
+          setModal(null);
+          return true;
+        } catch (inner) {
+          fail("Could not add item", inner);
+          return false;
+        }
+      }
       fail("Could not add item", error);
       return false;
     }
@@ -341,6 +483,17 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     await enqueue(async () => {
       const current = ticketRef.current;
       if (!current) return;
+      if (isLocalTicket(current) || !offline.online) {
+        const local = await ensureLocalTicket(registerId);
+        if (quantity <= 0) local.lines = local.lines.filter((entry) => entry.key !== line.key);
+        else {
+          const target = local.lines.find((entry) => entry.key === line.key);
+          if (target) target.quantity = quantity;
+        }
+        const saved = await persistLocalTicket(local);
+        setCurrentTicket(local.lines.length ? localToTicket(saved) : null);
+        return;
+      }
       const updated =
         quantity <= 0
           ? await api<Ticket>(`/pos/tickets/${current.id}/lines/${line.key}`, { method: "DELETE" })
@@ -354,6 +507,10 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
 
   async function holdTicket() {
     if (!ticket || ticket.lines.length === 0) return;
+    if (isLocalTicket(ticket) || !offline.online) {
+      fail("Hold", new Error("Hold needs the cloud — ticket stays on this till until you are online."));
+      return;
+    }
     try {
       await api(`/pos/tickets/${ticket.id}/hold`, { method: "POST" });
       setCurrentTicket(null);
@@ -366,6 +523,13 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   async function clearTicket() {
     if (!ticket) return;
     try {
+      if (isLocalTicket(ticket) || !offline.online) {
+        const { clearLocalTicket } = await import("./offline/db");
+        await clearLocalTicket(ticket.id);
+        setCurrentTicket(null);
+        setMobilePane("items");
+        return;
+      }
       await api(`/pos/tickets/${ticket.id}`, {
         method: "PATCH",
         body: JSON.stringify({ status: "voided" }),
@@ -537,6 +701,25 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     if (!payments.length) return;
     setBusy(true);
     try {
+      if (isLocalTicket(ticket) || !offline.online) {
+        const local = await ensureLocalTicket(registerId);
+        local.tipCents = ticket.tipCents;
+        local.discountCents = ticket.discountCents;
+        const queued = await queueCompletedLocalSale({
+          ticket: local,
+          payments,
+          taxRateBps,
+        });
+        setCurrentTicket(null);
+        setModal({
+          type: "receipt",
+          text: queued.text,
+          changeCents: queued.changeCents,
+          saleId: queued.clientSaleId,
+        });
+        await refreshOfflineBadge();
+        return;
+      }
       const result = await api<{
         sale: {
           id: string;
@@ -679,6 +862,23 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             Lock
           </button>
         </div>
+        <button
+          type="button"
+          className={`offline-badge${!offline.online ? " is-offline" : ""}${offline.pendingSales ? " has-queue" : ""}`}
+          title={
+            offline.online
+              ? offline.pendingSales
+                ? `${offline.pendingSales} sale(s) waiting to sync`
+                : "Online · catalog follows server"
+              : "Offline · sales queue locally; catalog from cache"
+          }
+          onClick={() => {
+            if (offline.online && offline.pendingSales) void syncQueuedSales();
+            else void refreshOfflineBadge();
+          }}
+        >
+          {!offline.online ? "Offline" : offline.syncing ? "Syncing…" : offline.pendingSales ? `Sync ${offline.pendingSales}` : "Online"}
+        </button>
         <div className={`toolbar-actions${tillPhase === "options" || tillPhase === "pay" || tillPhase === "done" ? " is-quiet" : ""}`}>
         <button
           type="button"

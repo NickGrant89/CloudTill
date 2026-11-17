@@ -429,3 +429,161 @@ posRouter.post("/drawer/open", async (req: AuthedRequest, res) => {
   });
   res.json({ ok: true, event });
 });
+
+/** Idempotent sync for sales completed on the till while offline. */
+posRouter.post("/offline-sales", async (req: AuthedRequest, res) => {
+  const body = z
+    .object({
+      clientSaleId: z.string().min(4),
+      registerId: z.string(),
+      customerId: z.string().nullable().optional(),
+      note: z.string().nullable().optional(),
+      discountCents: z.number().int().optional(),
+      tipCents: z.number().int().optional(),
+      lines: z
+        .array(
+          z.object({
+            variantId: z.string(),
+            name: z.string(),
+            quantity: z.number().positive(),
+            unitPriceCents: z.number().int(),
+            discountCents: z.number().int().default(0),
+            modifiers: z
+              .array(z.object({ name: z.string(), priceCents: z.number().int(), modifierId: z.string().optional() }))
+              .default([]),
+          })
+        )
+        .min(1),
+      payments: z
+        .array(
+          z.object({
+            paymentTypeId: z.string(),
+            amountCents: z.number().int().positive(),
+            tenderedCents: z.number().int().optional(),
+            giftCardCode: z.string().optional(),
+          })
+        )
+        .min(1),
+    })
+    .parse(req.body);
+
+  const offlineNote = `offline:${body.clientSaleId}`;
+  const existing = await prisma.sale.findFirst({
+    where: { storeId: req.user!.storeId, note: offlineNote },
+    include: { employee: true, customer: true, lines: true, payments: true },
+  });
+  if (existing) {
+    return res.json({
+      sale: {
+        ...existing,
+        employeeName: existing.employee.name,
+        customerName: existing.customer?.name ?? null,
+        createdAt: existing.createdAt.toISOString(),
+      },
+      duplicate: true,
+      changeCents: existing.changeCents,
+    });
+  }
+
+  const paymentTypes = await prisma.paymentType.findMany({
+    where: { id: { in: body.payments.map((p) => p.paymentTypeId) } },
+  });
+  const ptMap = new Map(paymentTypes.map((p) => [p.id, p]));
+  const tax = await getActiveTax(req.user!.storeId);
+
+  let subtotal = 0;
+  for (const line of body.lines) {
+    const modSum = line.modifiers.reduce((s, m) => s + m.priceCents, 0);
+    subtotal += lineSubtotal(line.unitPriceCents, line.quantity, modSum, line.discountCents);
+  }
+  const afterDisc = Math.max(0, subtotal - (body.discountCents ?? 0));
+  const taxCents = tax ? calcTax(afterDisc, tax.rateBps, tax.inclusive) : 0;
+  const tipCents = body.tipCents ?? 0;
+  const totalCents = afterDisc + (tax?.inclusive ? 0 : taxCents) + tipCents;
+  const paid = body.payments.reduce((s, p) => s + p.amountCents, 0);
+  if (paid < totalCents) return res.status(400).json({ error: "Insufficient payment", totalCents, paid });
+
+  const openShift = await prisma.shift.findFirst({
+    where: { storeId: req.user!.storeId, registerId: body.registerId, status: "open" },
+  });
+  const count = await prisma.sale.count({ where: { storeId: req.user!.storeId } });
+  const receiptNumber = `CT-${10000 + count + 1}`;
+
+  const sale = await prisma.sale.create({
+    data: {
+      receiptNumber,
+      storeId: req.user!.storeId,
+      registerId: body.registerId,
+      employeeId: req.user!.sub,
+      customerId: body.customerId ?? null,
+      shiftId: openShift?.id,
+      status: "completed",
+      subtotalCents: afterDisc,
+      discountCents: body.discountCents ?? 0,
+      taxCents,
+      tipCents,
+      totalCents,
+      paidCents: paid,
+      changeCents: paid - totalCents,
+      note: offlineNote,
+      lines: {
+        create: body.lines.map((line) => {
+          const modSum = line.modifiers.reduce((s, m) => s + m.priceCents, 0);
+          return {
+            variantId: line.variantId,
+            name: line.name,
+            quantity: line.quantity,
+            unitPriceCents: line.unitPriceCents,
+            discountCents: line.discountCents,
+            taxCents: 0,
+            totalCents: lineSubtotal(line.unitPriceCents, line.quantity, modSum, line.discountCents),
+            modifiersJson: JSON.stringify(line.modifiers),
+          };
+        }),
+      },
+      payments: {
+        create: body.payments.map((p) => ({
+          paymentTypeId: p.paymentTypeId,
+          paymentTypeName: ptMap.get(p.paymentTypeId)?.name ?? "Payment",
+          amountCents: p.amountCents,
+          tenderedCents: p.tenderedCents,
+          giftCardCode: p.giftCardCode?.toUpperCase(),
+        })),
+      },
+    },
+    include: { lines: true, payments: true, employee: true, customer: true },
+  });
+
+  for (const line of body.lines) {
+    const variant = await prisma.variant.findUnique({
+      where: { id: line.variantId },
+      include: { item: { include: { kitComponents: true } } },
+    });
+    if (!variant) continue;
+    if (variant.item.isComposite) {
+      for (const kc of variant.item.kitComponents) {
+        await adjustStock(
+          req.user!.storeId,
+          kc.componentVarId,
+          -kc.quantity * line.quantity,
+          "sale",
+          sale.receiptNumber,
+          req.user!.sub
+        );
+      }
+    } else if (variant.trackStock) {
+      await adjustStock(req.user!.storeId, variant.id, -line.quantity, "sale", sale.receiptNumber, req.user!.sub);
+    }
+  }
+
+  res.status(201).json({
+    sale: {
+      ...sale,
+      employeeName: sale.employee.name,
+      customerName: sale.customer?.name ?? null,
+      createdAt: sale.createdAt.toISOString(),
+    },
+    duplicate: false,
+    changeCents: sale.changeCents,
+  });
+});

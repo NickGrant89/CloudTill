@@ -1236,13 +1236,24 @@ function SettingsPage() {
     taxes: { id: string; name: string; rateBps: number; enabled: boolean }[];
     paymentTypes: { id: string; name: string; type: string; enabled: boolean; opensDrawer: boolean }[];
   } | null>(null);
+  const [billing, setBilling] = useState<{
+    planId: string;
+    status: string;
+    trialEndsAt: string | null;
+    plan: { name: string; monthlyGbp: number; highlights: string[]; features: string[] };
+  } | null>(null);
   const [receipt, setReceipt] = useState({ header: "", footer: "" });
   const [taxForm, setTaxForm] = useState({ name: "Local tax", rate: "8.25" });
   const [ptForm, setPtForm] = useState({ name: "", type: "other" });
+  const [pilotMsg, setPilotMsg] = useState("");
 
   async function load() {
-    const s = await api<NonNullable<typeof settings>>("/settings");
+    const [s, b] = await Promise.all([
+      api<NonNullable<typeof settings>>("/settings"),
+      api<NonNullable<typeof billing>>("/billing"),
+    ]);
     setSettings(s);
+    setBilling(b);
     setReceipt({ header: s.receipt.header, footer: s.receipt.footer });
   }
 
@@ -1257,7 +1268,7 @@ function SettingsPage() {
       <div className="page-head">
         <div>
           <h2>Settings</h2>
-          <p>Taxes, payment types, receipt, currency</p>
+          <p>Taxes, payment types, receipt, currency, billing</p>
         </div>
       </div>
 
@@ -1267,6 +1278,71 @@ function SettingsPage() {
           <strong>{settings.store.name}</strong> · {settings.store.currency} · {settings.store.timezone}
         </p>
         <p style={{ color: "var(--muted)" }}>{settings.store.address}</p>
+      </div>
+
+      {billing && (
+        <div className="panel-box">
+          <h3>Billing</h3>
+          <p>
+            <strong>{billing.plan.name}</strong> · £{billing.plan.monthlyGbp}/mo · {billing.status}
+            {billing.trialEndsAt ? ` · trial until ${new Date(billing.trialEndsAt).toLocaleDateString("en-GB")}` : ""}
+          </p>
+          <ul style={{ color: "var(--muted)", marginTop: 8 }}>
+            {billing.plan.highlights.map((h) => (
+              <li key={h}>{h}</li>
+            ))}
+          </ul>
+          <div className="toolbar" style={{ marginTop: 12 }}>
+            {(["starter", "pro", "multi"] as const).map((planId) => (
+              <button
+                key={planId}
+                type="button"
+                className={billing.planId === planId ? undefined : "secondary"}
+                onClick={() =>
+                  void api("/billing/plan", { method: "PATCH", body: JSON.stringify({ planId }) }).then(() => load())
+                }
+              >
+                {planId === "multi" ? "Multi-store" : planId[0].toUpperCase() + planId.slice(1)}
+              </button>
+            ))}
+            <a className="ghost-link" href="http://localhost:4000/pricing" target="_blank" rel="noreferrer">
+              Public pricing
+            </a>
+          </div>
+          <p style={{ marginTop: 10, fontSize: "0.88rem", color: "var(--muted)" }}>
+            Feature gate: CSV import needs Pro+ · multi-store transfers need Multi-store.
+          </p>
+        </div>
+      )}
+
+      <div className="panel-box">
+        <h3>Pilot tools</h3>
+        <p style={{ color: "var(--muted)", marginTop: 0 }}>Reset demo data or check API health.</p>
+        <div className="toolbar">
+          <button
+            type="button"
+            className="secondary"
+            onClick={() =>
+              void api<{ ok: boolean }>("/health")
+                .then((h) => setPilotMsg(`Health OK · ${JSON.stringify(h)}`))
+                .catch((e) => setPilotMsg(e instanceof Error ? e.message : "Health failed"))
+            }
+          >
+            Check health
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!confirm("Wipe and reseed the demo database?")) return;
+              void api<{ message: string }>("/extras/demo-reset", { method: "POST", body: "{}" })
+                .then((r) => setPilotMsg(r.message))
+                .catch((e) => setPilotMsg(e instanceof Error ? e.message : "Reset failed"));
+            }}
+          >
+            Demo reset
+          </button>
+        </div>
+        {pilotMsg && <p className="badge" style={{ marginTop: 10 }}>{pilotMsg}</p>}
       </div>
 
       <form

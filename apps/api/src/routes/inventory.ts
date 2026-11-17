@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
+import { storeAllowsFeature } from "./billing.js";
 
 export const inventoryRouter = Router();
 inventoryRouter.use(requireAuth);
@@ -162,6 +163,12 @@ inventoryRouter.get("/transfers", async (req: AuthedRequest, res) => {
 });
 
 inventoryRouter.post("/transfers", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  if (!(await storeAllowsFeature(req.user!.storeId, "multi_store"))) {
+    return res.status(402).json({
+      error: "Multi-store transfers require the Multi-store plan. Upgrade under Settings → Billing.",
+      feature: "multi_store",
+    });
+  }
   const body = z
     .object({
       fromStoreId: z.string(),

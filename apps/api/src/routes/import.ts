@@ -3,10 +3,21 @@ import { z } from "zod";
 import { prisma } from "../db.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 import { csvEscape, parseBool, parseCsv, parseNumber, parsePoundsToCents } from "../csv.js";
+import { storeAllowsFeature } from "./billing.js";
 
 export const importRouter = Router();
 importRouter.use(requireAuth);
 importRouter.use(requireRole("owner", "manager"));
+importRouter.use(async (req: AuthedRequest, res, next) => {
+  const allowed = await storeAllowsFeature(req.user!.storeId, "csv_import");
+  if (!allowed) {
+    return res.status(402).json({
+      error: "CSV import requires Pro or Multi-store. Upgrade under Settings → Billing.",
+      feature: "csv_import",
+    });
+  }
+  next();
+});
 
 export type ImportKind = "items" | "customers" | "stock";
 

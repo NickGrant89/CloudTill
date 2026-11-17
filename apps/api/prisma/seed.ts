@@ -729,6 +729,15 @@ async function main() {
     },
   });
 
+  const trialEnds = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+  await prisma.setting.createMany({
+    data: [
+      { storeId: store.id, key: "billing.plan", value: "pro" },
+      { storeId: store.id, key: "billing.status", value: "trialing" },
+      { storeId: store.id, key: "billing.trialEndsAt", value: trialEnds },
+    ],
+  });
+
   console.log("Seeded CloudTill demo:");
   console.log("  Store:", store.name, `(slug: ${store.slug})`);
   console.log("  owner@cloudtill.demo PIN 1234");

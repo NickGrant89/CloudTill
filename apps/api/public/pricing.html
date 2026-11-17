@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CloudTill pricing</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=DM+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --ink: #14241c;
+        --muted: #5d6d64;
+        --panel: #f7f3eb;
+        --line: #d9d2c6;
+        --accent: #2f6f4e;
+        --accent-ink: #f4f0e8;
+        --bg: #e8efe8;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "DM Sans", system-ui, sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(ellipse 80% 50% at 10% -10%, #cfe0d3 0%, transparent 55%),
+          radial-gradient(ellipse 60% 40% at 100% 0%, #e7d7c2 0%, transparent 50%),
+          var(--bg);
+      }
+      .wrap { width: min(1100px, calc(100% - 32px)); margin: 0 auto; padding: 40px 0 64px; }
+      .brand {
+        font-family: Fraunces, Georgia, serif;
+        font-size: clamp(2.4rem, 5vw, 3.6rem);
+        margin: 0 0 8px;
+      }
+      .lede { max-width: 38rem; color: var(--muted); font-size: 1.05rem; margin: 0 0 28px; }
+      .tiers {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+      }
+      @media (max-width: 900px) { .tiers { grid-template-columns: 1fr; } }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 22px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-height: 100%;
+      }
+      .card.featured { border-color: var(--accent); box-shadow: 0 16px 40px rgba(20, 36, 28, 0.08); }
+      .card h2 { font-family: Fraunces, Georgia, serif; margin: 0; font-size: 1.6rem; }
+      .price { font-size: 2rem; font-weight: 700; }
+      .price span { font-size: 0.95rem; font-weight: 500; color: var(--muted); }
+      ul { margin: 0; padding-left: 1.1rem; color: var(--muted); }
+      li { margin: 0.35rem 0; }
+      button, .ghost {
+        min-height: 44px;
+        border-radius: 12px;
+        border: none;
+        padding: 0 16px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      button { background: var(--accent); color: var(--accent-ink); }
+      .ghost { background: transparent; border: 1px solid var(--line); color: var(--ink); text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+      .signup {
+        margin-top: 36px;
+        background: rgba(255,255,255,0.55);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 22px;
+      }
+      .signup h3 { margin: 0 0 8px; font-family: Fraunces, Georgia, serif; }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      @media (max-width: 700px) { .row { grid-template-columns: 1fr; } }
+      label { display: grid; gap: 6px; font-size: 0.88rem; font-weight: 600; }
+      input, select {
+        min-height: 42px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        padding: 0 12px;
+        font: inherit;
+        background: #fff;
+      }
+      .msg { margin-top: 12px; color: var(--accent); font-weight: 600; }
+      .err { color: #9b3b2e; }
+      .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <p style="letter-spacing:0.08em; text-transform:uppercase; font-size:0.75rem; font-weight:700; color:var(--muted); margin:0 0 8px;">CloudTill · hosted SaaS</p>
+      <h1 class="brand">Cloud control · offline tills</h1>
+      <p class="lede">
+        CloudTill is a hosted multi-tenant POS: central back office, billing, and catalog in the cloud, with tills that keep selling offline and sync when they reconnect.
+        Starter is one till, Pro adds kitchen and ordering, Multi-store covers groups. Trial stub for the pilot — not a boxed on-prem install.
+      </p>
+      <div class="tiers" id="tiers"></div>
+
+      <form class="signup" id="signup">
+        <h3>Start a cloud trial</h3>
+        <p style="margin:0 0 14px; color:var(--muted);">Stub signup — applies the plan on the hosted demo store for this pilot (Stripe comes later).</p>
+        <div class="row">
+          <label>Business name<input name="businessName" required placeholder="Demo Café" /></label>
+          <label>Work email<input name="email" type="email" required placeholder="you@business.com" /></label>
+        </div>
+        <div class="row" style="margin-top:12px;">
+          <label>Plan
+            <select name="planId" id="planSelect">
+              <option value="starter">Starter</option>
+              <option value="pro" selected>Pro</option>
+              <option value="multi">Multi-store</option>
+            </select>
+          </label>
+        </div>
+        <div class="actions">
+          <button type="submit">Start trial</button>
+          <a class="ghost" href="http://localhost:5174/">Open back office</a>
+          <a class="ghost" href="http://localhost:5173/">Open POS</a>
+        </div>
+        <p class="msg" id="msg" hidden></p>
+      </form>
+    </div>
+    <script>
+      const tiers = document.getElementById("tiers");
+      const msg = document.getElementById("msg");
+      fetch("/api/public/plans")
+        .then((r) => r.json())
+        .then((data) => {
+          tiers.innerHTML = data.plans
+            .map(
+              (p, i) => `
+            <article class="card ${i === 1 ? "featured" : ""}">
+              <h2>${p.name}</h2>
+              <p>${p.tagline}</p>
+              <div class="price">£${p.monthlyGbp}<span>/mo</span></div>
+              <ul>${p.highlights.map((h) => `<li>${h}</li>`).join("")}</ul>
+              <button type="button" data-plan="${p.id}" style="margin-top:auto;">Choose ${p.name}</button>
+            </article>`
+            )
+            .join("");
+          tiers.querySelectorAll("button[data-plan]").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              document.getElementById("planSelect").value = btn.dataset.plan;
+              document.getElementById("signup").scrollIntoView({ behavior: "smooth" });
+            });
+          });
+        })
+        .catch(() => {
+          tiers.innerHTML = "<p class='err'>Could not load plans — is the API running on :4000?</p>";
+        });
+
+      document.getElementById("signup").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        msg.hidden = false;
+        msg.className = "msg";
+        msg.textContent = "Starting trial…";
+        const form = new FormData(e.target);
+        try {
+          const res = await fetch("/api/public/signup", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              businessName: form.get("businessName"),
+              email: form.get("email"),
+              planId: form.get("planId"),
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Signup failed");
+          msg.textContent = `${data.message} Plan: ${data.account.planName} · trial to ${new Date(data.account.trialEndsAt).toLocaleDateString("en-GB")}.`;
+        } catch (err) {
+          msg.className = "msg err";
+          msg.textContent = err instanceof Error ? err.message : "Signup failed";
+        }
+      });
+    </script>
+  </body>
+</html>

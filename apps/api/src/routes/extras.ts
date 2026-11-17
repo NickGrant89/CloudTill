@@ -289,6 +289,24 @@ extrasRouter.post("/stocktake", requireRole("owner", "manager"), async (req: Aut
   res.json({ ok: true, results });
 });
 
+/** Pilot helper: wipe + reseed demo data (owner only). */
+extrasRouter.post("/demo-reset", requireRole("owner"), async (_req: AuthedRequest, res) => {
+  const { spawn } = await import("node:child_process");
+  const { fileURLToPath } = await import("node:url");
+  const path = await import("node:path");
+  const cwd = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../");
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn("npx", ["tsx", "prisma/seed.ts"], { cwd, stdio: "inherit", shell: process.platform === "win32" });
+    child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`Demo reset failed (exit ${code})`))));
+    child.on("error", reject);
+  });
+  res.json({
+    ok: true,
+    message: "Demo data reset. Log in again with owner@cloudtill.demo / 1234.",
+    health: "/api/health",
+  });
+});
+
 /** Low-stock alerts for BO toast / push stub */
 extrasRouter.get("/low-stock-alerts", async (req: AuthedRequest, res) => {
   const levels = await prisma.inventoryLevel.findMany({

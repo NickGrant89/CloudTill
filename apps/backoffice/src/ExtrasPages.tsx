@@ -299,7 +299,12 @@ export function ImportPage() {
       );
     } catch (e) {
       setPreview(null);
-      setError(e instanceof Error ? e.message : "Preview failed");
+      const message = e instanceof Error ? e.message : "Preview failed";
+      setError(
+        /Pro or Multi-store|csv_import|402/i.test(message)
+          ? `${message} Open Settings → Billing to upgrade.`
+          : message
+      );
     } finally {
       setBusy(false);
     }
