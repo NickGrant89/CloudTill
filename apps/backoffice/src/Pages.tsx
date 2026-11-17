@@ -126,7 +126,7 @@ function Dashboard() {
         <h3>Quick links</h3>
         <p style={{ color: "var(--muted)", margin: 0 }}>
           Use the sidebar for catalog, inventory receiving, customer loyalty, employee PINs, sales void/refund,
-          and Loyverse-parity reports. Open the POS app on port 5173 for register sales.
+          and PurePOS reports. Open the POS till on port 5173 for register sales.
         </p>
       </div>
     </div>

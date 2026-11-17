@@ -1,6 +1,6 @@
 # PurePOS
 
-**PurePOS UK** — Loyverse-parity **cloud POS** (product). Hosted multi-tenant SaaS by default (central API, back office, billing, and catalog), with **offline-capable POS tills** that queue sales locally and sync when back online. Not a boxed standalone install.
+**PurePOS UK** is the product: **cloud till + back office + online ordering**. Hosted multi-tenant SaaS (central API, catalog, billing) with offline-capable tills that queue sales and sync when back online. Not a WordPress add-on, not a Loyverse bolt-on, not a boxed on-prem install.
 
 - **Brand / domain:** PurePOS · [purepos.co.uk](https://purepos.co.uk) (production hosting currently suspended)
 - **Staging (pilots):** `https://staging.purepos.co.uk` (documented target) · local `localhost` ports below
@@ -67,7 +67,7 @@ docs/PILOT.md     Pilot env checklist + offline/billing smoke
 docs/DEPLOY.md    Docker + Postgres (hosted shape)
 ```
 
-## Loyverse feature map
+## Feature map
 
 | Area | Status | Notes |
 | --- | --- | --- |

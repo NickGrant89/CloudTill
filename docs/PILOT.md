@@ -3,7 +3,8 @@
 **Brand:** PurePOS UK · domain **purepos.co.uk** (production hosting suspended — use local or staging).  
 **Repo folder / GitHub:** still `CloudTill` / `NickGrant89/CloudTill` for now.
 
-**Packaging:** PurePOS is a **cloud-controlled SaaS** — central API, back office, billing, and catalog — with **offline-capable POS tills** that sync. Default deployment shape is **hosted multi-tenant**, not a boxed standalone server per shop.
+**Product:** PurePOS = **cloud till + back office + online ordering** (this monorepo). Not a WordPress add-on / Loyverse bolt-on.  
+**Packaging:** Hosted multi-tenant SaaS — central API, catalog, billing — with **offline-capable tills** that sync.
 
 ## Quick start (this Mac)
 
