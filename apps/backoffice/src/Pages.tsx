@@ -683,7 +683,7 @@ function CustomersPage() {
             <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           </div>
           <div className="field">
-            <label>Store credit ($)</label>
+            <label>Store credit (£)</label>
             <input value={form.storeCreditCents} onChange={(e) => setForm({ ...form, storeCreditCents: e.target.value })} />
           </div>
         </div>

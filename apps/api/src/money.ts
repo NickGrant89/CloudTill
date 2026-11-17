@@ -18,7 +18,7 @@ export function calcTax(subtotalAfterDiscount: number, rateBps: number, inclusiv
   return Math.round((subtotalAfterDiscount * rateBps) / 10000);
 }
 
-export function formatMoney(cents: number, symbol = "$"): string {
+export function formatMoney(cents: number, symbol = "£"): string {
   const sign = cents < 0 ? "-" : "";
   return `${sign}${symbol}${(Math.abs(cents) / 100).toFixed(2)}`;
 }

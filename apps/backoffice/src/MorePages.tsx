@@ -62,7 +62,7 @@ export function GiftCardsPage() {
         <form className="panel-box" onSubmit={(e) => void issue(e)}>
           <h3>Issue card</h3>
           <div className="field">
-            <label>Amount ($)</label>
+            <label>Amount (£)</label>
             <input value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
           </div>
           <div className="field">
@@ -89,7 +89,7 @@ export function GiftCardsPage() {
             </select>
           </div>
           <div className="field">
-            <label>Amount ($)</label>
+            <label>Amount (£)</label>
             <input value={reload.amount} onChange={(e) => setReload({ ...reload, amount: e.target.value })} />
           </div>
           <button type="submit">Reload</button>

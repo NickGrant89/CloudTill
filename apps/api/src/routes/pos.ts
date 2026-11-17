@@ -37,7 +37,13 @@ async function ticketTotals(ticketId: string) {
   const afterDisc = Math.max(0, afterPct - ticket.discountCents);
   const taxCents = tax ? calcTax(afterDisc, tax.rateBps, tax.inclusive) : 0;
   const total = afterDisc + (tax?.inclusive ? 0 : taxCents) + ticket.tipCents;
-  return { subtotalCents: subtotal, taxCents, totalCents: total, discountCents: ticket.discountCents, tipCents: ticket.tipCents };
+  return {
+    subtotalCents: subtotal,
+    taxCents,
+    totalCents: total,
+    discountCents: subtotal - afterDisc,
+    tipCents: ticket.tipCents,
+  };
 }
 
 async function serializeTicket(ticketId: string) {
@@ -164,7 +170,7 @@ posRouter.patch("/tickets/:id", async (req, res) => {
   const body = z
     .object({
       name: z.string().optional(),
-      status: z.enum(["open", "held"]).optional(),
+      status: z.enum(["open", "held", "voided"]).optional(),
       customerId: z.string().nullable().optional(),
       discountCents: z.number().int().optional(),
       discountPercent: z.number().optional(),
@@ -237,7 +243,8 @@ posRouter.post("/tickets/:id/pay", async (req: AuthedRequest, res) => {
   const { redeemGiftCard } = await import("./giftcards.js");
   for (const p of body.payments) {
     const pt = ptMap.get(p.paymentTypeId);
-    if (pt?.type === "store_credit" && ticket.customerId) {
+    if (pt?.type === "store_credit") {
+      if (!ticket.customerId) return res.status(400).json({ error: "Attach a customer to use store credit" });
       const cust = await prisma.customer.findUniqueOrThrow({ where: { id: ticket.customerId } });
       if (cust.storeCreditCents < p.amountCents) {
         return res.status(400).json({ error: "Insufficient store credit" });
@@ -279,7 +286,7 @@ posRouter.post("/tickets/:id/pay", async (req: AuthedRequest, res) => {
       shiftId: openShift?.id,
       status: "completed",
       subtotalCents: totals.subtotalCents,
-      discountCents: totals.discountCents + Math.round((totals.subtotalCents * (ticket.discountPercent || 0)) / 100),
+      discountCents: totals.discountCents,
       taxCents: totals.taxCents,
       tipCents: totals.tipCents,
       totalCents: totals.totalCents,

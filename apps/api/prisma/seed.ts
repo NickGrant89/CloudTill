@@ -41,7 +41,7 @@ async function main() {
       name: "CloudTill Demo Café",
       address: "100 Market Street, Demo City",
       phone: "+1 555-0100",
-      currency: "USD",
+      currency: "GBP",
       timezone: "America/New_York",
     },
   });
@@ -51,7 +51,7 @@ async function main() {
       slug: "downtown",
       name: "CloudTill Downtown (stub)",
       address: "22 Harbor Ave",
-      currency: "USD",
+      currency: "GBP",
       timezone: "America/New_York",
     },
   });
@@ -734,7 +734,7 @@ async function main() {
   console.log("  owner@cloudtill.demo PIN 1234");
   console.log("  manager@cloudtill.demo PIN 2222");
   console.log("  cashier@cloudtill.demo PIN 1111");
-  console.log("  Gift cards: GC-DEMO50 ($50), GC-PARTIAL ($18)");
+  console.log("  Gift cards: GC-DEMO50 (£50), GC-PARTIAL (£18)");
   console.log("  Online order: OL-1001 (kitchen queue)");
   console.log("  Favorites: Latte, Croissant, Breakfast Combo");
 }

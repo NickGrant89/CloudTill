@@ -55,7 +55,7 @@ export async function loadReceiptData(saleId: string): Promise<ReceiptData> {
       amountCents: p.amountCents,
     })),
     createdAt: sale.createdAt.toISOString(),
-    currencySymbol: sale.store.currency === "USD" ? "$" : sale.store.currency,
+    currencySymbol: sale.store.currency === "GBP" ? "£" : sale.store.currency === "USD" ? "$" : sale.store.currency === "EUR" ? "€" : sale.store.currency,
   };
 }
 

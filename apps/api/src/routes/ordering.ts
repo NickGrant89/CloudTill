@@ -153,7 +153,7 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
     });
   }
 
-  // Flat delivery fee stub — free over $30 subtotal
+  // Flat delivery fee stub — free over £30 subtotal
   const DELIVERY_FEE_CENTS = 399;
   const deliveryFeeCents =
     body.fulfillment === "delivery" ? (subtotal >= 3000 ? 0 : DELIVERY_FEE_CENTS) : 0;

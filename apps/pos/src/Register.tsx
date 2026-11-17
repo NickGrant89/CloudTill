@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, getToken, money } from "./api";
 import type { SessionRegister, SessionStore, SessionUser } from "./App";
 
@@ -91,7 +91,6 @@ interface Props {
 
 type Modal =
   | null
-  | { type: "modifiers"; item: Item }
   | { type: "pay" }
   | { type: "held" }
   | { type: "customers" }
@@ -142,15 +141,46 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   const [busy, setBusy] = useState(false);
   const [clockedIn, setClockedIn] = useState(false);
   const [favorites, setFavorites] = useState<Item[]>([]);
-  const [showFavorites, setShowFavorites] = useState(true);
+  const [showFavorites, setShowFavorites] = useState(false);
+  const [catalogError, setCatalogError] = useState("");
+  const [menuReady, setMenuReady] = useState(false);
+  const [payText, setPayText] = useState<Record<string, string>>({});
+  const ticketRef = useRef<Ticket | null>(null);
+  const creatingRef = useRef<Promise<Ticket> | null>(null);
+  const queueRef = useRef(Promise.resolve());
   const [board, setBoard] = useState<BoardTicket[]>([]);
   const [kitchenOrders, setKitchenOrders] = useState<KitchenOrder[]>([]);
   const [tipSuggestions, setTipSuggestions] = useState<
     { label: string; tipCents: number; percent: number | null }[]
   >([]);
+  const [mobilePane, setMobilePane] = useState<"items" | "ticket">("items");
+  const [modifierItem, setModifierItem] = useState<Item | null>(null);
+  const [modifierGroupId, setModifierGroupId] = useState("");
+
+  function setCurrentTicket(next: Ticket | null) {
+    ticketRef.current = next;
+    setTicket(next);
+  }
+
+  function fail(title: string, error: unknown) {
+    setModal({
+      type: "message",
+      title,
+      body: error instanceof Error ? error.message : "Something went wrong",
+    });
+  }
+
+  function enqueue<T>(job: () => Promise<T>): Promise<T> {
+    const run = queueRef.current.then(job, job);
+    queueRef.current = run.then(
+      () => undefined,
+      () => undefined
+    );
+    return run;
+  }
 
   const loadCatalog = useCallback(async () => {
-    const [cats, its, pts, sett, curShift, clock, favs] = await Promise.all([
+    const [cats, its, pts, sett, curShift, clock, favs] = await Promise.allSettled([
       api<Category[]>("/catalog/categories"),
       api<Item[]>("/catalog/items"),
       api<PaymentType[]>("/pos/payment-types"),
@@ -159,31 +189,50 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
       api<{ clockedIn: boolean }>("/time-clock/status"),
       api<Item[]>("/extras/favorites"),
     ]);
-    setCategories(cats);
-    setItems(its);
-    setPaymentTypes(pts);
-    setSettings(sett);
-    setShift(curShift);
-    setClockedIn(clock.clockedIn);
-    setFavorites(favs);
+    if (cats.status === "fulfilled") setCategories(cats.value);
+    if (its.status === "fulfilled") setItems(its.value);
+    if (pts.status === "fulfilled") setPaymentTypes(pts.value);
+    if (sett.status === "fulfilled") setSettings(sett.value);
+    if (curShift.status === "fulfilled") setShift(curShift.value);
+    if (clock.status === "fulfilled") setClockedIn(clock.value.clockedIn);
+    if (favs.status === "fulfilled") setFavorites(favs.value);
+    const broken = [cats, its, pts].find((result) => result.status === "rejected");
+    setCatalogError(
+      broken?.status === "rejected"
+        ? broken.reason instanceof Error
+          ? broken.reason.message
+          : "Could not load the register"
+        : ""
+    );
+    setMenuReady(true);
   }, [registerId]);
 
   const ensureTicket = useCallback(async () => {
-    if (ticket) return ticket;
-    const t = await api<Ticket>("/pos/tickets", {
+    if (ticketRef.current) return ticketRef.current;
+    if (creatingRef.current) return creatingRef.current;
+    const pending = api<Ticket>("/pos/tickets", {
       method: "POST",
       body: JSON.stringify({ registerId, name: "Sale" }),
-    });
-    setTicket(t);
-    return t;
-  }, [ticket, registerId]);
+    })
+      .then((created) => {
+        ticketRef.current = created;
+        setTicket(created);
+        return created;
+      })
+      .finally(() => {
+        creatingRef.current = null;
+      });
+    creatingRef.current = pending;
+    return pending;
+  }, [registerId]);
 
   useEffect(() => {
     void loadCatalog();
   }, [loadCatalog]);
 
   useEffect(() => {
-    setTicket(null);
+    setCurrentTicket(null);
+    creatingRef.current = null;
   }, [registerId]);
 
   const filtered = useMemo(() => {
@@ -200,29 +249,82 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     });
   }, [items, categoryId, query]);
 
+  function openModifierMenu(item: Item) {
+    const initial: Record<string, Modifier[]> = {};
+    for (const group of item.modifierGroups) {
+      initial[group.id] = group.minSelect > 0 && group.modifiers[0] ? [group.modifiers[0]] : [];
+    }
+    setSelectedMods(initial);
+    setModifierGroupId(item.modifierGroups[0]?.id ?? "");
+    setModifierItem(item);
+    setMobilePane("items");
+  }
+
+  function chooseModifier(group: ModGroup, modifier: Modifier) {
+    setSelectedMods((prev) => {
+      const current = prev[group.id] ?? [];
+      if (group.maxSelect <= 1) return { ...prev, [group.id]: [modifier] };
+      if (current.some((option) => option.id === modifier.id)) {
+        return { ...prev, [group.id]: current.filter((option) => option.id !== modifier.id) };
+      }
+      if (current.length >= group.maxSelect) return prev;
+      return { ...prev, [group.id]: [...current, modifier] };
+    });
+    if (group.maxSelect <= 1 && modifierItem) {
+      const index = modifierItem.modifierGroups.findIndex((entry) => entry.id === group.id);
+      const next = modifierItem.modifierGroups[index + 1];
+      if (next) setModifierGroupId(next.id);
+    }
+  }
+
   async function addItem(item: Item) {
     if (item.modifierGroups.length > 0) {
-      const initial: Record<string, Modifier[]> = {};
-      for (const g of item.modifierGroups) {
-        if (g.minSelect > 0 && g.modifiers[0]) initial[g.id] = [g.modifiers[0]];
-        else initial[g.id] = [];
-      }
-      setSelectedMods(initial);
-      setModal({ type: "modifiers", item });
+      openModifierMenu(item);
       return;
     }
     await addVariant(item, []);
   }
 
   async function addVariant(item: Item, modifiers: { modifierId?: string; name: string; priceCents: number }[]) {
-    const t = await ensureTicket();
     const variant = item.variants[0];
-    const updated = await api<Ticket>(`/pos/tickets/${t.id}/lines`, {
-      method: "POST",
-      body: JSON.stringify({ variantId: variant.id, quantity: 1, modifiers }),
-    });
-    setTicket(updated);
-    setModal(null);
+    if (!variant) {
+      fail("Item", new Error(`${item.name} has no price`));
+      return false;
+    }
+    try {
+      await enqueue(async () => {
+        const t = await ensureTicket();
+        const updated = await api<Ticket>(`/pos/tickets/${t.id}/lines`, {
+          method: "POST",
+          body: JSON.stringify({ variantId: variant.id, quantity: 1, modifiers }),
+        });
+        setCurrentTicket(updated);
+        setModal(null);
+      });
+      return true;
+    } catch (error) {
+      fail("Could not add item", error);
+      return false;
+    }
+  }
+
+  async function confirmModifiers() {
+    if (!modifierItem) return;
+    for (const group of modifierItem.modifierGroups) {
+      const picked = selectedMods[group.id] ?? [];
+      if (picked.length < group.minSelect) {
+        setModifierGroupId(group.id);
+        fail(
+          modifierItem.name,
+          new Error(group.minSelect > 1 ? `Choose at least ${group.minSelect} for ${group.name}` : `Choose ${group.name}`)
+        );
+        return;
+      }
+    }
+    const mods = Object.values(selectedMods)
+      .flat()
+      .map((option) => ({ modifierId: option.id, name: option.name, priceCents: option.priceCents }));
+    if (await addVariant(modifierItem, mods)) setModifierItem(null);
   }
 
   async function onSearchKey(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -235,72 +337,117 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   }
 
   async function updateQty(line: TicketLine, quantity: number) {
-    if (!ticket) return;
-    if (quantity <= 0) {
-      const updated = await api<Ticket>(`/pos/tickets/${ticket.id}/lines/${line.key}`, { method: "DELETE" });
-      setTicket(updated);
-      return;
-    }
-    const updated = await api<Ticket>(`/pos/tickets/${ticket.id}/lines/${line.key}`, {
-      method: "PATCH",
-      body: JSON.stringify({ quantity }),
-    });
-    setTicket(updated);
+    if (!ticketRef.current) return;
+    await enqueue(async () => {
+      const current = ticketRef.current;
+      if (!current) return;
+      const updated =
+        quantity <= 0
+          ? await api<Ticket>(`/pos/tickets/${current.id}/lines/${line.key}`, { method: "DELETE" })
+          : await api<Ticket>(`/pos/tickets/${current.id}/lines/${line.key}`, {
+              method: "PATCH",
+              body: JSON.stringify({ quantity }),
+            });
+      setCurrentTicket(updated);
+    }).catch((error) => fail("Could not update quantity", error));
   }
 
   async function holdTicket() {
     if (!ticket || ticket.lines.length === 0) return;
-    await api(`/pos/tickets/${ticket.id}/hold`, { method: "POST" });
-    setTicket(null);
+    try {
+      await api(`/pos/tickets/${ticket.id}/hold`, { method: "POST" });
+      setCurrentTicket(null);
+      setMobilePane("items");
+    } catch (error) {
+      fail("Could not hold ticket", error);
+    }
+  }
+
+  async function clearTicket() {
+    if (!ticket) return;
+    try {
+      await api(`/pos/tickets/${ticket.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "voided" }),
+      });
+      setCurrentTicket(null);
+      setMobilePane("items");
+    } catch (error) {
+      fail("Could not clear ticket", error);
+    }
   }
 
   async function openHeld() {
-    const list = await api<Ticket[]>("/pos/tickets?status=held");
-    setHeld(list);
-    setModal({ type: "held" });
+    try {
+      const list = await api<Ticket[]>("/pos/tickets?status=held");
+      setHeld(list);
+      setModal({ type: "held" });
+    } catch (error) {
+      fail("Held tickets", error);
+    }
   }
 
   async function recall(id: string) {
-    const t = await api<Ticket>(`/pos/tickets/${id}/recall`, { method: "POST" });
-    setTicket(t);
-    setModal(null);
+    try {
+      const t = await api<Ticket>(`/pos/tickets/${id}/recall`, { method: "POST" });
+      setCurrentTicket(t);
+      setModal(null);
+      setMobilePane("ticket");
+    } catch (error) {
+      fail("Could not recall ticket", error);
+    }
   }
 
   async function openCustomers() {
-    const list = await api<Customer[]>("/customers");
-    setCustomers(list);
-    setModal({ type: "customers" });
+    try {
+      const list = await api<Customer[]>("/customers");
+      setCustomers(list);
+      setModal({ type: "customers" });
+    } catch (error) {
+      fail("Customers", error);
+    }
   }
 
   async function attachCustomer(c: Customer) {
-    if (!ticket) await ensureTicket();
-    const t = ticket ?? (await ensureTicket());
-    const updated = await api<Ticket>(`/pos/tickets/${t.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ customerId: c.id }),
-    });
-    setTicket(updated);
-    setModal(null);
+    try {
+      const t = ticketRef.current ?? (await ensureTicket());
+      const updated = await api<Ticket>(`/pos/tickets/${t.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ customerId: c.id }),
+      });
+      setCurrentTicket(updated);
+      setModal(null);
+    } catch (error) {
+      fail("Could not attach customer", error);
+    }
   }
 
   async function applyDiscount(discountCents: number, discountPercent: number) {
     if (!ticket) return;
-    const updated = await api<Ticket>(`/pos/tickets/${ticket.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ discountCents, discountPercent }),
-    });
-    setTicket(updated);
-    setModal(null);
+    try {
+      const updated = await api<Ticket>(`/pos/tickets/${ticket.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ discountCents, discountPercent }),
+      });
+      setCurrentTicket(updated);
+      setModal(null);
+    } catch (error) {
+      fail("Could not apply discount", error);
+    }
   }
 
   async function applyTip(tipCents: number) {
     if (!ticket) return;
-    const updated = await api<Ticket>(`/pos/tickets/${ticket.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ tipCents }),
-    });
-    setTicket(updated);
-    setModal(null);
+    try {
+      const updated = await api<Ticket>(`/pos/tickets/${ticket.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ tipCents }),
+      });
+      setCurrentTicket(updated);
+      setModal(null);
+    } catch (error) {
+      fail("Could not apply tip", error);
+    }
   }
 
   async function openDrawer() {
@@ -315,10 +462,25 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     }
   }
 
+  function setTender(id: string, cents: number) {
+    const safe = Math.max(0, cents);
+    setPayAmounts((prev) => ({ ...prev, [id]: safe }));
+    setPayText((prev) => ({ ...prev, [id]: (safe / 100).toFixed(2) }));
+  }
+
   function openPay() {
     if (!ticket || ticket.lines.length === 0) return;
     const cash = paymentTypes.find((p) => p.type === "cash");
-    setPayAmounts(cash ? { [cash.id]: ticket.totalCents } : {});
+    const amounts: Record<string, number> = {};
+    const text: Record<string, string> = {};
+    for (const type of paymentTypes) {
+      const cents = cash && type.id === cash.id ? ticket.totalCents : 0;
+      amounts[type.id] = cents;
+      text[type.id] = (cents / 100).toFixed(2);
+    }
+    setPayAmounts(amounts);
+    setPayText(text);
+    setMobilePane("ticket");
     setModal({ type: "pay" });
   }
 
@@ -340,17 +502,38 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
 
   async function completePay() {
     if (!ticket) return;
-    const payments = Object.entries(payAmounts)
-      .filter(([, amt]) => amt > 0)
-      .map(([paymentTypeId, amountCents]) => {
-        const pt = paymentTypes.find((p) => p.id === paymentTypeId);
-        return {
-          paymentTypeId,
-          amountCents,
-          tenderedCents: pt?.type === "cash" ? amountCents : undefined,
-          giftCardCode: pt?.type === "gift_card" ? giftCardCode : undefined,
-        };
+    let remaining = ticket.totalCents;
+    const ranked = Object.entries(payAmounts)
+      .filter(([, amount]) => amount > 0)
+      .sort((a, b) => {
+        const aCash = paymentTypes.find((p) => p.id === a[0])?.type === "cash" ? 1 : 0;
+        const bCash = paymentTypes.find((p) => p.id === b[0])?.type === "cash" ? 1 : 0;
+        return aCash - bCash;
       });
+    type PayLine = {
+      paymentTypeId: string;
+      amountCents: number;
+      tenderedCents?: number;
+      giftCardCode?: string;
+    };
+    const payments: PayLine[] = [];
+    for (const [paymentTypeId, amountCents] of ranked) {
+      const pt = paymentTypes.find((p) => p.id === paymentTypeId);
+      if (pt?.type === "cash") {
+        const tendered = amountCents;
+        remaining -= Math.min(tendered, Math.max(remaining, 0));
+        payments.push({ paymentTypeId, amountCents: tendered, tenderedCents: tendered });
+        continue;
+      }
+      const applied = Math.min(amountCents, Math.max(remaining, 0));
+      if (applied <= 0) continue;
+      remaining -= applied;
+      payments.push({
+        paymentTypeId,
+        amountCents: applied,
+        giftCardCode: pt?.type === "gift_card" ? giftCardCode : undefined,
+      });
+    }
     if (!payments.length) return;
     setBusy(true);
     try {
@@ -400,7 +583,8 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
       ]
         .filter(Boolean)
         .join("\n");
-      setTicket(null);
+      setCurrentTicket(null);
+      setMobilePane("items");
       setModal({ type: "receipt", text, changeCents: result.changeCents, saleId: s.id });
       void api("/printers/print-receipt", {
         method: "POST",
@@ -444,25 +628,58 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   }
 
   const paidSum = Object.values(payAmounts).reduce((a, b) => a + b, 0);
+  const lineCount = (ticket?.lines ?? []).reduce((n, line) => n + line.quantity, 0);
+  const hasLines = lineCount > 0;
+  const visibleItems = showFavorites && favorites.length ? favorites : filtered;
+  const activeModGroup =
+    modifierItem?.modifierGroups.find((group) => group.id === modifierGroupId) ?? modifierItem?.modifierGroups[0];
+  const modifierExtra = Object.values(selectedMods)
+    .flat()
+    .reduce((sum, option) => sum + option.priceCents, 0);
+  const modifierTotal = (modifierItem?.variants[0]?.priceCents ?? 0) + modifierExtra;
+  const modifierSummary = modifierItem
+    ? modifierItem.modifierGroups
+        .map((group) => (selectedMods[group.id] ?? []).map((option) => option.name).join(", "))
+        .filter(Boolean)
+        .join(" · ")
+    : "";
+  const tillPhase: "sale" | "options" | "pay" | "done" = modifierItem
+    ? "options"
+    : modal?.type === "pay"
+      ? "pay"
+      : modal?.type === "receipt"
+        ? "done"
+        : "sale";
+  const tillSteps = [
+    { id: "sale", label: "Sale" },
+    { id: "options", label: "Options" },
+    { id: "pay", label: "Pay" },
+    { id: "done", label: "Done" },
+  ] as const;
+  const tillIndex = tillSteps.findIndex((step) => step.id === tillPhase);
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell till-${tillPhase}`}>
       <div className="toolbar-dark">
-        <strong>{store.name}</strong>
-        <span>·</span>
-        <span>{user.name}</span>
-        <select
-          value={registerId}
-          onChange={(e) => onRegisterChange(e.target.value)}
-          style={{ minHeight: 40, borderRadius: 10, border: "none", padding: "0 10px" }}
-        >
-          {registers.map((r) => (
-            <option key={r.id} value={r.id}>
-              {r.name}
-            </option>
-          ))}
-        </select>
-        <span style={{ flex: 1 }} />
+        <div className="toolbar-identity">
+          <strong className="store-name">{store.name}</strong>
+          <span className="who">{user.name}</span>
+          <select
+            aria-label="Register"
+            value={registerId}
+            onChange={(e) => onRegisterChange(e.target.value)}
+          >
+            {registers.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
+          <button type="button" className="lock-btn" onClick={onLogout}>
+            Lock
+          </button>
+        </div>
+        <div className={`toolbar-actions${tillPhase === "options" || tillPhase === "pay" || tillPhase === "done" ? " is-quiet" : ""}`}>
         <button
           type="button"
           onClick={() =>
@@ -485,85 +702,160 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
         >
           Kitchen
         </button>
-        <button type="button" onClick={() => void toggleClock()}>
+        <button type="button" className={clockedIn ? "is-live" : ""} onClick={() => void toggleClock()}>
           {clockedIn ? "Clock out" : "Clock in"}
         </button>
-        <button type="button" onClick={() => setModal({ type: "shift" })}>
-          {shift ? "Shift open" : "Open shift"}
+        <button type="button" className={shift ? "is-live" : ""} onClick={() => setModal({ type: "shift" })}>
+          {shift ? "Close shift" : "Open shift"}
         </button>
         <button type="button" onClick={() => void openDrawer()}>
           Drawer
         </button>
-        <button type="button" onClick={onLogout}>
-          Lock
-        </button>
+        </div>
       </div>
 
-      <div className="register">
-        <section className="panel">
+      <ol className="till-steps" aria-label="Till steps">
+        {tillSteps.map((step, index) => (
+          <li
+            key={step.id}
+            className={`till-step${index < tillIndex ? " done" : ""}${index === tillIndex ? " active" : ""}`}
+          >
+            <span className="till-dot">{index + 1}</span>
+            {step.label}
+          </li>
+        ))}
+      </ol>
+
+      <div className={`register pane-${mobilePane}`}>
+        <section className="panel catalog-panel">
           <div className="topbar">
-            <div className="brand-mini">CloudTill</div>
-            <input
-              className="search"
-              placeholder="Search or scan barcode / SKU"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => void onSearchKey(e)}
-            />
+            {modifierItem ? (
+              <>
+                <button type="button" className="chip" onClick={() => setModifierItem(null)}>
+                  ← Menu
+                </button>
+                <div className="brand-mini">{modifierItem.name}</div>
+              </>
+            ) : (
+              <>
+                <div className="brand-mini">CloudTill</div>
+                <input
+                  className="search"
+                  placeholder="Search or scan barcode / SKU"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => void onSearchKey(e)}
+                />
+              </>
+            )}
           </div>
           <div className="chip-row">
-            <button
-              type="button"
-              className={`chip ${showFavorites ? "active" : ""}`}
-              onClick={() => {
-                setShowFavorites(true);
-                setCategoryId("all");
-              }}
-            >
-              ★ Quick keys
-            </button>
-            <button
-              type="button"
-              className={`chip ${!showFavorites && categoryId === "all" ? "active" : ""}`}
-              onClick={() => {
-                setShowFavorites(false);
-                setCategoryId("all");
-              }}
-            >
-              All
-            </button>
-            {categories.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                className={`chip ${!showFavorites && categoryId === c.id ? "active" : ""}`}
-                onClick={() => {
-                  setShowFavorites(false);
-                  setCategoryId(c.id);
-                }}
-              >
-                {c.name}
-              </button>
-            ))}
+            {modifierItem ? (
+              modifierItem.modifierGroups.map((group) => (
+                <button
+                  key={group.id}
+                  type="button"
+                  className={`chip ${activeModGroup?.id === group.id ? "active" : ""}`}
+                  onClick={() => setModifierGroupId(group.id)}
+                >
+                  {group.name}
+                  {group.minSelect > 0 ? " *" : ""}
+                </button>
+              ))
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className={`chip ${showFavorites ? "active" : ""}`}
+                  onClick={() => {
+                    setShowFavorites(true);
+                    setCategoryId("all");
+                  }}
+                >
+                  ★ Quick keys
+                </button>
+                <button
+                  type="button"
+                  className={`chip ${!showFavorites && categoryId === "all" ? "active" : ""}`}
+                  onClick={() => {
+                    setShowFavorites(false);
+                    setCategoryId("all");
+                  }}
+                >
+                  All
+                </button>
+                {categories.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className={`chip ${!showFavorites && categoryId === c.id ? "active" : ""}`}
+                    onClick={() => {
+                      setShowFavorites(false);
+                      setCategoryId(c.id);
+                    }}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </>
+            )}
           </div>
+          {catalogError && <p className="banner">{catalogError}</p>}
           <div className="grid">
-            {(showFavorites && favorites.length ? favorites : filtered).map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className="item-tile"
-                style={{ backgroundColor: item.color }}
-                onClick={() => void addItem(item)}
-              >
-                <span className="name">{item.name}</span>
-                <span className="price">{money(item.variants[0]?.priceCents ?? 0)}</span>
-              </button>
-            ))}
+            {modifierItem && activeModGroup ? (
+              activeModGroup.modifiers.map((option) => {
+                const selected = (selectedMods[activeModGroup.id] ?? []).some((picked) => picked.id === option.id);
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={`item-tile ${selected ? "is-selected" : ""}`}
+                    style={{ backgroundColor: modifierItem.color }}
+                    onClick={() => chooseModifier(activeModGroup, option)}
+                  >
+                    <span className="name">{option.name}</span>
+                    <span className="price">{option.priceCents ? `+${money(option.priceCents)}` : "Included"}</span>
+                  </button>
+                );
+              })
+            ) : (
+              <>
+                {!menuReady && <p className="empty">Loading menu…</p>}
+                {menuReady && visibleItems.length === 0 && <p className="empty">Nothing in this category.</p>}
+                {visibleItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="item-tile"
+                    style={{ backgroundColor: item.color }}
+                    onClick={() => void addItem(item)}
+                  >
+                    <span className="name">{item.name}</span>
+                    <span className="price">{money(item.variants[0]?.priceCents ?? 0)}</span>
+                  </button>
+                ))}
+              </>
+            )}
           </div>
+          {modifierItem && (
+            <div className="modifier-bar">
+              <div>
+                <p className="step-kicker">Step 2 · Options</p>
+                <strong>{modifierItem.name}</strong>
+                <div className="meta">{modifierSummary || "Choose options"}</div>
+              </div>
+              <button type="button" className="pay-btn" onClick={() => void confirmModifiers()}>
+                Add {money(modifierTotal)}
+              </button>
+            </div>
+          )}
         </section>
 
-        <section className="panel">
+        <section className="panel ticket-panel">
           <div className="ticket-head">
+            <button type="button" className="mobile-only back-items" onClick={() => setMobilePane("items")}>
+              Items
+            </button>
             <div>
               <h2>{ticket?.name ?? "New sale"}</h2>
               <div style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
@@ -600,9 +892,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
                 </div>
               );
             })}
-            {!ticket?.lines.length && (
-              <p style={{ color: "var(--muted)", padding: 16 }}>Tap items to build the ticket.</p>
-            )}
+            {!ticket?.lines.length && <p className="empty-ticket">Tap an item to start the sale.</p>}
           </div>
 
           <div className="totals">
@@ -629,142 +919,101 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
           </div>
 
           <div className="actions">
-            <button type="button" onClick={() => void holdTicket()}>
+            <button type="button" disabled={!hasLines} onClick={() => void holdTicket()}>
               Hold
             </button>
             <button type="button" onClick={() => void openHeld()}>
               Recall
             </button>
-            <button type="button" onClick={() => setModal({ type: "discount" })}>
+            <button type="button" disabled={!hasLines} onClick={() => ticket && setModal({ type: "discount" })}>
               Discount
             </button>
             <button
               type="button"
+              disabled={!hasLines}
               onClick={() =>
                 void api<{ suggestions: { label: string; tipCents: number; percent: number | null }[] }>(
                   `/extras/tip-suggestions?subtotalCents=${ticket?.subtotalCents ?? 0}`
-                ).then((r) => {
-                  setTipSuggestions(r.suggestions);
-                  setModal({ type: "tip" });
-                })
+                )
+                  .then((r) => {
+                    setTipSuggestions(r.suggestions);
+                    setModal({ type: "tip" });
+                  })
+                  .catch((error) => fail("Tip", error))
               }
             >
               Tip
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setTicket(null);
-              }}
-            >
+            <button type="button" disabled={!ticket} onClick={() => void clearTicket()}>
               Clear
             </button>
             <button type="button" onClick={() => void openCustomers()}>
               Customer
             </button>
-            <button type="button" className="pay-btn" onClick={openPay}>
+            <button type="button" className="pay-btn" disabled={!hasLines} onClick={openPay}>
               Charge {money(ticket?.totalCents ?? 0)}
             </button>
           </div>
         </section>
       </div>
 
-      {modal?.type === "modifiers" && (
-        <div className="modal-backdrop" onClick={() => setModal(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>{modal.item.name}</h3>
-            {modal.item.modifierGroups.map((g) => (
-              <div key={g.id} style={{ marginBottom: 14 }}>
-                <strong>
-                  {g.name}
-                  {g.minSelect > 0 ? " *" : ""}
-                </strong>
-                <div className="pay-grid">
-                  {g.modifiers.map((m) => {
-                    const selected = (selectedMods[g.id] ?? []).some((x) => x.id === m.id);
-                    return (
-                      <button
-                        key={m.id}
-                        type="button"
-                        className={selected ? "active" : ""}
-                        onClick={() => {
-                          setSelectedMods((prev) => {
-                            const cur = prev[g.id] ?? [];
-                            if (g.maxSelect <= 1) return { ...prev, [g.id]: [m] };
-                            if (selected) return { ...prev, [g.id]: cur.filter((x) => x.id !== m.id) };
-                            if (cur.length >= g.maxSelect) return prev;
-                            return { ...prev, [g.id]: [...cur, m] };
-                          });
-                        }}
-                      >
-                        {m.name}
-                        {m.priceCents ? ` (+${money(m.priceCents)})` : ""}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-            <div className="modal-actions">
-              <button type="button" className="btn ghost" onClick={() => setModal(null)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn primary"
-                onClick={() => {
-                  const mods = Object.values(selectedMods)
-                    .flat()
-                    .map((m) => ({ modifierId: m.id, name: m.name, priceCents: m.priceCents }));
-                  void addVariant(modal.item, mods);
-                }}
-              >
-                Add to ticket
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <div className={`mobile-dock${modifierItem ? " is-hidden" : ""}`}>
+        <button type="button" className="dock-ticket" onClick={() => setMobilePane("ticket")}>
+          <span>{lineCount === 0 ? "Ticket empty" : `${lineCount} ${lineCount === 1 ? "item" : "items"}`}</span>
+          <strong>{money(ticket?.totalCents ?? 0)}</strong>
+        </button>
+        <button type="button" className="dock-pay" onClick={openPay} disabled={lineCount === 0}>
+          Charge
+        </button>
+      </div>
 
       {modal?.type === "pay" && ticket && (
-        <div className="modal-backdrop" onClick={() => setModal(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-backdrop till-overlay" onClick={() => setModal(null)}>
+          <div className="modal tender-modal" onClick={(e) => e.stopPropagation()}>
+            <p className="step-kicker">Step 3 · Pay</p>
             <h3>Take payment</h3>
-            <p>
-              Due <strong>{money(ticket.totalCents)}</strong>
-              {paidSum > 0 && <> · Tendered {money(paidSum)}</>}
-              {paidSum > ticket.totalCents && <> · Change {money(paidSum - ticket.totalCents)}</>}
+            <p className="pay-summary">
+              <span>
+                Due <strong>{money(ticket.totalCents)}</strong>
+              </span>
+              <span>{paidSum > ticket.totalCents ? `Change ${money(paidSum - ticket.totalCents)}` : `Tendered ${money(paidSum)}`}</span>
             </p>
-            <p style={{ color: "var(--muted)", fontSize: "0.9rem" }}>Split tender: enter amounts per method.</p>
+            {!shift && <p className="hint">Open a shift if you are taking cash. Card sales still go through.</p>}
             {paymentTypes.map((pt) => (
               <div key={pt.id} className="field">
                 <label>
                   {pt.name}
                   {pt.type === "store_credit" && ticket.customer
-                    ? ` (available ${money(ticket.customer.storeCreditCents)})`
+                    ? ` · ${money(ticket.customer.storeCreditCents)} available`
                     : ""}
                 </label>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div className="tender-row">
                   <input
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={((payAmounts[pt.id] ?? 0) / 100).toFixed(2)}
-                    onChange={(e) =>
+                    inputMode="decimal"
+                    value={payText[pt.id] ?? ""}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      setPayText((prev) => ({ ...prev, [pt.id]: raw }));
+                      const parsed = parseFloat(raw);
                       setPayAmounts((prev) => ({
                         ...prev,
-                        [pt.id]: Math.round(parseFloat(e.target.value || "0") * 100),
-                      }))
-                    }
+                        [pt.id]: Number.isFinite(parsed) ? Math.max(0, Math.round(parsed * 100)) : 0,
+                      }));
+                    }}
                   />
-                  <button
-                    type="button"
-                    className="btn ghost"
-                    onClick={() => setPayAmounts({ [pt.id]: ticket.totalCents })}
-                  >
+                  <button type="button" className="btn ghost" onClick={() => setTender(pt.id, ticket.totalCents)}>
                     Exact
                   </button>
                 </div>
+                {pt.type === "cash" && (
+                  <div className="quick-amounts">
+                    {[500, 1000, 2000, 5000].map((cents) => (
+                      <button key={cents} type="button" onClick={() => setTender(pt.id, cents)}>
+                        {money(cents)}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {pt.type === "gift_card" && (payAmounts[pt.id] ?? 0) > 0 && (
                   <input
                     style={{ marginTop: 8 }}
@@ -862,12 +1111,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
                 key={t.id}
                 type="button"
                 className="list-btn"
-                onClick={() =>
-                  void api<Ticket>(`/pos/tickets/${t.id}/recall`, { method: "POST" }).then((x) => {
-                    setTicket(x);
-                    setModal(null);
-                  })
-                }
+                onClick={() => void recall(t.id)}
               >
                 <strong>
                   {t.name} · {t.status}
@@ -938,12 +1182,16 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
       )}
 
       {modal?.type === "receipt" && (
-        <div className="modal-backdrop" onClick={() => setModal(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Receipt</h3>
-            {modal.changeCents > 0 && <p>Change due: {money(modal.changeCents)}</p>}
+        <div className="modal-backdrop till-overlay" onClick={() => setModal(null)}>
+          <div className="modal receipt-modal" onClick={(e) => e.stopPropagation()}>
+            <p className="step-kicker">Step 4 · Done</p>
+            <h3>Sale complete</h3>
+            {modal.changeCents > 0 && <p className="change-due">Change due: {money(modal.changeCents)}</p>}
             <pre className="receipt">{modal.text}</pre>
             <div className="modal-actions">
+              <button type="button" className="btn primary" onClick={() => setModal(null)}>
+                New sale
+              </button>
               <button
                 type="button"
                 className="btn ghost"
@@ -979,9 +1227,6 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
                 }
               >
                 ESC/POS
-              </button>
-              <button type="button" className="btn primary" onClick={() => setModal(null)}>
-                Done
               </button>
             </div>
           </div>

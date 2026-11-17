@@ -227,7 +227,8 @@ export interface AppSettings {
   tipPresetsPercent: number[];
 }
 
-export const DEFAULT_CURRENCY = "USD";
+export const DEFAULT_CURRENCY = "GBP";
+export const DEFAULT_CURRENCY_SYMBOL = "£";
 export const API_PREFIX = "/api";
 
 export * from "./receipt.js";

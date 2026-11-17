@@ -32,7 +32,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   return res.json();
 }
 
-export function money(cents: number, symbol = "$"): string {
+export function money(cents: number, symbol = "£"): string {
   const sign = cents < 0 ? "-" : "";
   return `${sign}${symbol}${(Math.abs(cents) / 100).toFixed(2)}`;
 }

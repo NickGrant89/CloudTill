@@ -32,7 +32,7 @@ export interface ReceiptData {
   currencySymbol?: string;
 }
 
-export function formatMoney(cents: number, symbol = "$"): string {
+export function formatMoney(cents: number, symbol = "£"): string {
   const sign = cents < 0 ? "-" : "";
   return `${sign}${symbol}${(Math.abs(cents) / 100).toFixed(2)}`;
 }
@@ -43,7 +43,7 @@ function padLine(left: string, right: string, width = 32): string {
 }
 
 export function buildReceiptText(data: ReceiptData, width = 32): string {
-  const $ = (c: number) => formatMoney(c, data.currencySymbol ?? "$");
+  const $ = (c: number) => formatMoney(c, data.currencySymbol ?? "£");
   const lines: string[] = [
     data.header || data.storeName,
     "-".repeat(width),

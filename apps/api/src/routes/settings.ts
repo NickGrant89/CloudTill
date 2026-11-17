@@ -24,7 +24,7 @@ settingsRouter.get("/", async (req: AuthedRequest, res) => {
       timezone: store.timezone,
     },
     currency: store.currency,
-    currencySymbol: store.currency === "USD" ? "$" : store.currency,
+    currencySymbol: store.currency === "GBP" ? "£" : store.currency === "USD" ? "$" : store.currency === "EUR" ? "€" : store.currency,
     receipt: {
       header: map["receipt.header"] ?? store.name,
       footer: map["receipt.footer"] ?? "Thank you!",

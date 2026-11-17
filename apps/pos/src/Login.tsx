@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import type { SessionRegister, SessionStore, SessionUser } from "./App";
 
@@ -13,17 +13,24 @@ interface Props {
 
 export function Login({ onSuccess }: Props) {
   const [pin, setPin] = useState("");
-  const [email, setEmail] = useState("cashier@cloudtill.demo");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
+  const pinRef = useRef("");
+  const busyRef = useRef(false);
 
   useEffect(() => {
     api<{ id: string; name: string }[]>("/auth/stores").then(setStores).catch(() => undefined);
   }, []);
 
-  async function submit(nextPin = pin) {
-    if (nextPin.length < 4) return;
+  function setPinValue(next: string) {
+    pinRef.current = next;
+    setPin(next);
+  }
+
+  async function submit(nextPin: string) {
+    if (nextPin.length < 4 || busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setError("");
     try {
@@ -34,28 +41,31 @@ export function Login({ onSuccess }: Props) {
         registers: SessionRegister[];
       }>("/auth/login", {
         method: "POST",
-        body: JSON.stringify({ email, pin: nextPin }),
+        body: JSON.stringify({ pin: nextPin }),
       });
       onSuccess(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Login failed");
-      setPin("");
+      setPinValue("");
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
 
   function press(digit: string) {
+    if (busyRef.current) return;
     if (digit === "C") {
-      setPin("");
+      setPinValue("");
+      setError("");
       return;
     }
     if (digit === "←") {
-      setPin((p) => p.slice(0, -1));
+      setPinValue(pinRef.current.slice(0, -1));
       return;
     }
-    const next = (pin + digit).slice(0, 8);
-    setPin(next);
+    const next = (pinRef.current + digit).slice(0, 8);
+    setPinValue(next);
     if (next.length >= 4) void submit(next);
   }
 
@@ -63,16 +73,7 @@ export function Login({ onSuccess }: Props) {
     <div className="login">
       <div className="login-card">
         <h1 className="brand">CloudTill</h1>
-        <p className="tag">PIN login · tablet register</p>
-
-        <div className="field">
-          <label>Employee email</label>
-          <select value={email} onChange={(e) => setEmail(e.target.value)}>
-            <option value="cashier@cloudtill.demo">Casey Cashier</option>
-            <option value="manager@cloudtill.demo">Morgan Manager</option>
-            <option value="owner@cloudtill.demo">Alex Owner</option>
-          </select>
-        </div>
+        <p className="tag">Enter your PIN</p>
 
         {stores.length > 0 && (
           <p style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: -6 }}>

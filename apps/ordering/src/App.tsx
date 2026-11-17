@@ -95,7 +95,7 @@ interface OrderStatus {
 const STATUS_STEPS = ["pending", "accepted", "preparing", "ready"] as const;
 
 function money(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`;
+  return `£${(cents / 100).toFixed(2)}`;
 }
 
 function lineTotal(line: CartLine) {

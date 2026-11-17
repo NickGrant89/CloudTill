@@ -113,7 +113,7 @@ extrasRouter.post("/labels", async (req: AuthedRequest, res) => {
       text: [
         v.item.name,
         v.name !== "Regular" ? v.name : null,
-        `$${(v.priceCents / 100).toFixed(2)}`,
+        `£${(v.priceCents / 100).toFixed(2)}`,
         `*${v.barcode ?? v.sku}*`,
       ]
         .filter(Boolean)
@@ -135,7 +135,7 @@ body { font-family: system-ui, sans-serif; }
 ${labels
   .map(
     (l) =>
-      `<div class="label"><div class="name">${escapeHtml(l.name)}</div><div class="price">$${(
+      `<div class="label"><div class="name">${escapeHtml(l.name)}</div><div class="price">£${(
         l.priceCents / 100
       ).toFixed(2)}</div><div class="bc">${escapeHtml(l.barcode)}</div></div>`
   )
