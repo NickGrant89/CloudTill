@@ -6,12 +6,12 @@
     <title>PurePOS UK | Cloud till, back office &amp; online ordering</title>
     <meta
       name="description"
-      content="PurePOS is the UK cloud POS stack: offline-capable till, central back office, and customer online ordering. Starter £29, Pro £59, Multi-store £99. Not a WordPress add-on."
+      content="PurePOS is the UK cloud POS: offline-capable till, central back office, and customer online ordering. Starter £29, Pro £59, Multi-store £99."
     />
     <meta name="author" content="PurePOS UK" />
     <link rel="canonical" href="https://purepos.co.uk/" />
     <meta property="og:title" content="PurePOS UK | Till · back office · online ordering" />
-    <meta property="og:description" content="Cloud till, back office, and online ordering. Offline tills. £29 / £59 / £99." />
+    <meta property="og:description" content="Cloud till, back office, and online ordering. Offline tills. From £29/mo." />
     <meta property="og:url" content="https://purepos.co.uk/" />
     <meta property="og:locale" content="en_GB" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -29,7 +29,6 @@
         --accent: #0d9488;
         --accent-deep: #0f766e;
         --accent-soft: rgba(13, 148, 136, 0.14);
-        --warm: #c2410c;
         --bg: #eef6f4;
         --radius: 14px;
       }
@@ -103,7 +102,6 @@
         color: var(--ink);
       }
 
-      /* Hero: one composition, brand first, full-bleed atmosphere */
       .hero {
         min-height: min(88vh, 760px);
         display: grid;
@@ -202,7 +200,6 @@
       }
       .feature-list li:nth-child(2) { animation-delay: 0.08s; }
       .feature-list li:nth-child(3) { animation-delay: 0.16s; }
-      .feature-list li:nth-child(4) { animation-delay: 0.24s; }
       .feature-num {
         width: 3rem;
         height: 3rem;
@@ -305,7 +302,7 @@
           margin-bottom: 1.25rem;
           inset: auto;
         }
-        .tiers, .links { grid-template-columns: 1fr; }
+        .tiers { grid-template-columns: 1fr; }
         header { flex-direction: column; align-items: flex-start; }
       }
     </style>
@@ -323,8 +320,8 @@
         <nav aria-label="Primary">
           <a href="#features">Product</a>
           <a href="#pricing">Pricing</a>
-          <a href="#try">Try it</a>
-          <a class="btn btn-primary" href="http://localhost:4000/pricing">Start trial</a>
+          <a href="#try">Open apps</a>
+          <a class="btn btn-primary" href="/pricing">Start trial</a>
         </nav>
       </header>
 
@@ -336,11 +333,11 @@
           <p class="product">PurePOS</p>
           <h1>Cloud till, back office, and online ordering — one product.</h1>
           <p>
-            PurePOS is the hosted UK stack for shops: a till that keeps selling offline, a central back office, and customer web ordering. Not a WordPress plug-in, not a Loyverse bolt-on.
+            Hosted UK POS for shops: sell on the till (even offline), run the shop from back office, take orders online — all on the same cloud.
           </p>
           <div class="cta-row">
-            <a class="btn btn-primary" href="#pricing">See £29 / £59 / £99</a>
-            <a class="btn btn-ghost" href="http://localhost:5173/">Open local till</a>
+            <a class="btn btn-primary" href="/pos/">Open the till</a>
+            <a class="btn btn-ghost" href="#pricing">See £29 / £59 / £99</a>
           </div>
         </div>
       </section>
@@ -349,35 +346,28 @@
         <p class="eyebrow">The product</p>
         <h2 class="section-title">Three surfaces. One cloud.</h2>
         <p class="section-lede">
-          This is PurePOS now: till, back office, and online ordering on a multi-tenant cloud. Catalog and reports live in the cloud; tills sync when they’re back online.
+          Catalog and reports live in the cloud. Tills and ordering are browser apps that stay in sync.
         </p>
         <ul class="feature-list">
           <li>
             <div class="feature-num">1</div>
             <div>
               <h3>Cloud till</h3>
-              <p>Browser / tablet register with offline queue — take sales when the network drops, sync when you’re back.</p>
+              <p>Browser / tablet register with offline queue — keep selling when wifi drops, sync when you’re back.</p>
             </div>
           </li>
           <li>
             <div class="feature-num">2</div>
             <div>
               <h3>Back office</h3>
-              <p>Central catalog, customers, import, inventory, billing, and reports — managed once for every till.</p>
+              <p>Menu, customers, stock, staff, billing, and reports — managed once for every till.</p>
             </div>
           </li>
           <li>
             <div class="feature-num">3</div>
             <div>
               <h3>Online ordering</h3>
-              <p>Customer web ordering into the same store, with kitchen queue on Pro — no separate WordPress add-on.</p>
-            </div>
-          </li>
-          <li>
-            <div class="feature-num">4</div>
-            <div>
-              <h3>Hosted SaaS</h3>
-              <p>Multi-tenant by default. Plans gate features; Multi-store adds transfers across shops.</p>
+              <p>Customers order into the same store; kitchen sees the tickets on Pro.</p>
             </div>
           </li>
         </ul>
@@ -396,19 +386,19 @@
       <section id="pricing">
         <p class="eyebrow">Pricing</p>
         <h2 class="section-title">Simple monthly plans in £</h2>
-        <p class="section-lede">14-day trial stub for pilots. Stripe comes later — switch plans in back-office Billing today.</p>
+        <p class="section-lede">Start a pilot trial, then switch plans in back-office Billing.</p>
         <div class="tiers">
           <article class="tier">
             <h3>Starter</h3>
-            <p>Hosted cloud BO + one offline-capable till</p>
+            <p>Cloud BO + one offline-capable till</p>
             <div class="price">£29<span>/mo</span></div>
             <ul>
               <li>Central cloud catalog &amp; BO</li>
               <li>1 store · 1 register</li>
-              <li>Till caches catalog · queues sales offline</li>
+              <li>Offline till sync</li>
               <li>Email support</li>
             </ul>
-            <a class="btn btn-primary" href="http://localhost:4000/pricing">Choose Starter</a>
+            <a class="btn btn-primary" href="/pricing">Choose Starter</a>
           </article>
           <article class="tier featured">
             <h3>Pro</h3>
@@ -420,7 +410,7 @@
               <li>CSV import</li>
               <li>Kitchen + reports / EOD</li>
             </ul>
-            <a class="btn btn-primary" href="http://localhost:4000/pricing">Choose Pro</a>
+            <a class="btn btn-primary" href="/pricing">Choose Pro</a>
           </article>
           <article class="tier">
             <h3>Multi-store</h3>
@@ -429,56 +419,43 @@
             <ul>
               <li>Everything in Pro</li>
               <li>Multi-store transfers</li>
-              <li>Shared cloud catalog ops</li>
-              <li>Priority pilot support</li>
+              <li>Shared catalog ops</li>
+              <li>Priority support</li>
             </ul>
-            <a class="btn btn-primary" href="http://localhost:4000/pricing">Choose Multi-store</a>
+            <a class="btn btn-primary" href="/pricing">Choose Multi-store</a>
           </article>
         </div>
       </section>
 
       <section id="try">
-        <p class="eyebrow">Try PurePOS</p>
-        <h2 class="section-title">Local pilot · documented staging</h2>
+        <p class="eyebrow">Open PurePOS</p>
+        <h2 class="section-title">Try the live apps</h2>
         <p class="section-lede">
-          Use <strong>Mac dev</strong> (`pnpm dev`) for day-to-day, <strong>Docker gateway</strong> (`:8080`) for a hosted-shaped stack on this Mac, or documented staging when the domain is live.
+          Demo café is ready. Owner PIN <strong>1234</strong> · cashier PIN <strong>1111</strong> · email <strong>owner@purepos.demo</strong>.
         </p>
         <div class="links">
           <div class="link-panel">
-            <h3>This Mac — pnpm dev</h3>
-            <a href="http://localhost:5173/">POS till → :5173</a>
-            <a href="http://localhost:5174/">Back office → :5174</a>
-            <a href="http://localhost:5175/">Online ordering → :5175</a>
-            <a href="http://localhost:4000/pricing">Pricing / trial → :4000/pricing</a>
-            <a href="http://localhost:4000/api/health">API health → :4000/api/health</a>
+            <h3>Apps</h3>
+            <a href="/pos/">Till → /pos/</a>
+            <a href="/bo/">Back office → /bo/</a>
+            <a href="/order/">Online ordering → /order/</a>
+            <a href="/pricing">Pricing / trial → /pricing</a>
           </div>
           <div class="link-panel">
-            <h3>This Mac — Docker gateway</h3>
-            <a href="http://localhost:8080/pos/">Till → :8080/pos/</a>
-            <a href="http://localhost:8080/bo/">Back office → :8080/bo/</a>
-            <a href="http://localhost:8080/order/">Ordering → :8080/order/</a>
-            <a href="http://localhost:8080/pricing">Pricing → :8080/pricing</a>
-            <a href="http://localhost:8080/api/health">Health → :8080/api/health</a>
-          </div>
-          <div class="link-panel">
-            <h3>Staging (documented)</h3>
-            <a href="https://staging.purepos.co.uk/pos">staging.purepos.co.uk/pos</a>
-            <a href="https://staging.purepos.co.uk/bo">staging.purepos.co.uk/bo</a>
-            <a href="https://staging.purepos.co.uk/order">staging.purepos.co.uk/order</a>
-            <a href="https://staging.purepos.co.uk/pricing">staging.purepos.co.uk/pricing</a>
-            <a href="https://staging.purepos.co.uk/api/health">staging.purepos.co.uk/api/health</a>
+            <h3>Pilot tip</h3>
+            <p style="margin:0;color:var(--muted);line-height:1.5">
+              Open the till once online so the menu caches, then you can keep selling offline. Use Export if Sync shows pending sales before you clear browser data.
+            </p>
           </div>
         </div>
-        <p class="note">
-          Demo: owner@purepos.demo / 1234 · cashier PIN 1111 on the till. GitHub repo remains NickGrant89/CloudTill for now.
-        </p>
+        <p class="note">PurePOS UK · hello@purepos.co.uk</p>
       </section>
 
       <footer>
         <p>
-          <strong>PurePOS UK</strong> · hello@purepos.co.uk ·
+          <strong>PurePOS UK</strong> ·
           <a href="https://purepos.co.uk/">purepos.co.uk</a>
-          (production hosting suspended — pilots use local / staging)
+          · cloud till · back office · online ordering
         </p>
       </footer>
     </div>
