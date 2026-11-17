@@ -72,6 +72,13 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
       deliveryUnit: z.string().optional(),
       deliveryInstructions: z.string().optional(),
       note: z.string().optional(),
+      card: z.object({
+        name: z.string().min(1),
+        number: z.string().min(12),
+        expMonth: z.number().int().min(1).max(12),
+        expYear: z.number().int(),
+        cvc: z.string().min(3).max(4),
+      }),
       lines: z
         .array(
           z.object({
@@ -94,6 +101,19 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
     if (!body.customerPhone?.trim()) {
       return res.status(400).json({ error: "Phone is required for delivery" });
     }
+  }
+
+  const card = authorizeCard(body.card);
+  if ("error" in card) return res.status(400).json({ error: card.error });
+
+  const employee =
+    (await prisma.employee.findFirst({ where: { storeId: store.id, role: "owner", active: true } })) ??
+    (await prisma.employee.findFirst({ where: { storeId: store.id, active: true } }));
+  const cardType = await prisma.paymentType.findFirst({
+    where: { storeId: store.id, type: "card", enabled: true },
+  });
+  if (!employee || !cardType) {
+    return res.status(400).json({ error: "Card payments aren't set up for this café." });
   }
 
   const register =
@@ -225,7 +245,8 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
     body.customerName,
     body.customerPhone || null,
     body.fulfillment === "delivery" && deliveryAddressLine ? `Addr: ${deliveryAddressLine}` : null,
-    body.fulfillment === "delivery" ? `ETA stub: ${deliveryEstimate}` : null,
+    body.fulfillment === "delivery" ? `Ready in ${deliveryEstimate}` : null,
+    `PAID ${card.brand} •••• ${card.last4}`,
     "----",
     ...resolvedLines.map((l) => {
       const mods = JSON.parse(l.modifiersJson || "[]") as { name: string }[];
@@ -254,12 +275,99 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
     },
   });
 
+  const saleCount = await prisma.sale.count({ where: { storeId: store.id } });
+  const receiptNumber = `CT-${10000 + saleCount + 1}`;
+  const openShift = await prisma.shift.findFirst({
+    where: { storeId: store.id, registerId: register.id, status: "open" },
+  });
+  const saleLines: {
+    variantId?: string;
+    name: string;
+    quantity: number;
+    unitPriceCents: number;
+    totalCents: number;
+    modifiersJson: string;
+  }[] = resolvedLines.map((line) => {
+    const mods = JSON.parse(line.modifiersJson || "[]") as { priceCents?: number }[];
+    const modSum = mods.reduce((sum, mod) => sum + (mod.priceCents ?? 0), 0);
+    return {
+      variantId: line.variantId,
+      name: line.name,
+      quantity: line.quantity,
+      unitPriceCents: line.unitPriceCents,
+      totalCents: lineSubtotal(line.unitPriceCents, line.quantity, modSum, 0),
+      modifiersJson: line.modifiersJson,
+    };
+  });
+  if (deliveryFeeCents > 0) {
+    saleLines.push({
+      name: "Delivery",
+      quantity: 1,
+      unitPriceCents: deliveryFeeCents,
+      totalCents: deliveryFeeCents,
+      modifiersJson: "[]",
+    });
+  }
+
+  await prisma.sale.create({
+    data: {
+      receiptNumber,
+      storeId: store.id,
+      registerId: register.id,
+      employeeId: employee.id,
+      shiftId: openShift?.id,
+      status: "completed",
+      subtotalCents: subtotal,
+      taxCents,
+      totalCents,
+      paidCents: totalCents,
+      note: `Online ${orderNumber}`,
+      lines: { create: saleLines },
+      payments: {
+        create: {
+          paymentTypeId: cardType.id,
+          paymentTypeName: cardType.name,
+          amountCents: totalCents,
+        },
+      },
+    },
+  });
+
+  for (const line of resolvedLines) {
+    const variant = await prisma.variant.findUnique({
+      where: { id: line.variantId },
+      include: { item: { include: { kitComponents: true } } },
+    });
+    if (!variant) continue;
+    if (variant.item.isComposite) {
+      for (const component of variant.item.kitComponents) {
+        await sellStock(store.id, component.componentVarId, -component.quantity * line.quantity, receiptNumber, employee.id);
+      }
+    } else if (variant.trackStock) {
+      await sellStock(store.id, variant.id, -line.quantity, receiptNumber, employee.id);
+    }
+  }
+
+  const paidOrder = await prisma.onlineOrder.update({
+    where: { id: order.id },
+    data: { cardBrand: card.brand, cardLast4: card.last4, receiptNumber },
+    include: { lines: true },
+  });
+  await prisma.ticket.update({
+    where: { id: ticket.id },
+    data: {
+      status: "paid",
+      note: [ticket.note, `PAID ${card.brand} •••• ${card.last4}`, receiptNumber].filter(Boolean).join(" · "),
+    },
+  });
+
   res.status(201).json({
-    order,
+    order: paidOrder,
     ticketId: ticket.id,
     deliveryFeeCents,
     deliveryEstimate,
-    message: "Order received — kitchen notified",
+    receiptNumber,
+    message: "Card payment accepted — kitchen notified",
   });
 });
 
@@ -314,7 +422,7 @@ kitchenRouter.patch("/orders/:id", async (req: AuthedRequest, res) => {
       where: { id: order.ticketId },
       data: {
         kitchenStatus: kitchenMap[body.status] ?? undefined,
-        status: body.status === "cancelled" ? "voided" : body.status === "completed" ? "open" : "held",
+        status: body.status === "cancelled" ? "voided" : order.cardLast4 ? "paid" : body.status === "completed" ? "open" : "held",
       },
     });
   }
@@ -327,8 +435,63 @@ kitchenRouter.post("/orders/:id/recall-ticket", async (req: AuthedRequest, res) 
   if (!order.ticketId) return res.status(400).json({ error: "No ticket linked" });
   const ticket = await prisma.ticket.update({
     where: { id: order.ticketId },
-    data: { status: "open", kitchenStatus: order.status === "ready" ? "ready" : "preparing" },
+    data: {
+      status: order.cardLast4 ? "paid" : "open",
+      kitchenStatus: order.status === "ready" ? "ready" : "preparing",
+    },
     include: { lines: true },
   });
   res.json(ticket);
 });
+
+function luhn(digits: string) {
+  let sum = 0;
+  let alternate = false;
+  for (let i = digits.length - 1; i >= 0; i -= 1) {
+    let value = Number(digits[i]);
+    if (alternate) {
+      value *= 2;
+      if (value > 9) value -= 9;
+    }
+    sum += value;
+    alternate = !alternate;
+  }
+  return sum % 10 === 0;
+}
+
+function cardBrand(digits: string) {
+  if (digits.startsWith("4")) return "Visa";
+  if (/^5[1-5]/.test(digits) || /^2(?:2[2-9]|[3-6]\d|7[01]|720)/.test(digits)) return "Mastercard";
+  if (/^3[47]/.test(digits)) return "Amex";
+  if (/^6(?:011|5)/.test(digits)) return "Discover";
+  return "Card";
+}
+
+function authorizeCard(card: { name: string; number: string; expMonth: number; expYear: number; cvc: string }) {
+  const digits = card.number.replace(/\D/g, "");
+  if (digits.length < 13 || digits.length > 19 || !luhn(digits)) {
+    return { error: "That card number isn't valid." };
+  }
+  if (!/^\d{3,4}$/.test(card.cvc)) return { error: "Check the security code." };
+  if (!card.name.trim()) return { error: "Name on card is required." };
+  const expires = new Date(card.expYear, card.expMonth, 0, 23, 59, 59);
+  if (Number.isNaN(expires.getTime()) || expires.getTime() < Date.now()) {
+    return { error: "This card is expired." };
+  }
+  return { brand: cardBrand(digits), last4: digits.slice(-4) };
+}
+
+async function sellStock(storeId: string, variantId: string, quantity: number, note: string, employeeId: string) {
+  const level = await prisma.inventoryLevel.findUnique({
+    where: { storeId_variantId: { storeId, variantId } },
+  });
+  if (level) {
+    await prisma.inventoryLevel.update({
+      where: { id: level.id },
+      data: { quantity: level.quantity + quantity },
+    });
+  }
+  await prisma.inventoryMovement.create({
+    data: { storeId, variantId, type: "sale", quantity, note, employeeId },
+  });
+}
