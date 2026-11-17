@@ -50,7 +50,10 @@ app.get("/api/health", async (_req, res) => {
     time: new Date().toISOString(),
     pricingUrl: "/pricing",
     urls: {
-      publicBase: process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`,
+      publicBase:
+        process.env.PUBLIC_BASE_URL ||
+        process.env.RENDER_EXTERNAL_URL ||
+        `http://localhost:${PORT}`,
       stagingBase: process.env.STAGING_BASE_URL || "https://staging.purepos.co.uk",
       production: "https://purepos.co.uk",
       productionNote: "Hosting currently suspended — use staging or localhost",
@@ -66,6 +69,25 @@ app.get("/api/health", async (_req, res) => {
 app.get("/pricing", (_req, res) => {
   res.sendFile(path.join(__dirname, "../public/pricing.html"));
 });
+
+/** Hosted all-in-one: static till / BO / ordering / marketing (see Dockerfile.webapp). */
+const webRoot = path.join(__dirname, "../web");
+function mountSpa(routeBase: string, folder: string) {
+  const dir = path.join(webRoot, folder);
+  const index = path.join(dir, "index.html");
+  app.use(
+    routeBase,
+    express.static(dir, { index: false }),
+    (req, res, next) => {
+      if (req.method !== "GET" && req.method !== "HEAD") return next();
+      res.sendFile(index, (err) => (err ? next() : undefined));
+    }
+  );
+}
+mountSpa("/pos", "pos");
+mountSpa("/bo", "bo");
+mountSpa("/order", "order");
+app.use(express.static(path.join(webRoot, "marketing")));
 
 app.use("/api/auth", authRouter);
 app.use("/api/catalog", catalogRouter);

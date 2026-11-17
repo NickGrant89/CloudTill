@@ -53,12 +53,13 @@ Stop: `pnpm docker:down`
 
 Env overrides: copy `.env.docker.example` → `.env` next to compose (optional). Defaults are fine for a local hosted pilot.
 
-### Point a real domain later
+### Permanent online host
 
-1. Run the same Compose stack on a VPS (or managed Postgres + containers).
-2. Put TLS in front (Caddy / Cloudflare) for `staging.purepos.co.uk` then `purepos.co.uk`.
-3. Set `PUBLIC_BASE_URL`, `JWT_SECRET`, and strong DB credentials.
-4. Prisma provider is flipped to **postgresql** inside the API image; Mac schema stays **sqlite**.
+See **[HOSTING-ONLINE.md](./HOSTING-ONLINE.md)** — Render Blueprint (`render.yaml` + `Dockerfile.webapp`), or Compose on a VPS with TLS.
+
+`purepos.co.uk` (Fasthosts) is **suspended** and is shared hosting — not suitable for this Node/Postgres stack. Point DNS at Render/VPS once ready.
+
+Prisma provider is flipped to **postgresql** inside Docker images; Mac schema stays **sqlite**.
 
 ## What Compose starts
 
