@@ -1,15 +1,20 @@
 # Host PurePOS online
 
-## Live right now (this Mac)
+## Live on Railway (permanent host)
 
-Public tunnel of the Docker stack:
+**https://web-production-b2a209a9.up.railway.app**
 
-**https://05eb-2a03-9c20-4080-8e01-cc5a-7e31-6e-b5c2.ngrok-free.app**
-
-`/pos/` · `/bo/` · `/order/` · `/pricing` · `/api/health`  
+`/` marketing · `/pos/` till · `/bo/` BO · `/order/` · `/pricing` · `/api/health`  
 Login: `owner@purepos.demo` / `1234`
 
-This is online for testing while the Mac + Docker + ngrok stay up. It is **not** permanent DNS hosting.
+### DNS for purepos.co.uk
+
+| Type | Host | Value |
+| --- | --- | --- |
+| CNAME (or ANAME/ALIAS at apex) | `@` | `25iorx89.up.railway.app` |
+| TXT | `_railway-verify` | `railway-verify=ed28fa443c92ad85c284e9e8292630e6475d8a9b247115a2bc9694bd8bd69c9a` |
+
+Free plan: one custom domain (apex registered). Upgrade for `www` / `staging`.
 
 ## Permanent hosting (recommended)
 
