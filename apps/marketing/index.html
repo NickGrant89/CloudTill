@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PurePOS UK | Cloud till · offline POS · from £29/mo</title>
+    <meta
+      name="description"
+      content="PurePOS is a hosted UK cloud POS: central back office and catalog, offline-capable tills that sync, online ordering on Pro. Starter £29, Pro £59, Multi-store £99. Pilots on localhost or staging.purepos.co.uk."
+    />
+    <meta name="author" content="PurePOS UK" />
+    <link rel="canonical" href="https://purepos.co.uk/" />
+    <meta property="og:title" content="PurePOS UK | Cloud till with offline sync" />
+    <meta property="og:description" content="Hosted multi-tenant POS. Offline tills. £29 / £59 / £99." />
+    <meta property="og:url" content="https://purepos.co.uk/" />
+    <meta property="og:locale" content="en_GB" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --ink: #0f172a;
+        --muted: #5b6b7c;
+        --panel: #ffffff;
+        --line: #d9e2ec;
+        --accent: #0d9488;
+        --accent-deep: #0f766e;
+        --accent-soft: rgba(13, 148, 136, 0.14);
+        --warm: #c2410c;
+        --bg: #eef6f4;
+        --radius: 14px;
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(ellipse 90% 55% at 12% -8%, #b7e4dc 0%, transparent 55%),
+          radial-gradient(ellipse 70% 45% at 100% 0%, #fde7d4 0%, transparent 50%),
+          linear-gradient(180deg, #f4fbf9 0%, var(--bg) 40%, #e8f2ef 100%);
+        min-height: 100vh;
+      }
+      a { color: inherit; }
+      .wrap { width: min(1120px, calc(100% - 2rem)); margin: 0 auto; }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1.1rem 0;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 0.7rem;
+        text-decoration: none;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+      .brand img {
+        width: 42px;
+        height: 42px;
+        object-fit: cover;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+      }
+      .brand strong { font-size: 1.15rem; }
+      .brand span { color: var(--accent); font-weight: 600; font-size: 0.92rem; }
+      nav { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+      nav a {
+        text-decoration: none;
+        color: var(--muted);
+        font-weight: 600;
+        font-size: 0.92rem;
+      }
+      nav a:hover { color: var(--accent-deep); }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 46px;
+        padding: 0 1.15rem;
+        border-radius: 12px;
+        border: none;
+        font-weight: 700;
+        text-decoration: none;
+        cursor: pointer;
+        transition: transform 0.2s ease, background 0.2s ease;
+      }
+      .btn:hover { transform: translateY(-1px); }
+      .btn-primary { background: var(--accent); color: #fff; }
+      .btn-primary:hover { background: var(--accent-deep); }
+      .btn-ghost {
+        background: transparent;
+        border: 1px solid var(--line);
+        color: var(--ink);
+      }
+
+      /* Hero: one composition, brand first, full-bleed atmosphere */
+      .hero {
+        min-height: min(88vh, 760px);
+        display: grid;
+        align-items: end;
+        padding: 2rem 0 3.5rem;
+        position: relative;
+        overflow: hidden;
+      }
+      .hero-plane {
+        position: absolute;
+        top: 0;
+        right: -4%;
+        width: min(52vw, 580px);
+        height: min(68vh, 520px);
+        border-radius: 28px 0 0 28px;
+        background:
+          radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.18), transparent 55%),
+          linear-gradient(155deg, #0f766e 0%, #0d9488 48%, #115e59 100%);
+        box-shadow: 0 30px 80px rgba(15, 23, 42, 0.22);
+        display: grid;
+        place-items: center;
+        animation: rise 0.9s ease both;
+      }
+      .hero-plane img {
+        width: min(62%, 280px);
+        height: auto;
+        border-radius: 18px;
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+      }
+      .hero-copy {
+        position: relative;
+        z-index: 1;
+        max-width: 34rem;
+        animation: fade 0.8s ease both;
+      }
+      .hero-copy .product {
+        font-family: Fraunces, "Iowan Old Style", Georgia, serif;
+        font-size: clamp(3rem, 8vw, 4.6rem);
+        line-height: 0.95;
+        letter-spacing: -0.03em;
+        margin: 0 0 0.85rem;
+        color: var(--ink);
+        font-weight: 700;
+      }
+      .hero-copy h1 {
+        font-family: Fraunces, "Iowan Old Style", Georgia, serif;
+        font-size: clamp(1.45rem, 3.2vw, 2rem);
+        font-weight: 600;
+        margin: 0 0 0.75rem;
+        line-height: 1.2;
+        color: var(--ink);
+      }
+      .hero-copy p {
+        margin: 0 0 1.5rem;
+        color: var(--muted);
+        font-size: 1.05rem;
+        max-width: 32rem;
+      }
+      .cta-row { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+
+      section { padding: 4rem 0; }
+      .eyebrow {
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: var(--accent-deep);
+        margin: 0 0 0.6rem;
+      }
+      .section-title {
+        font-family: Fraunces, Georgia, serif;
+        font-size: clamp(1.7rem, 3vw, 2.2rem);
+        margin: 0 0 0.5rem;
+      }
+      .section-lede {
+        color: var(--muted);
+        margin: 0 0 2rem;
+        max-width: 36rem;
+      }
+
+      .feature-list {
+        display: grid;
+        gap: 1.25rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .feature-list li {
+        display: grid;
+        grid-template-columns: 3rem 1fr;
+        gap: 1rem;
+        align-items: start;
+        padding: 0.25rem 0;
+        animation: rise 0.7s ease both;
+      }
+      .feature-list li:nth-child(2) { animation-delay: 0.08s; }
+      .feature-list li:nth-child(3) { animation-delay: 0.16s; }
+      .feature-list li:nth-child(4) { animation-delay: 0.24s; }
+      .feature-num {
+        width: 3rem;
+        height: 3rem;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        background: var(--accent-soft);
+        color: var(--accent-deep);
+        font-weight: 700;
+      }
+      .feature-list h3 { margin: 0 0 0.25rem; font-size: 1.05rem; }
+      .feature-list p { margin: 0; color: var(--muted); }
+
+      .band {
+        background: var(--accent);
+        color: #fff;
+        border-radius: 24px;
+        padding: 2rem 1.5rem;
+        animation: fade 0.8s ease both;
+      }
+      .band h2 { font-family: Fraunces, Georgia, serif; margin: 0 0 0.5rem; font-size: 1.7rem; }
+      .band p { margin: 0; opacity: 0.95; max-width: 40rem; }
+
+      .tiers {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1rem;
+      }
+      .tier {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 1.35rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+        min-height: 100%;
+        transition: border-color 0.2s ease, transform 0.2s ease;
+      }
+      .tier:hover { border-color: var(--accent); transform: translateY(-2px); }
+      .tier.featured {
+        border-color: var(--accent);
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+      }
+      .tier h3 { font-family: Fraunces, Georgia, serif; margin: 0; font-size: 1.45rem; }
+      .tier .price { font-size: 2rem; font-weight: 700; }
+      .tier .price span { font-size: 0.9rem; font-weight: 500; color: var(--muted); }
+      .tier ul { margin: 0; padding-left: 1.1rem; color: var(--muted); flex: 1; }
+      .tier li { margin: 0.35rem 0; }
+
+      .links {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+      }
+      .link-panel {
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 1.25rem;
+      }
+      .link-panel h3 { margin: 0 0 0.75rem; font-size: 1.05rem; }
+      .link-panel a {
+        display: block;
+        text-decoration: none;
+        color: var(--accent-deep);
+        font-weight: 600;
+        padding: 0.35rem 0;
+      }
+      .note {
+        margin-top: 1rem;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      footer {
+        padding: 2.5rem 0 3rem;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      footer strong { color: var(--ink); }
+
+      @keyframes fade {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes rise {
+        from { opacity: 0; transform: translateY(12px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      @media (max-width: 900px) {
+        .hero { min-height: auto; padding-top: 1rem; }
+        .hero-plane {
+          position: relative;
+          width: 100%;
+          height: 220px;
+          border-radius: 18px;
+          margin-bottom: 1.25rem;
+          inset: auto;
+        }
+        .tiers, .links { grid-template-columns: 1fr; }
+        header { flex-direction: column; align-items: flex-start; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <a class="brand" href="/">
+          <img src="./assets/purepos-logo.jpg" alt="" width="42" height="42" />
+          <div>
+            <strong>PurePOS</strong>
+            <span> UK</span>
+          </div>
+        </a>
+        <nav aria-label="Primary">
+          <a href="#features">Product</a>
+          <a href="#pricing">Pricing</a>
+          <a href="#try">Try it</a>
+          <a class="btn btn-primary" href="http://localhost:4000/pricing">Start trial</a>
+        </nav>
+      </header>
+
+      <section class="hero" aria-label="Hero">
+        <div class="hero-plane" aria-hidden="true">
+          <img src="./assets/purepos-logo-2.jpg" alt="" width="280" height="280" />
+        </div>
+        <div class="hero-copy">
+          <p class="product">PurePOS</p>
+          <h1>Cloud till for UK shops — sells offline, syncs when you’re back.</h1>
+          <p>
+            Hosted multi-tenant POS: central catalog and back office in the cloud, with tills that keep taking sales offline.
+          </p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="#pricing">See £29 / £59 / £99</a>
+            <a class="btn btn-ghost" href="http://localhost:5173/">Open local till</a>
+          </div>
+        </div>
+      </section>
+
+      <section id="features">
+        <p class="eyebrow">The product</p>
+        <h2 class="section-title">One cloud. Many tills.</h2>
+        <p class="section-lede">
+          PurePOS is not a boxed on-prem install. The cloud owns catalog, billing, and reports; each till is a browser client with an offline queue.
+        </p>
+        <ul class="feature-list">
+          <li>
+            <div class="feature-num">1</div>
+            <div>
+              <h3>Central back office</h3>
+              <p>Catalog, customers, import, inventory, billing plans — managed once in the cloud.</p>
+            </div>
+          </li>
+          <li>
+            <div class="feature-num">2</div>
+            <div>
+              <h3>Offline-capable tills</h3>
+              <p>IndexedDB caches the menu; open tickets and completed sales queue locally, then sync.</p>
+            </div>
+          </li>
+          <li>
+            <div class="feature-num">3</div>
+            <div>
+              <h3>Conflict rules that are boring on purpose</h3>
+              <p>Server wins catalog on refresh. Client-queued sales are idempotent when the cloud comes back.</p>
+            </div>
+          </li>
+          <li>
+            <div class="feature-num">4</div>
+            <div>
+              <h3>Ordering & kitchen on Pro</h3>
+              <p>Customer web ordering and kitchen queue when you need more than a single till.</p>
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <div class="band">
+          <h2>Offline is a first-class till mode</h2>
+          <p>
+            Load the register once online, then keep selling if the network drops. The till badge shows Offline / Sync N;
+            sales POST to the cloud via <code>/api/pos/offline-sales</code> when you reconnect.
+          </p>
+        </div>
+      </section>
+
+      <section id="pricing">
+        <p class="eyebrow">Pricing</p>
+        <h2 class="section-title">Simple monthly plans in £</h2>
+        <p class="section-lede">14-day trial stub for pilots. Stripe comes later — switch plans in back-office Billing today.</p>
+        <div class="tiers">
+          <article class="tier">
+            <h3>Starter</h3>
+            <p>Hosted cloud BO + one offline-capable till</p>
+            <div class="price">£29<span>/mo</span></div>
+            <ul>
+              <li>Central cloud catalog &amp; BO</li>
+              <li>1 store · 1 register</li>
+              <li>Till caches catalog · queues sales offline</li>
+              <li>Email support</li>
+            </ul>
+            <a class="btn btn-primary" href="http://localhost:4000/pricing">Choose Starter</a>
+          </article>
+          <article class="tier featured">
+            <h3>Pro</h3>
+            <p>Full cloud shop: kitchen, ordering, import</p>
+            <div class="price">£59<span>/mo</span></div>
+            <ul>
+              <li>Everything in Starter</li>
+              <li>Online ordering</li>
+              <li>CSV import</li>
+              <li>Kitchen + reports / EOD</li>
+            </ul>
+            <a class="btn btn-primary" href="http://localhost:4000/pricing">Choose Pro</a>
+          </article>
+          <article class="tier">
+            <h3>Multi-store</h3>
+            <p>Multi-tenant cloud for groups of shops</p>
+            <div class="price">£99<span>/mo</span></div>
+            <ul>
+              <li>Everything in Pro</li>
+              <li>Multi-store transfers</li>
+              <li>Shared cloud catalog ops</li>
+              <li>Priority pilot support</li>
+            </ul>
+            <a class="btn btn-primary" href="http://localhost:4000/pricing">Choose Multi-store</a>
+          </article>
+        </div>
+      </section>
+
+      <section id="try">
+        <p class="eyebrow">Try PurePOS</p>
+        <h2 class="section-title">Local pilot · documented staging</h2>
+        <p class="section-lede">
+          Production domain <strong>purepos.co.uk</strong> is currently suspended. Use localhost on this Mac, or the documented staging host.
+        </p>
+        <div class="links">
+          <div class="link-panel">
+            <h3>This Mac (localhost)</h3>
+            <a href="http://localhost:5173/">POS till → :5173</a>
+            <a href="http://localhost:5174/">Back office → :5174</a>
+            <a href="http://localhost:5175/">Online ordering → :5175</a>
+            <a href="http://localhost:4000/pricing">Pricing / trial → :4000/pricing</a>
+            <a href="http://localhost:4000/api/health">API health → :4000/api/health</a>
+          </div>
+          <div class="link-panel">
+            <h3>Staging (documented)</h3>
+            <a href="https://staging.purepos.co.uk/pos">staging.purepos.co.uk/pos</a>
+            <a href="https://staging.purepos.co.uk/bo">staging.purepos.co.uk/bo</a>
+            <a href="https://staging.purepos.co.uk/order">staging.purepos.co.uk/order</a>
+            <a href="https://staging.purepos.co.uk/pricing">staging.purepos.co.uk/pricing</a>
+            <a href="https://staging.purepos.co.uk/api/health">staging.purepos.co.uk/api/health</a>
+          </div>
+        </div>
+        <p class="note">
+          Demo: owner@purepos.demo / 1234 · cashier PIN 1111 on the till. GitHub repo remains NickGrant89/CloudTill for now.
+        </p>
+      </section>
+
+      <footer>
+        <p>
+          <strong>PurePOS UK</strong> · hello@purepos.co.uk ·
+          <a href="https://purepos.co.uk/">purepos.co.uk</a>
+          (production hosting suspended — pilots use local / staging)
+        </p>
+      </footer>
+    </div>
+  </body>
+</html>

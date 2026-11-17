@@ -60,6 +60,7 @@ apps/api          Cloud API (Prisma) + public pricing + billing stub
 apps/pos          Offline-capable till (IndexedDB queue + sync badge)
 apps/backoffice   Central BO (catalog, billing, import, pilot tools)
 apps/ordering     Customer-facing online order UI
+apps/marketing    PurePOS UK marketing site (static · :5180)
 apps/mobile       Expo register checkout (install separately)
 packages/shared   Types, plans, ESC/POS builders
 docs/PILOT.md     Pilot env checklist + offline/billing smoke

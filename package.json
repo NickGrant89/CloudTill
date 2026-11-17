@@ -10,6 +10,7 @@
     "dev:pos": "pnpm --filter @cloudtill/pos dev",
     "dev:bo": "pnpm --filter @cloudtill/backoffice dev",
     "dev:ordering": "pnpm --filter @cloudtill/ordering dev",
+    "dev:marketing": "pnpm --filter @cloudtill/marketing dev",
     "build": "pnpm -r run build",
     "db:generate": "pnpm --filter @cloudtill/api db:generate",
     "db:migrate": "pnpm --filter @cloudtill/api exec prisma db push",

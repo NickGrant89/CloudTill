@@ -3,5 +3,6 @@ packages:
   - "apps/pos"
   - "apps/backoffice"
   - "apps/ordering"
+  - "apps/marketing"
   - "packages/*"
   # apps/mobile is an Expo scaffold installed separately (see apps/mobile/README.md)
