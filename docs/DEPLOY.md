@@ -1,85 +1,79 @@
-# PurePOS production deploy (Docker + Postgres)
+# PurePOS hosting
 
-## Quick path (Compose)
+Two ways to run — both stay supported:
 
-From the repo root:
+| Mode | Command | DB | Entry |
+| --- | --- | --- | --- |
+| **Mac day-to-day** | `pnpm setup` then `pnpm dev` | SQLite | `:4000` API · `:5173` till · `:5174` BO · `:5175` ordering |
+| **Hosted-shaped (Docker)** | `pnpm docker:up` | Postgres | **http://localhost:8080** (`/pos` `/bo` `/order` `/pricing` `/api`) |
+
+Same product. Mac keeps fast Vite + SQLite. Docker is what you push toward staging / purepos.co.uk.
+
+## Mac (keep this)
 
 ```bash
-docker compose up --build -d
-curl http://localhost:4000/api/health
+cd ~/Projects/CloudTill
+pnpm setup          # once
+pnpm dev            # or tmux session cloudtill-dev
 ```
 
-Compose starts:
+| Surface | URL |
+| --- | --- |
+| API / pricing | http://localhost:4000 · http://localhost:4000/pricing |
+| Till | http://localhost:5173 |
+| Back office | http://localhost:5174 |
+| Ordering | http://localhost:5175 |
+| Marketing | `pnpm dev:marketing` → http://localhost:5180 |
+
+Demo: `owner@purepos.demo` / PIN `1234` · cashier `1111`.
+
+Share off-Mac: tunnel the Vite ports (ngrok) while `pnpm dev` is up.
+
+## Docker gateway (hosted shape on this Mac)
+
+Requires **Docker Desktop running**.
+
+```bash
+cd ~/Projects/CloudTill
+pnpm docker:up          # build + start db + api + nginx gateway
+curl -s http://localhost:8080/api/health
+open http://localhost:8080/pos/
+```
+
+| Path | App |
+| --- | --- |
+| `/` | Marketing |
+| `/pos/` | Till (static build) |
+| `/bo/` | Back office |
+| `/order/` | Online ordering |
+| `/pricing` | Trial / plans |
+| `/api/*` | Cloud API |
+
+Stop: `pnpm docker:down`
+
+Env overrides: copy `.env.docker.example` → `.env` next to compose (optional). Defaults are fine for a local hosted pilot.
+
+### Point a real domain later
+
+1. Run the same Compose stack on a VPS (or managed Postgres + containers).
+2. Put TLS in front (Caddy / Cloudflare) for `staging.purepos.co.uk` then `purepos.co.uk`.
+3. Set `PUBLIC_BASE_URL`, `JWT_SECRET`, and strong DB credentials.
+4. Prisma provider is flipped to **postgresql** inside the API image; Mac schema stays **sqlite**.
+
+## What Compose starts
 
 | Service | Port | Notes |
 | --- | --- | --- |
-| `db` | 5432 | Postgres 16 (`cloudtill` / `cloudtill` / db `cloudtill`) |
-| `api` | 4000 | Prisma `db push` + seed + Express API |
+| `db` | 5432 | Postgres 16 |
+| `api` | (internal) | Prisma push + seed + Express — use via gateway `/api` |
+| `gateway` | **8080→80** | nginx: static apps + `/api` proxy |
 
-Demo logins after seed: `owner@purepos.demo` / `1234`, etc.
+Mac `pnpm dev` and Docker can run **at the same time**: Mac keeps `:4000`/`:517x`; Docker is only **`:8080`** on the host (Postgres + API stay inside the Compose network).
 
-### Point web apps at the API
+## Build notes
 
-Local Vite apps already proxy `/api` → `4000`. For a remote API, either:
-
-- keep the Vite proxy and tunnel, or
-- set a reverse proxy (Caddy/Nginx) so POS / back office / ordering are served as static builds with `/api` forwarded to the API container.
-
-Example static build:
-
-```bash
-pnpm --filter @cloudtill/shared build
-pnpm --filter @cloudtill/pos build
-pnpm --filter @cloudtill/backoffice build
-pnpm --filter @cloudtill/ordering build
-```
-
-Serve `apps/*/dist` behind Nginx with `/api` → `http://api:4000`.
-
-## Postgres without Docker
-
-1. Create a database and user.
-2. Set API env:
-
-```bash
-cp apps/api/.env.example apps/api/.env
-# DATABASE_URL="postgresql://USER:PASS@HOST:5432/cloudtill?schema=public"
-# JWT_SECRET="long-random-secret"
-```
-
-3. Switch Prisma provider if needed (schema already works with Postgres when `DATABASE_URL` is Postgres — ensure `provider = "postgresql"` in `apps/api/prisma/schema.prisma` for production).
-
-For this repo’s dual-mode demo, the default schema provider is **SQLite**. For Compose we recommend changing the provider to `postgresql` before `docker compose up`, or maintaining a `schema.postgres.prisma` copy. The included `Dockerfile` runs `prisma db push` against whatever `DATABASE_URL` is set; **set `provider = "postgresql"`** in `schema.prisma` when using the Compose Postgres service.
-
-```prisma
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-```
-
-Then:
-
-```bash
-pnpm --filter @cloudtill/api exec prisma db push
-pnpm db:seed
-pnpm --filter @cloudtill/api start   # after build
-```
-
-## Environment variables
-
-| Variable | Purpose |
-| --- | --- |
-| `DATABASE_URL` | SQLite `file:./dev.db` or Postgres URL |
-| `JWT_SECRET` | Sign employee PIN sessions |
-| `PORT` / `HOST` | API bind (default `4000` / `0.0.0.0`) |
+Frontends are built with `VITE_BASE=/pos/` (etc.) so asset URLs work under path prefixes. Mac `pnpm dev` keeps `base: /`.
 
 ## Printers in production
 
-Configure printers in Back Office → **Printers**:
-
-- **mock** — logs ESC/POS bytes (CI/demo)
-- **network** — raw TCP to thermal printer host:9100
-- **usb_bridge** — queues payload for a host agent
-
-Kitchen online orders enqueue a `kitchen` print job automatically.
+Configure in Back Office → **Printers**: mock · network (:9100) · usb_bridge.

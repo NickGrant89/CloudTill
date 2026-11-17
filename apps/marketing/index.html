@@ -255,7 +255,7 @@
 
       .links {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
         gap: 1rem;
       }
       .link-panel {
@@ -441,16 +441,24 @@
         <p class="eyebrow">Try PurePOS</p>
         <h2 class="section-title">Local pilot · documented staging</h2>
         <p class="section-lede">
-          Production domain <strong>purepos.co.uk</strong> is currently suspended. Use localhost on this Mac, or the documented staging host.
+          Use <strong>Mac dev</strong> (`pnpm dev`) for day-to-day, <strong>Docker gateway</strong> (`:8080`) for a hosted-shaped stack on this Mac, or documented staging when the domain is live.
         </p>
         <div class="links">
           <div class="link-panel">
-            <h3>This Mac (localhost)</h3>
+            <h3>This Mac — pnpm dev</h3>
             <a href="http://localhost:5173/">POS till → :5173</a>
             <a href="http://localhost:5174/">Back office → :5174</a>
             <a href="http://localhost:5175/">Online ordering → :5175</a>
             <a href="http://localhost:4000/pricing">Pricing / trial → :4000/pricing</a>
             <a href="http://localhost:4000/api/health">API health → :4000/api/health</a>
+          </div>
+          <div class="link-panel">
+            <h3>This Mac — Docker gateway</h3>
+            <a href="http://localhost:8080/pos/">Till → :8080/pos/</a>
+            <a href="http://localhost:8080/bo/">Back office → :8080/bo/</a>
+            <a href="http://localhost:8080/order/">Ordering → :8080/order/</a>
+            <a href="http://localhost:8080/pricing">Pricing → :8080/pricing</a>
+            <a href="http://localhost:8080/api/health">Health → :8080/api/health</a>
           </div>
           <div class="link-panel">
             <h3>Staging (documented)</h3>

@@ -1,3 +1,5 @@
+# PurePOS hosted stack (Postgres + API + nginx gateway)
+# Mac local day-to-day: keep using `pnpm dev` (SQLite) — see docs/DEPLOY.md
 services:
   db:
     image: postgres:16-alpine
@@ -5,8 +7,9 @@ services:
       POSTGRES_USER: cloudtill
       POSTGRES_PASSWORD: cloudtill
       POSTGRES_DB: cloudtill
-    ports:
-      - "5432:5432"
+    # Postgres stays internal so Mac services can keep host :5432 if needed.
+    expose:
+      - "5432"
     volumes:
       - cloudtill_pg:/var/lib/postgresql/data
     healthcheck:
@@ -21,14 +24,33 @@ services:
       dockerfile: Dockerfile
     environment:
       DATABASE_URL: postgresql://cloudtill:cloudtill@db:5432/cloudtill?schema=public
-      JWT_SECRET: cloudtill-docker-dev-secret
+      JWT_SECRET: ${JWT_SECRET:-cloudtill-docker-dev-secret-change-me}
       PORT: "4000"
       HOST: "0.0.0.0"
-    ports:
-      - "4000:4000"
+      PRODUCT_NAME: PurePOS
+      PRODUCT_LEGAL: PurePOS UK
+      PRODUCT_DOMAIN: purepos.co.uk
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
+      STAGING_BASE_URL: ${STAGING_BASE_URL:-https://staging.purepos.co.uk}
+      POS_PUBLIC_URL: ${POS_PUBLIC_URL:-http://localhost:8080/pos/}
+      BO_PUBLIC_URL: ${BO_PUBLIC_URL:-http://localhost:8080/bo/}
+      ORDERING_PUBLIC_URL: ${ORDERING_PUBLIC_URL:-http://localhost:8080/order/}
+    # API stays on the Docker network only so Mac `pnpm dev` can keep :4000.
+    # Reach the API via gateway http://localhost:8080/api/...
+    expose:
+      - "4000"
     depends_on:
       db:
         condition: service_healthy
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
 
 volumes:
   cloudtill_pg:

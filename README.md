@@ -19,7 +19,7 @@ Web-first typed monorepo: tablet register, desktop back office, customer online 
 
 Conflict rules: **server wins catalog** on refresh; **client queues sales** until the cloud acks (`/api/pos/offline-sales`, idempotent `clientSaleId`).
 
-Pilot walkthrough: [docs/PILOT.md](docs/PILOT.md) · Local pricing: http://localhost:4000/pricing
+Pilot walkthrough: [docs/PILOT.md](docs/PILOT.md) · Hosting (Mac + Docker): [docs/DEPLOY.md](docs/DEPLOY.md) · Local pricing: http://localhost:4000/pricing
 
 ## Quick start
 
@@ -36,7 +36,7 @@ pnpm dev     # API + POS + back office + online ordering
 | Back office | http://localhost:5174 | https://staging.purepos.co.uk/bo |
 | Online ordering | http://localhost:5175 | https://staging.purepos.co.uk/order |
 | Mobile (Expo) | `cd apps/mobile && npm install && npx expo start` | — |
-| Docker (API + Postgres) | `docker compose up --build` — [docs/DEPLOY.md](docs/DEPLOY.md) | — |
+| Docker gateway (hosted shape) | http://localhost:8080 — `pnpm docker:up` · [docs/DEPLOY.md](docs/DEPLOY.md) | staging paths `/pos` `/bo` `/order` |
 
 Set `PUBLIC_BASE_URL` / `STAGING_BASE_URL` in `apps/api/.env` when pointing tills at staging.
 

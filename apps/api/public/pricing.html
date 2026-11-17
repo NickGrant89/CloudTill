@@ -123,8 +123,8 @@
         </div>
         <div class="actions">
           <button type="submit">Start trial</button>
-          <a class="ghost" href="http://localhost:5174/">Open back office</a>
-          <a class="ghost" href="http://localhost:5173/">Open POS</a>
+          <a class="ghost" id="linkBo" href="http://localhost:5174/">Open back office</a>
+          <a class="ghost" id="linkPos" href="http://localhost:5173/">Open POS</a>
         </div>
         <p class="msg" id="msg" hidden></p>
       </form>
@@ -157,6 +157,16 @@
         .catch(() => {
           tiers.innerHTML = "<p class='err'>Could not load plans — is the API running on :4000?</p>";
         });
+
+      // Hosted gateway (:8080 / staging) uses path routes; Mac API-only (:4000) uses Vite ports.
+      (function () {
+        const hosted = location.port === "8080" || location.port === "80" || location.port === "";
+        if (!hosted) return;
+        const bo = document.getElementById("linkBo");
+        const pos = document.getElementById("linkPos");
+        if (bo) bo.href = "/bo/";
+        if (pos) pos.href = "/pos/";
+      })();
 
       document.getElementById("signup").addEventListener("submit", async (e) => {
         e.preventDefault();

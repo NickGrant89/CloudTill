@@ -18,7 +18,10 @@
     "db:reset": "pnpm --filter @cloudtill/api db:reset",
     "setup": "pnpm install && pnpm --filter @cloudtill/shared build && cp -n apps/api/.env.example apps/api/.env || true && pnpm db:generate && pnpm db:migrate && pnpm db:seed",
     "docker:up": "docker compose up --build -d",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f --tail=100",
+    "host:mac": "pnpm dev",
+    "host:docker": "pnpm docker:up"
   },
   "engines": {
     "node": ">=20"

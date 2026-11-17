@@ -18,7 +18,9 @@ RUN pnpm --filter @cloudtill/shared build \
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/* \
+  && corepack enable && corepack prepare pnpm@9.15.0 --activate
 COPY --from=deps /app/node_modules /app/node_modules
 COPY --from=deps /app/packages /app/packages
 COPY --from=deps /app/apps/api /app/apps/api
@@ -26,10 +28,11 @@ COPY --from=build /app/packages/shared/dist /app/packages/shared/dist
 COPY package.json pnpm-workspace.yaml ./
 COPY apps/api/prisma apps/api/prisma
 COPY apps/api/src apps/api/src
+COPY apps/api/public apps/api/public
 COPY packages/shared/package.json packages/shared/
 COPY packages/shared/src packages/shared/src
 WORKDIR /app/apps/api
-# Compose uses Postgres — flip Prisma provider at runtime
+# Compose uses Postgres — flip Prisma provider at runtime (Mac schema stays sqlite)
 RUN sed -i 's/provider = "sqlite"/provider = "postgresql"/' prisma/schema.prisma
 EXPOSE 4000
 CMD ["sh", "-c", "pnpm exec prisma generate && pnpm exec prisma db push && pnpm exec tsx prisma/seed.ts && pnpm exec tsx src/index.ts"]
