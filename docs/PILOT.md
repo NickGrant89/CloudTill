@@ -1,6 +1,6 @@
 # PurePOS pilot guide
 
-**Brand:** PurePOS UK · domain **purepos.co.uk** (production hosting suspended — use local or staging).  
+**Brand:** PurePOS UK · live Railway host (see `docs/HOSTING-ONLINE.md`) · **purepos.co.uk** DNS cutover from Fasthosts pending.  
 **Repo folder / GitHub:** still `CloudTill` / `NickGrant89/CloudTill` for now.
 
 **Product:** PurePOS = **cloud till + back office + online ordering** (this monorepo). Not a WordPress add-on / Loyverse bolt-on.  

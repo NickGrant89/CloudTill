@@ -2,7 +2,7 @@
 
 **PurePOS UK** is the product: **cloud till + back office + online ordering**. Hosted multi-tenant SaaS (central API, catalog, billing) with offline-capable tills that queue sales and sync when back online. Not a WordPress add-on, not a Loyverse bolt-on, not a boxed on-prem install.
 
-- **Brand / domain:** PurePOS · [purepos.co.uk](https://purepos.co.uk) (production hosting currently suspended)
+- **Brand / domain:** PurePOS · live [Railway host](https://web-production-b2a209a9.up.railway.app) · [purepos.co.uk](https://purepos.co.uk) (DNS cutover from Fasthosts pending)
 - **Staging (pilots):** `https://staging.purepos.co.uk` (documented target) · local `localhost` ports below
 - **GitHub repo (unchanged for now):** [NickGrant89/CloudTill](https://github.com/NickGrant89/CloudTill)
 

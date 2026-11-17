@@ -18,9 +18,9 @@ Free plan: one custom domain (apex registered). Upgrade for `www` / `staging`.
 
 ## Permanent hosting (recommended)
 
-`purepos.co.uk` is on **Fasthosts** and currently shows **Hosting Account Suspended**. That shared host also can’t run this Node + Postgres cloud stack (it was for WordPress).
+Product is already on Railway above. Fasthosts still serves the suspended holding page for the apex until DNS is cut over — that shared host can’t run this Node + Postgres stack anyway.
 
-Use a PaaS instead:
+Optional alternate PaaS:
 
 ### Render (Blueprint)
 

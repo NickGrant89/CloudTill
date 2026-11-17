@@ -56,7 +56,8 @@ app.get("/api/health", async (_req, res) => {
         `http://localhost:${PORT}`,
       stagingBase: process.env.STAGING_BASE_URL || "https://staging.purepos.co.uk",
       production: "https://purepos.co.uk",
-      productionNote: "Hosting currently suspended — use staging or localhost",
+      productionNote:
+        "Hosted on Railway (PUBLIC_BASE_URL). Apex purepos.co.uk needs Fasthosts DNS cutover.",
     },
     env: {
       hasJwtSecret: Boolean(process.env.JWT_SECRET),

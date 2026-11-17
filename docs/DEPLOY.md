@@ -57,7 +57,7 @@ Env overrides: copy `.env.docker.example` → `.env` next to compose (optional).
 
 See **[HOSTING-ONLINE.md](./HOSTING-ONLINE.md)** — Render Blueprint (`render.yaml` + `Dockerfile.webapp`), or Compose on a VPS with TLS.
 
-`purepos.co.uk` (Fasthosts) is **suspended** and is shared hosting — not suitable for this Node/Postgres stack. Point DNS at Render/VPS once ready.
+App is live on Railway (`docs/HOSTING-ONLINE.md`). Fasthosts shared hosting is unsuitable — point `purepos.co.uk` DNS at Railway when ready.
 
 Prisma provider is flipped to **postgresql** inside Docker images; Mac schema stays **sqlite**.
 
