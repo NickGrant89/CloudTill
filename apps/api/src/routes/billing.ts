@@ -134,7 +134,9 @@ async function provisionStore(opts: {
       name: "Starter item",
       color: "#0f766e",
       active: true,
-      variants: { create: [{ name: "Regular", priceCents: 350, active: true }] },
+      variants: {
+        create: [{ name: "Regular", sku: `SKU-${slug}-1`, priceCents: 350, active: true }],
+      },
     },
   });
 
