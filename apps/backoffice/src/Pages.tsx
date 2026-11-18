@@ -25,10 +25,10 @@ export type PageId =
   | "eod"
   | "settings";
 
-export function Pages({ page }: { page: PageId }) {
+export function Pages({ page, onNavigate }: { page: PageId; onNavigate?: (page: PageId) => void }) {
   switch (page) {
     case "dashboard":
-      return <Dashboard />;
+      return <Dashboard onNavigate={onNavigate} />;
     case "catalog":
       return <CatalogPage />;
     case "modifiers":
@@ -68,66 +68,244 @@ export function Pages({ page }: { page: PageId }) {
   }
 }
 
-function Dashboard() {
-  const [summary, setSummary] = useState<{
+type DashData = {
+  store: { name: string; slug: string; currency: string };
+  asOf: string;
+  today: {
     receiptCount: number;
     grossSalesCents: number;
     taxCents: number;
     tipCents: number;
     avgTicketCents: number;
-  } | null>(null);
-  const [low, setLow] = useState(0);
+  };
+  week: { receiptCount: number; grossSalesCents: number; avgTicketCents: number };
+  kitchen: {
+    counts: { pending: number; preparing: number; ready: number; total: number };
+    orders: {
+      id: string;
+      orderNumber: string;
+      customerName: string;
+      channel: string;
+      status: string;
+      fulfillment: string;
+      totalCents: number;
+      createdAt: string;
+      linesPreview: string;
+    }[];
+  };
+  openTickets: number;
+  openShifts: number;
+  lowStock: { count: number; items: { name: string; sku: string; quantity: number; lowStock: number }[] };
+};
+
+function channelLabel(channel: string) {
+  const map: Record<string, string> = {
+    web: "Web",
+    justeat: "Just Eat",
+    deliveroo: "Deliveroo",
+    ubereats: "Uber Eats",
+    hungrypanda: "HungryPanda",
+    foodhub: "Foodhub",
+    generic: "Delivery",
+  };
+  return map[channel] ?? channel;
+}
+
+function Dashboard({ onNavigate }: { onNavigate?: (page: PageId) => void }) {
+  const [data, setData] = useState<DashData | null>(null);
+  const [err, setErr] = useState("");
+
+  async function load() {
+    try {
+      setData(await api<DashData>("/reports/dashboard"));
+      setErr("");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not load dashboard");
+    }
+  }
 
   useEffect(() => {
-    void Promise.all([
-      api<typeof summary extends infer T ? NonNullable<T> : never>("/reports/summary"),
-      api<{ isLow: boolean }[]>("/inventory/levels?low=1"),
-    ]).then(([s, levels]) => {
-      setSummary(s);
-      setLow(levels.length);
-    });
+    void load();
+    const t = setInterval(() => void load(), 15000);
+    return () => clearInterval(t);
   }, []);
 
+  const go = (page: PageId) => onNavigate?.(page);
+
+  if (!data && !err) return <p>Loading overview…</p>;
+
+  const k = data?.kitchen.counts;
+  const todayLabel = new Date().toLocaleDateString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+  });
+
   return (
-    <div>
+    <div className="dash">
       <div className="page-head">
         <div>
-          <h2>Dashboard</h2>
-          <p>Last 7 days · PurePOS Demo Café</p>
+          <h2>Today</h2>
+          <p>
+            {data?.store.name ?? "Store"} · {todayLabel}
+            {data ? ` · updated ${new Date(data.asOf).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}` : ""}
+          </p>
+        </div>
+        <div className="toolbar" style={{ marginBottom: 0 }}>
+          <button type="button" className="secondary" onClick={() => void load()}>
+            Refresh
+          </button>
+          <a className="ghost-link" href="/pos/" target="_blank" rel="noreferrer">
+            Open till
+          </a>
         </div>
       </div>
-      <div className="cards">
-        <div className="stat">
-          <div className="label">Gross sales</div>
-          <div className="value">{money(summary?.grossSalesCents ?? 0)}</div>
+
+      {err && <p className="error">{err}</p>}
+
+      <div className="dash-today">
+        <div className="stat stat-hero">
+          <div className="label">Sales today</div>
+          <div className="value">{money(data?.today.grossSalesCents ?? 0)}</div>
         </div>
         <div className="stat">
           <div className="label">Receipts</div>
-          <div className="value">{summary?.receiptCount ?? 0}</div>
-        </div>
-        <div className="stat">
-          <div className="label">Tax collected</div>
-          <div className="value">{money(summary?.taxCents ?? 0)}</div>
-        </div>
-        <div className="stat">
-          <div className="label">Tips</div>
-          <div className="value">{money(summary?.tipCents ?? 0)}</div>
+          <div className="value">{data?.today.receiptCount ?? 0}</div>
         </div>
         <div className="stat">
           <div className="label">Avg ticket</div>
-          <div className="value">{money(summary?.avgTicketCents ?? 0)}</div>
+          <div className="value">{money(data?.today.avgTicketCents ?? 0)}</div>
         </div>
         <div className="stat">
-          <div className="label">Low stock SKUs</div>
-          <div className="value">{low}</div>
+          <div className="label">Tips today</div>
+          <div className="value">{money(data?.today.tipCents ?? 0)}</div>
         </div>
       </div>
-      <div className="panel-box">
-        <h3>Quick links</h3>
-        <p style={{ color: "var(--muted)", margin: 0 }}>
-          Use the sidebar for items, inventory receiving, customer loyalty, employee PINs, sales void/refund,
-          and PurePOS reports. Open the POS till on port 5173 for register sales.
-        </p>
+
+      <div className="dash-grid">
+        <section className="panel-box dash-kitchen">
+          <div className="dash-panel-head">
+            <div>
+              <h3>Kitchen / delivery</h3>
+              <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>
+                {k?.total
+                  ? `${k.pending} waiting · ${k.preparing} preparing · ${k.ready} ready`
+                  : "Queue clear"}
+              </p>
+            </div>
+            <button type="button" className="secondary" onClick={() => go("kitchen")}>
+              Open kitchen
+            </button>
+          </div>
+          {data?.kitchen.orders.length ? (
+            <ul className="dash-order-list">
+              {data.kitchen.orders.map((o) => (
+                <li key={o.id}>
+                  <div>
+                    <strong>{o.orderNumber}</strong>{" "}
+                    <span className="badge">{channelLabel(o.channel)}</span>{" "}
+                    <span className="badge warn">{o.status}</span>
+                    <div style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: 2 }}>
+                      {o.customerName} · {o.fulfillment}
+                      {o.linesPreview ? ` · ${o.linesPreview}` : ""}
+                    </div>
+                  </div>
+                  <div className="dash-order-right">
+                    <span>{money(o.totalCents)}</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void api(`/kitchen/orders/${o.id}`, {
+                          method: "PATCH",
+                          body: JSON.stringify({
+                            status:
+                              o.status === "pending" || o.status === "accepted"
+                                ? "preparing"
+                                : o.status === "preparing"
+                                  ? "ready"
+                                  : "completed",
+                          }),
+                        }).then(() => load())
+                      }
+                    >
+                      Advance
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p style={{ color: "var(--muted)", margin: "8px 0 0" }}>
+              No open kitchen orders. Web and delivery-app orders appear here.
+            </p>
+          )}
+        </section>
+
+        <aside className="dash-side">
+          <section className="panel-box">
+            <h3>At a glance</h3>
+            <ul className="dash-glance">
+              <li>
+                <span>Open tickets</span>
+                <strong>{data?.openTickets ?? 0}</strong>
+              </li>
+              <li>
+                <span>Open shifts</span>
+                <strong>{data?.openShifts ?? 0}</strong>
+              </li>
+              <li>
+                <span>Low stock</span>
+                <strong className={(data?.lowStock.count ?? 0) > 0 ? "warn-text" : undefined}>
+                  {data?.lowStock.count ?? 0}
+                </strong>
+              </li>
+              <li>
+                <span>7-day sales</span>
+                <strong>{money(data?.week.grossSalesCents ?? 0)}</strong>
+              </li>
+              <li>
+                <span>7-day receipts</span>
+                <strong>{data?.week.receiptCount ?? 0}</strong>
+              </li>
+            </ul>
+            {(data?.lowStock.items.length ?? 0) > 0 && (
+              <div className="dash-low">
+                {data!.lowStock.items.map((i) => (
+                  <div key={i.sku}>
+                    {i.name}{" "}
+                    <span style={{ color: "var(--muted)" }}>
+                      {i.quantity} ≤ {i.lowStock}
+                    </span>
+                  </div>
+                ))}
+                <button type="button" className="secondary" style={{ marginTop: 10 }} onClick={() => go("inventory")}>
+                  Inventory
+                </button>
+              </div>
+            )}
+          </section>
+
+          <section className="panel-box">
+            <h3>Go to</h3>
+            <div className="dash-actions">
+              <button type="button" onClick={() => go("sales")}>
+                Sales history
+              </button>
+              <button type="button" className="secondary" onClick={() => go("reports")}>
+                Reports
+              </button>
+              <button type="button" className="secondary" onClick={() => go("catalog")}>
+                Items
+              </button>
+              <button type="button" className="secondary" onClick={() => go("eod")}>
+                End of day
+              </button>
+              <button type="button" className="secondary" onClick={() => go("settings")}>
+                Settings
+              </button>
+            </div>
+          </section>
+        </aside>
       </div>
     </div>
   );

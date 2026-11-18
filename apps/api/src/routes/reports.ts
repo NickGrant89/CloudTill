@@ -148,6 +148,109 @@ reportsRouter.get("/taxes", async (req: AuthedRequest, res) => {
   });
 });
 
+reportsRouter.get("/dashboard", async (req: AuthedRequest, res) => {
+  const storeId = req.user!.storeId;
+  const now = new Date();
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+  const startOfWeek = new Date(Date.now() - 7 * 86400000);
+
+  const [
+    store,
+    todaySales,
+    weekSales,
+    kitchenOrders,
+    openTickets,
+    lowLevels,
+    openShifts,
+  ] = await Promise.all([
+    prisma.store.findUniqueOrThrow({
+      where: { id: storeId },
+      select: { id: true, name: true, slug: true, currency: true },
+    }),
+    prisma.sale.findMany({
+      where: { storeId, status: "completed", createdAt: { gte: startOfToday } },
+      select: { totalCents: true, taxCents: true, tipCents: true },
+    }),
+    prisma.sale.findMany({
+      where: { storeId, status: "completed", createdAt: { gte: startOfWeek } },
+      select: { totalCents: true },
+    }),
+    prisma.onlineOrder.findMany({
+      where: {
+        storeId,
+        status: { in: ["pending", "accepted", "preparing", "ready"] },
+      },
+      include: { lines: { select: { name: true, quantity: true } } },
+      orderBy: { createdAt: "asc" },
+      take: 8,
+    }),
+    prisma.ticket.count({ where: { storeId, status: { in: ["open", "held"] } } }),
+    prisma.inventoryLevel.findMany({
+      where: { storeId },
+      include: { variant: { include: { item: true } } },
+    }),
+    prisma.shift.count({ where: { storeId, status: "open" } }),
+  ]);
+
+  const sum = (rows: { totalCents: number }[]) => rows.reduce((s, r) => s + r.totalCents, 0);
+  const todayGross = sum(todaySales);
+  const weekGross = sum(weekSales);
+  const lowStock = lowLevels.filter((l) => l.quantity <= l.lowStock);
+
+  const kitchenCounts = { pending: 0, preparing: 0, ready: 0, total: kitchenOrders.length };
+  for (const o of kitchenOrders) {
+    if (o.status === "pending" || o.status === "accepted") kitchenCounts.pending += 1;
+    else if (o.status === "preparing") kitchenCounts.preparing += 1;
+    else if (o.status === "ready") kitchenCounts.ready += 1;
+  }
+
+  res.json({
+    store,
+    asOf: now.toISOString(),
+    today: {
+      receiptCount: todaySales.length,
+      grossSalesCents: todayGross,
+      taxCents: todaySales.reduce((s, x) => s + x.taxCents, 0),
+      tipCents: todaySales.reduce((s, x) => s + x.tipCents, 0),
+      avgTicketCents: todaySales.length ? Math.round(todayGross / todaySales.length) : 0,
+    },
+    week: {
+      receiptCount: weekSales.length,
+      grossSalesCents: weekGross,
+      avgTicketCents: weekSales.length ? Math.round(weekGross / weekSales.length) : 0,
+    },
+    kitchen: {
+      counts: kitchenCounts,
+      orders: kitchenOrders.map((o) => ({
+        id: o.id,
+        orderNumber: o.orderNumber,
+        customerName: o.customerName,
+        channel: o.channel,
+        status: o.status,
+        fulfillment: o.fulfillment,
+        totalCents: o.totalCents,
+        createdAt: o.createdAt.toISOString(),
+        linesPreview: o.lines
+          .slice(0, 3)
+          .map((l) => `${l.quantity}× ${l.name}`)
+          .join(", "),
+      })),
+    },
+    openTickets,
+    openShifts,
+    lowStock: {
+      count: lowStock.length,
+      items: lowStock.slice(0, 5).map((l) => ({
+        name: l.variant.item.name,
+        sku: l.variant.sku,
+        quantity: l.quantity,
+        lowStock: l.lowStock,
+      })),
+    },
+  });
+});
+
 reportsRouter.get("/shifts", async (req: AuthedRequest, res) => {
   const { from, to } = dateRange(req);
   const shifts = await prisma.shift.findMany({

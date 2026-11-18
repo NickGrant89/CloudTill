@@ -187,7 +187,7 @@ export function App() {
           </div>
         </aside>
         <main className="main">
-          <Pages page={page} />
+          <Pages page={page} onNavigate={setPage} />
         </main>
       </div>
       <LowStockToast onOpenInventory={() => setPage("inventory")} />
