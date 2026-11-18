@@ -271,7 +271,7 @@ model Ticket {
   customerId      String?
   name            String   @default("Ticket")
   status          String   @default("open") // open | held | paid | voided
-  source          String   @default("pos") // pos | online | mobile
+  source          String   @default("pos") // pos | online | mobile | justeat | deliveroo | ubereats | hungrypanda | foodhub | delivery
   kitchenStatus   String? // queued | preparing | ready | done
   discountCents   Int      @default(0)
   discountPercent Float    @default(0)
@@ -425,6 +425,10 @@ model OnlineOrder {
   customerEmail   String?
   fulfillment     String   @default("pickup") // pickup | dine_in | delivery
   status          String   @default("pending") // pending | accepted | preparing | ready | completed | cancelled
+  /// web | justeat | deliveroo | ubereats | hungrypanda | foodhub | generic
+  channel         String   @default("web")
+  externalOrderId String?
+  partnerMetaJson String? // truncated raw/partner ids for support
   note            String?
   deliveryAddress String?
   deliveryFeeCents Int     @default(0)
@@ -440,6 +444,8 @@ model OnlineOrder {
   store  Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
   ticket Ticket?           @relation(fields: [ticketId], references: [id])
   lines  OnlineOrderLine[]
+
+  @@index([storeId, channel, externalOrderId])
 }
 
 model OnlineOrderLine {

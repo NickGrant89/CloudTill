@@ -21,6 +21,7 @@ import { importRouter } from "./routes/import.js";
 import { billingRouter, publicBillingRouter } from "./routes/billing.js";
 import { adminRouter } from "./routes/admin.js";
 import { backupRouter } from "./routes/backup.js";
+import { deliveryRouter, publicDeliveryRouter } from "./routes/delivery.js";
 import { prisma } from "./db.js";
 
 const app = express();
@@ -46,7 +47,7 @@ app.get("/api/health", async (_req, res) => {
     product: process.env.PRODUCT_NAME || "PurePOS",
     legalName: process.env.PRODUCT_LEGAL || "PurePOS UK",
     domain: process.env.PRODUCT_DOMAIN || "purepos.co.uk",
-    version: "0.5.2",
+    version: "0.5.3",
     database,
     storeCount,
     time: new Date().toISOString(),
@@ -115,10 +116,12 @@ app.use("/api/gift-cards", giftCardsRouter);
 app.use("/api/time-clock", timeClockRouter);
 app.use("/api/public", publicOrderingRouter);
 app.use("/api/public", publicBillingRouter);
+app.use("/api/public/delivery", publicDeliveryRouter);
 app.use("/api/billing", billingRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/extras", backupRouter);
 app.use("/api/kitchen", kitchenRouter);
+app.use("/api/delivery", deliveryRouter);
 app.use("/api/printers", printersRouter);
 app.use("/api/extras", extrasRouter);
 app.use("/api/import", importRouter);

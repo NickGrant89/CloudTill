@@ -1,6 +1,24 @@
 import { useEffect, useState } from "react";
 import { api, money } from "./api";
 
+type DeliveryChannelId = "justeat" | "deliveroo" | "ubereats" | "hungrypanda" | "foodhub" | "generic";
+
+type DeliveryConfig = {
+  store: { id: string; slug: string; name: string };
+  enabledChannels: DeliveryChannelId[];
+  channels: {
+    id: DeliveryChannelId;
+    label: string;
+    enabled: boolean;
+    webhookUrl: string;
+    partnerRestaurantId: string;
+    hasClientSecret: boolean;
+  }[];
+  normalizedIngestUrl: string;
+  webhookSecretSet: boolean;
+  credentialsNeeded: Record<string, string[]>;
+};
+
 export function KitchenPage() {
   const [orders, setOrders] = useState<
     {
@@ -9,20 +27,36 @@ export function KitchenPage() {
       customerName: string;
       fulfillment: string;
       status: string;
+      channel?: string;
       totalCents: number;
       note: string | null;
+      deliveryAddress?: string | null;
       lines: { name: string; quantity: number }[];
       createdAt: string;
     }[]
   >([]);
+  const [delivery, setDelivery] = useState<DeliveryConfig | null>(null);
+  const [secretDraft, setSecretDraft] = useState("");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [simChannel, setSimChannel] = useState<DeliveryChannelId>("deliveroo");
 
-  async function load() {
+  async function loadOrders() {
     setOrders(await api("/kitchen/orders"));
   }
 
+  async function loadDelivery() {
+    try {
+      setDelivery(await api<DeliveryConfig>("/delivery/config"));
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Could not load delivery config");
+    }
+  }
+
   useEffect(() => {
-    void load();
-    const t = setInterval(() => void load(), 8000);
+    void loadOrders();
+    void loadDelivery();
+    const t = setInterval(() => void loadOrders(), 8000);
     return () => clearInterval(t);
   }, []);
 
@@ -34,7 +68,50 @@ export function KitchenPage() {
           ? "ready"
           : "completed";
     await api(`/kitchen/orders/${id}`, { method: "PATCH", body: JSON.stringify({ status: next }) });
-    await load();
+    await loadOrders();
+  }
+
+  function channelLabel(channel?: string) {
+    if (!channel || channel === "web") return "Web";
+    const hit = delivery?.channels.find((c) => c.id === channel);
+    return hit?.label ?? channel;
+  }
+
+  async function saveDelivery(partial: {
+    enabledChannels?: DeliveryChannelId[];
+    webhookSecret?: string | null;
+    restaurantIds?: Record<string, string>;
+    clientSecrets?: Record<string, string>;
+  }) {
+    setBusy(true);
+    setMsg("");
+    try {
+      await api("/delivery/config", { method: "PUT", body: JSON.stringify(partial) });
+      setSecretDraft("");
+      await loadDelivery();
+      setMsg("Delivery settings saved");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function simulate() {
+    setBusy(true);
+    setMsg("");
+    try {
+      const r = await api<{ message: string; order: { orderNumber: string } }>("/delivery/simulate", {
+        method: "POST",
+        body: JSON.stringify({ channel: simChannel }),
+      });
+      setMsg(r.message + ` · ${r.order.orderNumber}`);
+      await loadOrders();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Simulate failed");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -42,9 +119,9 @@ export function KitchenPage() {
       <div className="page-head">
         <div>
           <h2>Kitchen / online orders</h2>
-          <p>Customer online orders become held tickets with kitchen status</p>
+          <p>Web ordering and UK delivery apps (Just Eat, Deliveroo, Uber Eats, HungryPanda, Foodhub) land here</p>
         </div>
-        <button type="button" className="secondary" onClick={() => void load()}>
+        <button type="button" className="secondary" onClick={() => void loadOrders()}>
           Refresh
         </button>
       </div>
@@ -53,6 +130,7 @@ export function KitchenPage() {
           <thead>
             <tr>
               <th>Order</th>
+              <th>Channel</th>
               <th>Customer</th>
               <th>Items</th>
               <th>Total</th>
@@ -70,7 +148,13 @@ export function KitchenPage() {
                   </div>
                 </td>
                 <td>
+                  <span className="badge">{channelLabel(o.channel)}</span>
+                </td>
+                <td>
                   {o.customerName}
+                  {o.deliveryAddress ? (
+                    <div style={{ color: "var(--muted)", fontSize: "0.85rem" }}>{o.deliveryAddress}</div>
+                  ) : null}
                   {o.note ? <div style={{ color: "var(--muted)" }}>{o.note}</div> : null}
                 </td>
                 <td>{o.lines.map((l) => `${l.quantity}× ${l.name}`).join(", ")}</td>
@@ -87,13 +171,132 @@ export function KitchenPage() {
             ))}
             {!orders.length && (
               <tr>
-                <td colSpan={6} style={{ color: "var(--muted)" }}>
-                  No open online orders. Place one at the ordering app (port 5175).
+                <td colSpan={7} style={{ color: "var(--muted)" }}>
+                  No open kitchen orders. Place a web order, or simulate a delivery app below.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="panel-box" style={{ marginTop: 18 }}>
+        <h3>UK delivery apps</h3>
+        <p style={{ color: "var(--muted)", marginTop: 0 }}>
+          Partner APIs need real credentials from Just Eat / Deliveroo / Uber Eats / HungryPanda / Foodhub (or a
+          middleware like Deliverect). PurePOS accepts signed webhooks now; simulate below without partner secrets.
+        </p>
+
+        {delivery && (
+          <>
+            <div className="field" style={{ maxWidth: 420 }}>
+              <label>Webhook secret (header X-PurePOS-Delivery-Secret)</label>
+              <input
+                type="password"
+                placeholder={delivery.webhookSecretSet ? "•••••••• (set — enter to replace)" : "Set a long secret"}
+                value={secretDraft}
+                onChange={(e) => setSecretDraft(e.target.value)}
+              />
+            </div>
+            <div className="toolbar" style={{ marginBottom: 12 }}>
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy || secretDraft.trim().length < 8}
+                onClick={() => void saveDelivery({ webhookSecret: secretDraft.trim() })}
+              >
+                Save secret
+              </button>
+              {delivery.webhookSecretSet && (
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={busy}
+                  onClick={() => {
+                    if (!confirm("Clear delivery webhook secret?")) return;
+                    void saveDelivery({ webhookSecret: null });
+                  }}
+                >
+                  Clear secret
+                </button>
+              )}
+            </div>
+
+            <div className="table-wrap" style={{ marginBottom: 12 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>App</th>
+                    <th>On</th>
+                    <th>Webhook URL</th>
+                    <th>Partner store ID</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {delivery.channels.map((c) => (
+                    <tr key={c.id}>
+                      <td>
+                        <strong>{c.label}</strong>
+                        {c.hasClientSecret ? (
+                          <div style={{ color: "var(--muted)", fontSize: "0.8rem" }}>Client secret stored</div>
+                        ) : null}
+                      </td>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={c.enabled}
+                          onChange={(e) => {
+                            const next = e.target.checked
+                              ? Array.from(new Set([...delivery.enabledChannels, c.id]))
+                              : delivery.enabledChannels.filter((id) => id !== c.id);
+                            void saveDelivery({ enabledChannels: next });
+                          }}
+                        />
+                      </td>
+                      <td style={{ fontSize: "0.78rem", wordBreak: "break-all" }}>
+                        <code>{c.webhookUrl}</code>
+                      </td>
+                      <td>
+                        <input
+                          defaultValue={c.partnerRestaurantId}
+                          placeholder="Site / Shop ID"
+                          style={{ minWidth: 120 }}
+                          onBlur={(e) => {
+                            const v = e.target.value.trim();
+                            if (v === (c.partnerRestaurantId || "")) return;
+                            void saveDelivery({ restaurantIds: { [c.id]: v } });
+                          }}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <p style={{ fontSize: "0.88rem", color: "var(--muted)" }}>
+              Normalized middleware ingest: <code>{delivery.normalizedIngestUrl}</code>
+            </p>
+
+            <div className="toolbar" style={{ marginTop: 10 }}>
+              <select value={simChannel} onChange={(e) => setSimChannel(e.target.value as DeliveryChannelId)}>
+                {delivery.channels.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+              <button type="button" disabled={busy} onClick={() => void simulate()}>
+                {busy ? "Working…" : "Simulate order → kitchen"}
+              </button>
+            </div>
+          </>
+        )}
+        {msg && (
+          <p className="badge" style={{ marginTop: 10 }}>
+            {msg}
+          </p>
+        )}
       </div>
     </div>
   );

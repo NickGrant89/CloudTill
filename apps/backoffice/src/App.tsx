@@ -103,7 +103,7 @@ export function App() {
     { id: "import", label: "Import" },
     { id: "customers", label: "Customers" },
     { id: "giftcards", label: "Gift cards" },
-    { id: "kitchen", label: "Kitchen / online" },
+    { id: "kitchen", label: "Kitchen / delivery" },
     { id: "employees", label: "Employees" },
     { id: "timeclock", label: "Time clock" },
     { id: "stores", label: "Stores & registers" },

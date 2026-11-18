@@ -140,6 +140,8 @@ interface KitchenOrder {
   orderNumber: string;
   customerName: string;
   status: string;
+  channel?: string;
+  fulfillment?: string;
   totalCents: number;
   lines: { name: string; quantity: number }[];
 }
@@ -1497,7 +1499,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
       {modal?.type === "kitchen" && (
         <div className="modal-backdrop" onClick={() => setModal(null)}>
           <div className="modal wide" onClick={(e) => e.stopPropagation()}>
-            <h3>Kitchen / online orders</h3>
+            <h3>Kitchen / delivery orders</h3>
             {kitchenOrders.length === 0 && <p style={{ color: "var(--muted)" }}>Queue empty.</p>}
             {kitchenOrders.map((o) => (
               <div key={o.id} className="list-btn" style={{ cursor: "default" }}>
@@ -1505,7 +1507,9 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
                   {o.orderNumber} · {o.customerName}
                 </strong>
                 <div style={{ color: "var(--muted)" }}>
-                  {o.status} · {money(o.totalCents)} · {o.lines.map((l) => `${l.quantity}×${l.name}`).join(", ")}
+                  {(o.channel && o.channel !== "web" ? o.channel : "web")}
+                  {o.fulfillment ? ` · ${o.fulfillment}` : ""} · {o.status} · {money(o.totalCents)} ·{" "}
+                  {o.lines.map((l) => `${l.quantity}×${l.name}`).join(", ")}
                 </div>
                 <button
                   type="button"

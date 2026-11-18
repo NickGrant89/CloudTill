@@ -222,6 +222,7 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
       customerEmail: body.customerEmail,
       fulfillment: body.fulfillment,
       status: "pending",
+      channel: "web",
       note: orderNote,
       deliveryAddress: body.fulfillment === "delivery" ? deliveryAddressLine || null : null,
       deliveryFeeCents,
