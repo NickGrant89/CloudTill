@@ -243,7 +243,7 @@ type PreviewResult = {
 };
 
 const IMPORT_KINDS: { id: ImportKind; label: string; blurb: string }[] = [
-  { id: "items", label: "Items", blurb: "Name, category, SKU, price, stock" },
+  { id: "items", label: "Items", blurb: "Name, group, SKU, price, stock" },
   { id: "customers", label: "Customers", blurb: "Name, email, phone, credit, loyalty" },
   { id: "stock", label: "Stock levels", blurb: "Set or receive qty by SKU / barcode" },
 ];

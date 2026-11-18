@@ -145,9 +145,14 @@ function CatalogPage() {
       modifierGroups: { id: string; name: string; modifiers: { name: string }[] }[];
     }[]
   >([]);
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string; color?: string }[]>([]);
   const [q, setQ] = useState("");
+  const [groupFilter, setGroupFilter] = useState<string | "all" | "none">("all");
   const [showForm, setShowForm] = useState(false);
+  const [showGroups, setShowGroups] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [groupBusy, setGroupBusy] = useState(false);
+  const [groupMsg, setGroupMsg] = useState("");
   const [editMods, setEditMods] = useState<{ id: string; name: string } | null>(null);
   const [form, setForm] = useState({
     name: "",
@@ -172,12 +177,20 @@ function CatalogPage() {
     void load();
   }, []);
 
-  const filtered = items.filter(
-    (i) =>
-      !q ||
-      i.name.toLowerCase().includes(q.toLowerCase()) ||
-      i.variants.some((v) => v.sku.toLowerCase().includes(q.toLowerCase()))
-  );
+  const groupName = (categoryId: string | null) =>
+    categoryId ? categories.find((c) => c.id === categoryId)?.name ?? "Group" : "Ungrouped";
+
+  const filtered = items.filter((i) => {
+    if (groupFilter === "none" && i.categoryId) return false;
+    if (groupFilter !== "all" && groupFilter !== "none" && i.categoryId !== groupFilter) return false;
+    if (!q) return true;
+    const needle = q.toLowerCase();
+    return (
+      i.name.toLowerCase().includes(needle) ||
+      groupName(i.categoryId).toLowerCase().includes(needle) ||
+      i.variants.some((v) => v.sku.toLowerCase().includes(needle))
+    );
+  });
 
   async function createItem(e: React.FormEvent) {
     e.preventDefault();
@@ -198,17 +211,77 @@ function CatalogPage() {
     await load();
   }
 
+  async function createGroup(e: React.FormEvent) {
+    e.preventDefault();
+    const name = newGroupName.trim();
+    if (!name) return;
+    setGroupBusy(true);
+    setGroupMsg("");
+    try {
+      await api("/catalog/categories", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      });
+      setNewGroupName("");
+      setGroupMsg(`Group “${name}” added`);
+      await load();
+    } catch (err) {
+      setGroupMsg(err instanceof Error ? err.message : "Could not add group");
+    } finally {
+      setGroupBusy(false);
+    }
+  }
+
   return (
     <div>
       <div className="page-head">
         <div>
           <h2>Items</h2>
-          <p>Items, variants, categories, kits, SKU / barcode, stock toggle</p>
+          <p>Items in groups — filter by group so staff can see what’s what</p>
         </div>
-        <button type="button" onClick={() => setShowForm((v) => !v)}>
-          {showForm ? "Close" : "Add item"}
-        </button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button type="button" className="secondary" onClick={() => setShowGroups((v) => !v)}>
+            {showGroups ? "Hide groups" : "Manage groups"}
+          </button>
+          <button type="button" onClick={() => setShowForm((v) => !v)}>
+            {showForm ? "Close" : "Add item"}
+          </button>
+        </div>
       </div>
+
+      {showGroups && (
+        <form className="panel-box" onSubmit={(e) => void createGroup(e)}>
+          <h3>Item groups</h3>
+          <p style={{ color: "var(--muted)", marginTop: 0 }}>
+            Groups organise the menu (Drinks, Food, Retail…). Same groups appear as chips on the till.
+          </p>
+          <div className="toolbar" style={{ marginBottom: 12 }}>
+            <input
+              placeholder="New group name"
+              value={newGroupName}
+              onChange={(e) => setNewGroupName(e.target.value)}
+              required
+            />
+            <button type="submit" disabled={groupBusy}>
+              {groupBusy ? "Saving…" : "Add group"}
+            </button>
+          </div>
+          {groupMsg && <p style={{ color: "var(--muted)" }}>{groupMsg}</p>}
+          {categories.length === 0 ? (
+            <p style={{ color: "var(--muted)" }}>No groups yet — add one above.</p>
+          ) : (
+            <ul style={{ margin: 0, paddingLeft: "1.1rem", color: "var(--muted)" }}>
+              {categories.map((c) => (
+                <li key={c.id}>
+                  <strong style={{ color: "var(--ink)" }}>{c.name}</strong>
+                  {" · "}
+                  {items.filter((i) => i.categoryId === c.id).length} items
+                </li>
+              ))}
+            </ul>
+          )}
+        </form>
+      )}
 
       {showForm && (
         <form className="panel-box" onSubmit={(e) => void createItem(e)}>
@@ -219,9 +292,9 @@ function CatalogPage() {
               <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div className="field">
-              <label>Category</label>
+              <label>Group</label>
               <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
-                <option value="">Uncategorized</option>
+                <option value="">Ungrouped</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -259,8 +332,35 @@ function CatalogPage() {
       )}
 
       <div className="toolbar">
-        <input placeholder="Search items / SKU" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input placeholder="Search items / SKU / group" value={q} onChange={(e) => setQ(e.target.value)} />
         <span style={{ color: "var(--muted)" }}>{filtered.length} items</span>
+      </div>
+
+      <div className="chip-row" role="tablist" aria-label="Filter by group" style={{ marginBottom: 12 }}>
+        <button
+          type="button"
+          className={`chip${groupFilter === "all" ? " active" : ""}`}
+          onClick={() => setGroupFilter("all")}
+        >
+          All
+        </button>
+        <button
+          type="button"
+          className={`chip${groupFilter === "none" ? " active" : ""}`}
+          onClick={() => setGroupFilter("none")}
+        >
+          Ungrouped
+        </button>
+        {categories.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            className={`chip${groupFilter === c.id ? " active" : ""}`}
+            onClick={() => setGroupFilter(c.id)}
+          >
+            {c.name}
+          </button>
+        ))}
       </div>
 
       {editMods && (
@@ -272,6 +372,7 @@ function CatalogPage() {
           <thead>
             <tr>
               <th>Item</th>
+              <th>Group</th>
               <th>SKU</th>
               <th>Barcode</th>
               <th>Price</th>
@@ -281,6 +382,13 @@ function CatalogPage() {
             </tr>
           </thead>
           <tbody>
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={8} style={{ color: "var(--muted)" }}>
+                  No items in this group — add an item or choose another group.
+                </td>
+              </tr>
+            )}
             {filtered.map((item) => {
               const v = item.variants[0];
               return (
@@ -288,6 +396,9 @@ function CatalogPage() {
                   <td>
                     <strong>{item.name}</strong>
                     {item.isComposite && <span className="badge" style={{ marginLeft: 8 }}>Kit</span>}
+                  </td>
+                  <td>
+                    <span className="badge">{groupName(item.categoryId)}</span>
                   </td>
                   <td>{v?.sku}</td>
                   <td>{v?.barcode ?? "—"}</td>

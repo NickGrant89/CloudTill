@@ -1058,7 +1058,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
               </>
             )}
           </div>
-          <div className="chip-row">
+          <div className="chip-row" role="tablist" aria-label={modifierItem ? "Modifier options" : "Item groups"}>
             {modifierItem ? (
               modifierItem.modifierGroups.map((group) => (
                 <button
@@ -1091,7 +1091,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
                     setCategoryId("all");
                   }}
                 >
-                  All
+                  All groups
                 </button>
                 {categories.map((c) => (
                   <button
@@ -1130,7 +1130,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             ) : (
               <>
                 {!menuReady && <p className="empty">Loading menu…</p>}
-                {menuReady && visibleItems.length === 0 && <p className="empty">Nothing in this category.</p>}
+                {menuReady && visibleItems.length === 0 && <p className="empty">Nothing in this group.</p>}
                 {visibleItems.map((item) => (
                   <button
                     key={item.id}
