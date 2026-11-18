@@ -154,6 +154,15 @@ function CatalogPage() {
   const [groupBusy, setGroupBusy] = useState(false);
   const [groupMsg, setGroupMsg] = useState("");
   const [editMods, setEditMods] = useState<{ id: string; name: string } | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [branchStores, setBranchStores] = useState<{ id: string; name: string; slug?: string }[]>([]);
+  const [currentStoreId, setCurrentStoreId] = useState("");
+  const [presenceByItem, setPresenceByItem] = useState<
+    Record<string, { id: string; name: string }[]>
+  >({});
+  const [targetStoreIds, setTargetStoreIds] = useState<string[]>([]);
+  const [assignBusy, setAssignBusy] = useState(false);
+  const [assignMsg, setAssignMsg] = useState("");
   const [form, setForm] = useState({
     name: "",
     categoryId: "",
@@ -165,17 +174,70 @@ function CatalogPage() {
   });
 
   async function load() {
-    const [its, cats] = await Promise.all([
+    const [its, cats, presence] = await Promise.all([
       api<typeof items>("/catalog/items"),
       api<typeof categories>("/catalog/categories"),
+      api<{
+        currentStoreId: string;
+        stores: { id: string; name: string; slug?: string }[];
+        presence: { itemId: string; stores: { id: string; name: string }[] }[];
+      }>("/catalog/items/store-presence").catch(() => null),
     ]);
     setItems(its);
     setCategories(cats);
+    if (presence) {
+      setCurrentStoreId(presence.currentStoreId);
+      setBranchStores(presence.stores);
+      setPresenceByItem(
+        Object.fromEntries(presence.presence.map((p) => [p.itemId, p.stores]))
+      );
+    }
   }
 
   useEffect(() => {
     void load();
   }, []);
+
+  const otherStores = branchStores.filter((s) => s.id !== currentStoreId);
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  function toggleAllFiltered() {
+    const ids = filtered.map((i) => i.id);
+    const allOn = ids.length > 0 && ids.every((id) => selectedIds.includes(id));
+    setSelectedIds(allOn ? selectedIds.filter((id) => !ids.includes(id)) : [...new Set([...selectedIds, ...ids])]);
+  }
+
+  async function assignToBranches(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedIds.length || !targetStoreIds.length) {
+      setAssignMsg("Select at least one item and one branch.");
+      return;
+    }
+    setAssignBusy(true);
+    setAssignMsg("");
+    try {
+      const result = await api<{
+        message: string;
+        createdCount: number;
+        skippedCount: number;
+      }>("/catalog/items/assign-stores", {
+        method: "POST",
+        body: JSON.stringify({ itemIds: selectedIds, storeIds: targetStoreIds, stockQty: 0 }),
+      });
+      setAssignMsg(
+        `${result.message}${result.skippedCount ? ` (${result.skippedCount} already present / skipped)` : ""}`
+      );
+      setSelectedIds([]);
+      await load();
+    } catch (err) {
+      setAssignMsg(err instanceof Error ? err.message : "Could not assign items");
+    } finally {
+      setAssignBusy(false);
+    }
+  }
 
   const groupName = (categoryId: string | null) =>
     categoryId ? categories.find((c) => c.id === categoryId)?.name ?? "Group" : "Ungrouped";
@@ -367,12 +429,66 @@ function CatalogPage() {
         <ModifierEditor itemId={editMods.id} itemName={editMods.name} onClose={() => { setEditMods(null); void load(); }} />
       )}
 
+      <form className="panel-box" onSubmit={(e) => void assignToBranches(e)}>
+        <h3>Send items to branches</h3>
+        <p style={{ color: "var(--muted)", marginTop: 0 }}>
+          Tick items below, pick branches, then send. Copies the item (and its group) onto those stores by SKU —
+          skips if already there. Opening stock on the new branch starts at 0.
+        </p>
+        {otherStores.length === 0 ? (
+          <p style={{ color: "var(--muted)" }}>
+            Only one store in this account. Add another branch under <strong>Stores &amp; registers</strong> first.
+          </p>
+        ) : (
+          <>
+            <div className="chip-row" style={{ marginBottom: 12 }} aria-label="Destination branches">
+              {otherStores.map((s) => {
+                const on = targetStoreIds.includes(s.id);
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className={`chip${on ? " active" : ""}`}
+                    onClick={() =>
+                      setTargetStoreIds((prev) =>
+                        on ? prev.filter((id) => id !== s.id) : [...prev, s.id]
+                      )
+                    }
+                  >
+                    {s.name}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="toolbar">
+              <span style={{ color: "var(--muted)" }}>
+                {selectedIds.length} selected · {targetStoreIds.length} branch
+                {targetStoreIds.length === 1 ? "" : "es"}
+              </span>
+              <button type="submit" disabled={assignBusy || !selectedIds.length || !targetStoreIds.length}>
+                {assignBusy ? "Sending…" : "Send to branches"}
+              </button>
+            </div>
+          </>
+        )}
+        {assignMsg && <p style={{ color: "var(--muted)" }}>{assignMsg}</p>}
+      </form>
+
       <div className="table-wrap">
         <table>
           <thead>
             <tr>
+              <th>
+                <input
+                  type="checkbox"
+                  aria-label="Select all filtered items"
+                  checked={filtered.length > 0 && filtered.every((i) => selectedIds.includes(i.id))}
+                  onChange={() => toggleAllFiltered()}
+                />
+              </th>
               <th>Item</th>
               <th>Group</th>
+              <th>Also on</th>
               <th>SKU</th>
               <th>Barcode</th>
               <th>Price</th>
@@ -384,21 +500,35 @@ function CatalogPage() {
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} style={{ color: "var(--muted)" }}>
+                <td colSpan={10} style={{ color: "var(--muted)" }}>
                   No items in this group — add an item or choose another group.
                 </td>
               </tr>
             )}
             {filtered.map((item) => {
               const v = item.variants[0];
+              const elsewhere = presenceByItem[item.id] ?? [];
               return (
                 <tr key={item.id}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(item.id)}
+                      onChange={() => toggleSelected(item.id)}
+                      aria-label={`Select ${item.name}`}
+                    />
+                  </td>
                   <td>
                     <strong>{item.name}</strong>
                     {item.isComposite && <span className="badge" style={{ marginLeft: 8 }}>Kit</span>}
                   </td>
                   <td>
                     <span className="badge">{groupName(item.categoryId)}</span>
+                  </td>
+                  <td style={{ color: "var(--muted)", fontSize: "0.88rem" }}>
+                    {elsewhere.length
+                      ? elsewhere.map((s) => s.name).join(", ")
+                      : "This store only"}
                   </td>
                   <td>{v?.sku}</td>
                   <td>{v?.barcode ?? "—"}</td>
