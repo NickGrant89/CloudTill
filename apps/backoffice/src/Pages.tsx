@@ -1305,15 +1305,30 @@ function SettingsPage() {
                 {planId === "multi" ? "Multi-store" : planId[0].toUpperCase() + planId.slice(1)}
               </button>
             ))}
-            <a className="ghost-link" href="http://localhost:4000/pricing" target="_blank" rel="noreferrer">
-              PurePOS pricing (local)
-            </a>
-            <a className="ghost-link" href="https://staging.purepos.co.uk/pricing" target="_blank" rel="noreferrer">
-              Staging
+            <a className="ghost-link" href="/pricing" target="_blank" rel="noreferrer">
+              Pricing / trial signup
             </a>
           </div>
+          <form
+            style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              const fd = new FormData(e.currentTarget);
+              const licenseKey = String(fd.get("licenseKey") || "");
+              void api("/billing/activate-license", {
+                method: "POST",
+                body: JSON.stringify({ licenseKey }),
+              }).then(() => load());
+            }}
+          >
+            <input name="licenseKey" placeholder="PP-PRO-XXXX-XXXX-XXXX" style={{ minWidth: 240 }} />
+            <button type="submit" className="secondary">
+              Activate license key
+            </button>
+          </form>
           <p style={{ marginTop: 10, fontSize: "0.88rem", color: "var(--muted)" }}>
-            Feature gate: CSV import needs Pro+ · multi-store transfers need Multi-store.
+            Feature gates: CSV import + online ordering need Pro+ · multi-store transfers need Multi-store.
+            Stripe Checkout needs <code>STRIPE_SECRET_KEY</code> + price IDs when you go live.
           </p>
         </div>
       )}

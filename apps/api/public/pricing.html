@@ -3,32 +3,33 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PurePOS pricing</title>
+    <title>PurePOS pricing · Start trial</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=DM+Sans:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
     <style>
       :root {
-        --ink: #14241c;
-        --muted: #5d6d64;
-        --panel: #f7f3eb;
-        --line: #d9d2c6;
-        --accent: #2f6f4e;
-        --accent-ink: #f4f0e8;
-        --bg: #e8efe8;
+        --ink: #0b1c24;
+        --muted: #5a6f7a;
+        --panel: #ffffff;
+        --line: #d5e3e0;
+        --accent: #0d9488;
+        --accent-deep: #0f766e;
+        --accent-ink: #fff;
+        --bg: #eef6f4;
       }
       * { box-sizing: border-box; }
       body {
         margin: 0;
         min-height: 100vh;
-        font-family: "DM Sans", system-ui, sans-serif;
+        font-family: Manrope, "Avenir Next", system-ui, sans-serif;
         color: var(--ink);
         background:
-          radial-gradient(ellipse 80% 50% at 10% -10%, #cfe0d3 0%, transparent 55%),
-          radial-gradient(ellipse 60% 40% at 100% 0%, #e7d7c2 0%, transparent 50%),
+          radial-gradient(ellipse 80% 50% at 10% -10%, #c5ebe4 0%, transparent 55%),
+          radial-gradient(ellipse 60% 40% at 100% 0%, #ffd8bf 0%, transparent 50%),
           var(--bg);
       }
       .wrap { width: min(1100px, calc(100% - 32px)); margin: 0 auto; padding: 40px 0 64px; }
@@ -36,8 +37,9 @@
         font-family: Fraunces, Georgia, serif;
         font-size: clamp(2.4rem, 5vw, 3.6rem);
         margin: 0 0 8px;
+        letter-spacing: -0.03em;
       }
-      .lede { max-width: 38rem; color: var(--muted); font-size: 1.05rem; margin: 0 0 28px; }
+      .lede { max-width: 40rem; color: var(--muted); font-size: 1.05rem; margin: 0 0 28px; line-height: 1.55; }
       .tiers {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -53,10 +55,12 @@
         flex-direction: column;
         gap: 10px;
         min-height: 100%;
+        transition: transform 0.2s ease, border-color 0.2s ease;
       }
-      .card.featured { border-color: var(--accent); box-shadow: 0 16px 40px rgba(20, 36, 28, 0.08); }
+      .card:hover { transform: translateY(-2px); border-color: var(--accent); }
+      .card.featured { border-color: var(--accent); box-shadow: 0 16px 40px rgba(11, 28, 36, 0.08); }
       .card h2 { font-family: Fraunces, Georgia, serif; margin: 0; font-size: 1.6rem; }
-      .price { font-size: 2rem; font-weight: 700; }
+      .price { font-size: 2rem; font-weight: 800; letter-spacing: -0.02em; }
       .price span { font-size: 0.95rem; font-weight: 500; color: var(--muted); }
       ul { margin: 0; padding-left: 1.1rem; color: var(--muted); }
       li { margin: 0.35rem 0; }
@@ -67,17 +71,27 @@
         padding: 0 16px;
         font-weight: 700;
         cursor: pointer;
+        font: inherit;
       }
       button { background: var(--accent); color: var(--accent-ink); }
-      .ghost { background: transparent; border: 1px solid var(--line); color: var(--ink); text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
-      .signup {
-        margin-top: 36px;
-        background: rgba(255,255,255,0.55);
+      button:hover { background: var(--accent-deep); }
+      .ghost {
+        background: transparent;
+        border: 1px solid var(--line);
+        color: var(--ink);
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .signup, .license, .demo {
+        margin-top: 28px;
+        background: rgba(255,255,255,0.72);
         border: 1px solid var(--line);
         border-radius: 18px;
         padding: 22px;
       }
-      .signup h3 { margin: 0 0 8px; font-family: Fraunces, Georgia, serif; }
+      .signup h3, .license h3, .demo h3 { margin: 0 0 8px; font-family: Fraunces, Georgia, serif; }
       .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
       @media (max-width: 700px) { .row { grid-template-columns: 1fr; } }
       label { display: grid; gap: 6px; font-size: 0.88rem; font-weight: 600; }
@@ -89,49 +103,91 @@
         font: inherit;
         background: #fff;
       }
-      .msg { margin-top: 12px; color: var(--accent); font-weight: 600; }
+      .msg { margin-top: 12px; color: var(--accent-deep); font-weight: 600; white-space: pre-wrap; }
       .err { color: #9b3b2e; }
       .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+      .cred {
+        margin-top: 12px;
+        padding: 12px 14px;
+        background: rgba(13, 148, 136, 0.1);
+        border-radius: 12px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.9rem;
+      }
     </style>
   </head>
   <body>
     <div class="wrap">
-      <p style="letter-spacing:0.08em; text-transform:uppercase; font-size:0.75rem; font-weight:700; color:var(--muted); margin:0 0 8px;">PurePOS UK · purepos.co.uk</p>
-      <h1 class="brand">Cloud control · offline tills</h1>
+      <p style="letter-spacing:0.08em; text-transform:uppercase; font-size:0.75rem; font-weight:700; color:var(--accent-deep); margin:0 0 8px;">PurePOS UK · purepos.co.uk</p>
+      <h1 class="brand">Cloud till · back office · ordering</h1>
       <p class="lede">
-        PurePOS is a hosted multi-tenant POS for the UK: central back office, billing, and catalog in the cloud, with tills that keep selling offline and sync when they reconnect.
-        Production domain <strong>purepos.co.uk</strong> is suspended for now — pilots use <strong>localhost</strong> or documented <strong>staging.purepos.co.uk</strong>.
-        Starter is one till, Pro adds kitchen and ordering, Multi-store covers groups.
+        Hosted UK POS with offline tills. Start a <strong>real trial company</strong> (new store + owner PIN),
+        or try the seeded demo café. Plans: Starter £29 · Pro £59 · Multi-store £99.
       </p>
       <div class="tiers" id="tiers"></div>
 
+      <section class="demo" id="demo">
+        <h3>Try the demo store</h3>
+        <p style="margin:0 0 12px; color:var(--muted);">
+          Seeded café is ready now — no signup needed.
+          Owner PIN <strong>1234</strong> · cashier <strong>1111</strong> · email <strong>owner@purepos.demo</strong>.
+        </p>
+        <div class="actions">
+          <a class="ghost" href="/pos/">Open till</a>
+          <a class="ghost" href="/bo/">Open back office</a>
+          <a class="ghost" href="/order/">Online ordering</a>
+          <a class="ghost" href="/">Marketing home</a>
+        </div>
+      </section>
+
       <form class="signup" id="signup">
-        <h3>Start a cloud trial</h3>
-        <p style="margin:0 0 14px; color:var(--muted);">Stub signup — applies the plan on the hosted demo store for this pilot (Stripe comes later).</p>
+        <h3>Start a company trial</h3>
+        <p style="margin:0 0 14px; color:var(--muted);">
+          Creates a new store, owner login, starter catalog, and a license key. Stripe Checkout needs
+          <code>STRIPE_SECRET_KEY</code> + price IDs when you go live.
+        </p>
         <div class="row">
-          <label>Business name<input name="businessName" required placeholder="Demo Café" /></label>
-          <label>Work email<input name="email" type="email" required placeholder="you@purepos.co.uk" /></label>
+          <label>Business name<input name="businessName" required placeholder="Northside Café" /></label>
+          <label>Work email<input name="email" type="email" required placeholder="you@business.co.uk" /></label>
         </div>
         <div class="row" style="margin-top:12px;">
           <label>Plan
             <select name="planId" id="planSelect">
-              <option value="starter">Starter</option>
-              <option value="pro" selected>Pro</option>
-              <option value="multi">Multi-store</option>
+              <option value="starter">Starter · £29</option>
+              <option value="pro" selected>Pro · £59</option>
+              <option value="multi">Multi-store · £99</option>
             </select>
           </label>
+          <label>Your name<input name="ownerName" placeholder="Nick" /></label>
         </div>
         <div class="actions">
-          <button type="submit">Start trial</button>
-          <a class="ghost" id="linkBo" href="http://localhost:5174/">Open back office</a>
-          <a class="ghost" id="linkPos" href="http://localhost:5173/">Open POS</a>
+          <button type="submit">Create trial company</button>
+          <a class="ghost" href="/bo/">Open back office</a>
+          <a class="ghost" href="/pos/">Open till</a>
         </div>
         <p class="msg" id="msg" hidden></p>
+        <div class="cred" id="cred" hidden></div>
+      </form>
+
+      <form class="license" id="license">
+        <h3>Activate a license key</h3>
+        <p style="margin:0 0 14px; color:var(--muted);">Demo-safe path when Stripe isn’t configured. Format: <code>PP-PRO-XXXX-XXXX-XXXX</code>.</p>
+        <div class="row">
+          <label>License key<input name="licenseKey" required placeholder="PP-PRO-...." /></label>
+          <label>Email (optional)<input name="email" type="email" placeholder="you@business.co.uk" /></label>
+        </div>
+        <div class="actions">
+          <button type="submit">Activate license</button>
+        </div>
+        <p class="msg" id="licMsg" hidden></p>
       </form>
     </div>
     <script>
       const tiers = document.getElementById("tiers");
       const msg = document.getElementById("msg");
+      const cred = document.getElementById("cred");
+      const licMsg = document.getElementById("licMsg");
+
       fetch("/api/public/plans")
         .then((r) => r.json())
         .then((data) => {
@@ -155,24 +211,15 @@
           });
         })
         .catch(() => {
-          tiers.innerHTML = "<p class='err'>Could not load plans — is the API running on :4000?</p>";
+          tiers.innerHTML = "<p class='err'>Could not load plans — check /api/health.</p>";
         });
-
-      // Hosted gateway (:8080 / staging) uses path routes; Mac API-only (:4000) uses Vite ports.
-      (function () {
-        const hosted = location.port === "8080" || location.port === "80" || location.port === "";
-        if (!hosted) return;
-        const bo = document.getElementById("linkBo");
-        const pos = document.getElementById("linkPos");
-        if (bo) bo.href = "/bo/";
-        if (pos) pos.href = "/pos/";
-      })();
 
       document.getElementById("signup").addEventListener("submit", async (e) => {
         e.preventDefault();
         msg.hidden = false;
+        cred.hidden = true;
         msg.className = "msg";
-        msg.textContent = "Starting trial…";
+        msg.textContent = "Creating your company…";
         const form = new FormData(e.target);
         try {
           const res = await fetch("/api/public/signup", {
@@ -182,14 +229,43 @@
               businessName: form.get("businessName"),
               email: form.get("email"),
               planId: form.get("planId"),
+              ownerName: form.get("ownerName") || undefined,
             }),
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error || "Signup failed");
-          msg.textContent = `${data.message} Plan: ${data.account.planName} · trial to ${new Date(data.account.trialEndsAt).toLocaleDateString("en-GB")}.`;
+          msg.textContent = `${data.message}\nPlan: ${data.account.planName} · trial to ${new Date(data.account.trialEndsAt).toLocaleDateString("en-GB")} · store /${data.account.storeSlug}`;
+          if (data.credentials) {
+            cred.hidden = false;
+            cred.textContent = `Email: ${data.credentials.email}\nOwner PIN: ${data.credentials.ownerPin}\nCashier PIN: ${data.credentials.cashierPin}\nLicense: ${data.credentials.licenseKey}`;
+          }
         } catch (err) {
           msg.className = "msg err";
           msg.textContent = err instanceof Error ? err.message : "Signup failed";
+        }
+      });
+
+      document.getElementById("license").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        licMsg.hidden = false;
+        licMsg.className = "msg";
+        licMsg.textContent = "Activating…";
+        const form = new FormData(e.target);
+        try {
+          const res = await fetch("/api/public/activate-license", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              licenseKey: form.get("licenseKey"),
+              email: form.get("email") || undefined,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Activation failed");
+          licMsg.textContent = data.message;
+        } catch (err) {
+          licMsg.className = "msg err";
+          licMsg.textContent = err instanceof Error ? err.message : "Activation failed";
         }
       });
     </script>

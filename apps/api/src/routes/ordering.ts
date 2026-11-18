@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db.js";
 import { requireAuth, type AuthedRequest } from "../auth.js";
 import { calcTax, lineSubtotal } from "../money.js";
+import { storeAllowsFeature } from "./billing.js";
 
 export const publicOrderingRouter = Router();
 export const kitchenRouter = Router();
@@ -61,6 +62,9 @@ publicOrderingRouter.get("/stores/:slug/menu", async (req, res) => {
 publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
   const store = await resolveStore(req.params.slug);
   if (!store) return res.status(404).json({ error: "Store not found" });
+  if (!(await storeAllowsFeature(store.id, "online_ordering"))) {
+    return res.status(402).json({ error: "Online ordering needs Pro or Multi-store. Upgrade in Billing." });
+  }
 
   const body = z
     .object({

@@ -1,16 +1,16 @@
 :root {
-  --bg: #eef1ee;
-  --ink: #1c2420;
-  --muted: #5f6d66;
+  --bg: #eef6f4;
+  --ink: #0b1c24;
+  --muted: #5a6f7a;
   --panel: #ffffff;
-  --line: #d7ddd8;
-  --sidebar: #1a2420;
-  --sidebar-ink: #e8eee9;
-  --accent: #2f6f4e;
-  --accent-soft: #e5f0ea;
-  --warn: #a35b1f;
-  --danger: #a33b2d;
-  --font: "DM Sans", system-ui, sans-serif;
+  --line: #d5e3e0;
+  --sidebar: #0b2740;
+  --sidebar-ink: #e8f5f3;
+  --accent: #0d9488;
+  --accent-soft: rgba(13, 148, 136, 0.14);
+  --warn: #c2410c;
+  --danger: #b91c1c;
+  --font: "Manrope", "Avenir Next", system-ui, sans-serif;
   --display: "Fraunces", Georgia, serif;
   --mobile-topbar-h: 56px;
   --safe-top: env(safe-area-inset-top, 0px);
@@ -35,7 +35,8 @@ body {
   font-family: var(--font);
   color: var(--ink);
   background:
-    linear-gradient(180deg, #f7f8f6 0%, var(--bg) 40%),
+    radial-gradient(ellipse 70% 40% at 0% 0%, #c5ebe4 0%, transparent 55%),
+    linear-gradient(180deg, #f7fcfb 0%, var(--bg) 40%),
     var(--bg);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
@@ -78,9 +79,16 @@ button.danger {
   padding: max(24px, var(--safe-top)) max(24px, var(--safe-right)) max(24px, var(--safe-bottom))
     max(24px, var(--safe-left));
   background:
-    radial-gradient(800px 400px at 20% 0%, #cfd9d2, transparent 60%),
+    radial-gradient(800px 400px at 20% 0%, #b7e4dc, transparent 60%),
+    radial-gradient(600px 300px at 100% 10%, #ffd8bf, transparent 50%),
     var(--bg);
   overflow: auto;
+  animation: fadeIn 0.45s ease both;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .login-card {

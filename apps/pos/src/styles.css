@@ -1,17 +1,17 @@
 :root {
-  --bg: #1a2420;
-  --bg-elevated: #24302a;
-  --bg-soft: #2c3b33;
-  --panel: #f4f0e8;
-  --panel-ink: #1c2420;
-  --muted: #6b7a72;
-  --accent: #c4783a;
-  --accent-ink: #1a1410;
-  --ok: #2f6f4e;
-  --danger: #a33b2d;
-  --line: rgba(28, 36, 32, 0.12);
-  --tile: #314239;
-  --font: "DM Sans", system-ui, sans-serif;
+  --bg: #0b1c24;
+  --bg-elevated: #123040;
+  --bg-soft: #1a3d4a;
+  --panel: #f3faf8;
+  --panel-ink: #0b1c24;
+  --muted: #5a6f7a;
+  --accent: #0d9488;
+  --accent-ink: #042f2e;
+  --ok: #0f766e;
+  --danger: #b91c1c;
+  --line: rgba(11, 28, 36, 0.12);
+  --tile: #1a4554;
+  --font: "Manrope", "Avenir Next", system-ui, sans-serif;
   --display: "Fraunces", Georgia, serif;
   --radius: 14px;
   --touch: 48px;
@@ -32,10 +32,10 @@ body,
 body {
   font-family: var(--font);
   background:
-    radial-gradient(1200px 600px at 10% -10%, #3a4f44 0%, transparent 55%),
-    radial-gradient(900px 500px at 100% 0%, #5c4033 0%, transparent 45%),
+    radial-gradient(1200px 600px at 10% -10%, #134e4a 0%, transparent 55%),
+    radial-gradient(900px 500px at 100% 0%, #0f766e 0%, transparent 48%),
     var(--bg);
-  color: #f4f0e8;
+  color: #e8f5f3;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
