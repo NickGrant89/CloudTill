@@ -1487,6 +1487,8 @@ function SettingsPage() {
   const [taxForm, setTaxForm] = useState({ name: "Local tax", rate: "8.25" });
   const [ptForm, setPtForm] = useState({ name: "", type: "other" });
   const [pilotMsg, setPilotMsg] = useState("");
+  const [backupMsg, setBackupMsg] = useState("");
+  const [backupBusy, setBackupBusy] = useState(false);
 
   async function load() {
     const [s, b] = await Promise.all([
@@ -1573,6 +1575,90 @@ function SettingsPage() {
           </p>
         </div>
       )}
+
+      <div className="panel-box">
+        <h3>Backup &amp; restore</h3>
+        <p style={{ color: "var(--muted)", marginTop: 0 }}>
+          Download a JSON backup of this store’s items, groups, stock levels, taxes, payment types, and settings.
+          Restore replaces the catalog on this store (open tickets are cleared). Unsynced till sales: use the till{" "}
+          <strong>Export</strong> button while Sync shows a count.
+        </p>
+        <div className="toolbar">
+          <button
+            type="button"
+            className="secondary"
+            disabled={backupBusy}
+            onClick={() => {
+              setBackupBusy(true);
+              setBackupMsg("");
+              void api<Record<string, unknown>>("/extras/backup")
+                .then((data) => {
+                  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+                  const a = document.createElement("a");
+                  const slug =
+                    typeof (data.store as { slug?: string } | undefined)?.slug === "string"
+                      ? (data.store as { slug: string }).slug
+                      : "store";
+                  a.href = URL.createObjectURL(blob);
+                  a.download = `purepos-backup-${slug}-${new Date().toISOString().slice(0, 10)}.json`;
+                  a.click();
+                  URL.revokeObjectURL(a.href);
+                  const meta = data.meta as { itemCount?: number; categoryCount?: number } | undefined;
+                  setBackupMsg(
+                    `Backup downloaded · ${meta?.itemCount ?? "?"} items · ${meta?.categoryCount ?? "?"} groups`
+                  );
+                })
+                .catch((e) => setBackupMsg(e instanceof Error ? e.message : "Backup failed"))
+                .finally(() => setBackupBusy(false));
+            }}
+          >
+            {backupBusy ? "Working…" : "Download backup"}
+          </button>
+          <label className="secondary" style={{ display: "inline-flex", alignItems: "center", minHeight: 40, padding: "0 14px", borderRadius: 10, cursor: "pointer", fontWeight: 700 }}>
+            Restore from file…
+            <input
+              type="file"
+              accept="application/json,.json"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (!file) return;
+                if (
+                  !confirm(
+                    "Restore this backup into the current store? Catalog will be replaced and open tickets cleared. Sales history stays."
+                  )
+                ) {
+                  return;
+                }
+                setBackupBusy(true);
+                setBackupMsg("Restoring…");
+                const reader = new FileReader();
+                reader.onload = () => {
+                  try {
+                    const backup = JSON.parse(String(reader.result || "{}"));
+                    void api<{ message: string }>("/extras/restore", {
+                      method: "POST",
+                      body: JSON.stringify({ backup, mode: "catalog", confirm: true }),
+                    })
+                      .then((r) => {
+                        setBackupMsg(r.message);
+                        return load();
+                      })
+                      .catch((err) => setBackupMsg(err instanceof Error ? err.message : "Restore failed"))
+                      .finally(() => setBackupBusy(false));
+                  } catch {
+                    setBackupBusy(false);
+                    setBackupMsg("That file is not valid JSON");
+                  }
+                };
+                reader.readAsText(file);
+              }}
+            />
+          </label>
+        </div>
+        {backupMsg && <p className="badge" style={{ marginTop: 10 }}>{backupMsg}</p>}
+      </div>
 
       <div className="panel-box">
         <h3>Pilot tools</h3>
