@@ -48,7 +48,7 @@ Copy `apps/api/.env.example` → `apps/api/.env`:
 - CLI: `pnpm db:reset` (wipe SQLite + seed)
 - BO: **Settings → Pilot tools → Demo reset** (owner) → `POST /api/extras/demo-reset`
 
-Reseed includes Pro trial billing settings on the demo store.
+Reseed includes Shop (pro) trial billing settings on the demo store.
 
 ## Offline till ↔ cloud sync
 
@@ -69,24 +69,25 @@ Tills are thin clients of the cloud catalog:
 
 Still true: clearing site data, or wiping the device *before* sync/export, can lose the queue. Once synced to the cloud, sales are durable.
 
-## Billing / tiers (stub)
+## Billing / tiers
 
 | Package | £/mo | Cloud features |
 | --- | --- | --- |
-| Solo (`starter`) | 29 | 1 store till · offline sync · BO |
-| Shop (`pro`) | 59 | + ordering, kitchen, CSV import, reports |
-| Group (`multi`) | 99 | + transfers between stores |
+| Solo (`starter`) | 29 | Till · BO · Items/groups · live ticket sync · offline queue · backup |
+| Shop (`pro`) | 59 | + web ordering · kitchen · UK delivery apps · CSV · richer reports |
+| Group (`multi`) | 99 | + multi-store transfers · assign items to branches |
 
-- Public page: https://purepos.co.uk/pricing (or local `/pricing`)
-- BO **Settings → Billing** to switch package
-- Gates: CSV import / ordering → Shop+; inventory transfers → Group
+- Public page: https://purepos.co.uk/pricing (cards from `/api/public/plans`)
+- BO **Settings → Billing** to switch package / activate license
+- Gates: CSV / ordering / delivery → Shop+; transfers / branch assign → Group
 
 ## Smoke checklist
 
-- [ ] `/api/health` → `ok: true`
+- [ ] `/api/health` → `ok: true` (0.5.4+)
 - [ ] POS PIN `1111`, add Latte, charge £
 - [ ] Offline badge; queue a sale offline; sync online
-- [ ] BO Import preview (Pro plan)
-- [ ] Pricing page + trial stub
-- [ ] Settings billing plan switch
+- [ ] BO Import preview (Shop plan)
+- [ ] Pricing page Solo/Shop/Group + trial signup
+- [ ] Settings billing plan switch + backup panel
+- [ ] Kitchen simulate delivery app
 - [ ] Demo reset + re-login
