@@ -1,0 +1,30 @@
+{
+  "name": "cloudtill",
+  "private": true,
+  "version": "0.1.0",
+  "description": "PurePOS UK — cloud POS with offline tills (web-first). GitHub repo: CloudTill.",
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter @cloudtill/api --filter @cloudtill/pos --filter @cloudtill/backoffice --filter @cloudtill/ordering run dev",
+    "dev:mobile": "npm --prefix apps/mobile start",
+    "dev:api": "pnpm --filter @cloudtill/api dev",
+    "dev:pos": "pnpm --filter @cloudtill/pos dev",
+    "dev:bo": "pnpm --filter @cloudtill/backoffice dev",
+    "dev:ordering": "pnpm --filter @cloudtill/ordering dev",
+    "dev:marketing": "pnpm --filter @cloudtill/marketing dev",
+    "build": "pnpm -r run build",
+    "db:generate": "pnpm --filter @cloudtill/api db:generate",
+    "db:migrate": "pnpm --filter @cloudtill/api exec prisma db push",
+    "db:seed": "pnpm --filter @cloudtill/api db:seed",
+    "db:reset": "pnpm --filter @cloudtill/api db:reset",
+    "setup": "pnpm install && pnpm --filter @cloudtill/shared build && cp -n apps/api/.env.example apps/api/.env || true && pnpm db:generate && pnpm db:migrate && pnpm db:seed",
+    "docker:up": "docker compose up --build -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f --tail=100",
+    "host:mac": "pnpm dev",
+    "host:docker": "pnpm docker:up"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.0"
+}
