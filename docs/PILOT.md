@@ -71,15 +71,15 @@ Still true: clearing site data, or wiping the device *before* sync/export, can l
 
 ## Billing / tiers (stub)
 
-| Plan | £/mo | Cloud features |
+| Package | £/mo | Cloud features |
 | --- | --- | --- |
-| Starter | 29 | 1 store till · offline sync · BO |
-| Pro | 59 | + ordering, kitchen, CSV import, reports |
-| Multi-store | 99 | + transfers between stores |
+| Solo (`starter`) | 29 | 1 store till · offline sync · BO |
+| Shop (`pro`) | 59 | + ordering, kitchen, CSV import, reports |
+| Group (`multi`) | 99 | + transfers between stores |
 
-- Public page: http://localhost:4000/pricing (trial stub applies plan to demo store)
-- BO **Settings → Billing** to switch plan
-- Gates: CSV import → Pro+; inventory transfers → Multi-store
+- Public page: https://purepos.co.uk/pricing (or local `/pricing`)
+- BO **Settings → Billing** to switch package
+- Gates: CSV import / ordering → Shop+; inventory transfers → Group
 
 ## Smoke checklist
 

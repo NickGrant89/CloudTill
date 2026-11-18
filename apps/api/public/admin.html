@@ -297,9 +297,9 @@
               <td>
                 <div>${escapeHtml(s.billing.planName || s.billing.planId)}</div>
                 <select class="planPick" data-id="${s.id}">
-                  <option value="starter" ${s.billing.planId === "starter" ? "selected" : ""}>Starter</option>
-                  <option value="pro" ${s.billing.planId === "pro" ? "selected" : ""}>Pro</option>
-                  <option value="multi" ${s.billing.planId === "multi" ? "selected" : ""}>Multi</option>
+                  <option value="starter" ${s.billing.planId === "starter" ? "selected" : ""}>Solo</option>
+                  <option value="pro" ${s.billing.planId === "pro" ? "selected" : ""}>Shop</option>
+                  <option value="multi" ${s.billing.planId === "multi" ? "selected" : ""}>Group</option>
                 </select>
               </td>
               <td>

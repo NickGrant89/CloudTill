@@ -1302,7 +1302,7 @@ function SettingsPage() {
                   void api("/billing/plan", { method: "PATCH", body: JSON.stringify({ planId }) }).then(() => load())
                 }
               >
-                {planId === "multi" ? "Multi-store" : planId[0].toUpperCase() + planId.slice(1)}
+                {planId === "starter" ? "Solo" : planId === "pro" ? "Shop" : "Group"}
               </button>
             ))}
             <a className="ghost-link" href="/pricing" target="_blank" rel="noreferrer">
@@ -1327,7 +1327,7 @@ function SettingsPage() {
             </button>
           </form>
           <p style={{ marginTop: 10, fontSize: "0.88rem", color: "var(--muted)" }}>
-            Feature gates: CSV import + online ordering need Pro+ · multi-store transfers need Multi-store.
+            Feature gates: CSV import + online ordering need Shop+ · multi-store transfers need Group.
             Stripe Checkout needs <code>STRIPE_SECRET_KEY</code> + price IDs when you go live.
           </p>
         </div>

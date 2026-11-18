@@ -3,7 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PurePOS pricing · Start trial</title>
+    <title>PurePOS pricing · UK cloud POS packages</title>
+    <meta
+      name="description"
+      content="UK-built PurePOS packages from £29/mo. Solo, Shop, and Group — offline tills, cloud back office, online ordering. Start a 14-day trial."
+    />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -12,14 +16,15 @@
     />
     <style>
       :root {
-        --ink: #0b1c24;
-        --muted: #5a6f7a;
+        --ink: #07161c;
+        --muted: #4d6570;
         --panel: #ffffff;
-        --line: #d5e3e0;
+        --line: #cfe0dc;
         --accent: #0d9488;
         --accent-deep: #0f766e;
-        --accent-ink: #fff;
-        --bg: #eef6f4;
+        --deep: #083344;
+        --ember: #c2410c;
+        --bg: #e8f4f1;
       }
       * { box-sizing: border-box; }
       body {
@@ -28,84 +33,211 @@
         font-family: Manrope, "Avenir Next", system-ui, sans-serif;
         color: var(--ink);
         background:
-          radial-gradient(ellipse 80% 50% at 10% -10%, #c5ebe4 0%, transparent 55%),
-          radial-gradient(ellipse 60% 40% at 100% 0%, #ffd8bf 0%, transparent 50%),
+          radial-gradient(ellipse 85% 50% at 5% -8%, #9fd9d0 0%, transparent 55%),
+          radial-gradient(ellipse 60% 40% at 100% 0%, rgba(194, 65, 12, 0.18) 0%, transparent 48%),
           var(--bg);
       }
-      .wrap { width: min(1100px, calc(100% - 32px)); margin: 0 auto; padding: 40px 0 64px; }
+      .hero {
+        position: relative;
+        min-height: min(88vh, 720px);
+        display: grid;
+        align-items: end;
+        padding: clamp(28px, 5vw, 56px) 0 clamp(40px, 6vw, 72px);
+        overflow: hidden;
+        isolation: isolate;
+        color: #f7fffd;
+      }
+      .hero::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -2;
+        background:
+          linear-gradient(145deg, rgba(8, 51, 68, 0.94) 0%, rgba(13, 148, 136, 0.62) 46%, rgba(194, 65, 12, 0.4) 100%),
+          radial-gradient(circle at 78% 18%, rgba(255,255,255,0.2), transparent 42%);
+      }
+      .hero::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        background: repeating-linear-gradient(-16deg, transparent 0 16px, rgba(255,255,255,0.03) 16px 17px);
+      }
+      .wrap { width: min(1120px, calc(100% - 32px)); margin: 0 auto; }
       .brand {
         font-family: Fraunces, Georgia, serif;
-        font-size: clamp(2.4rem, 5vw, 3.6rem);
-        margin: 0 0 8px;
-        letter-spacing: -0.03em;
+        font-size: clamp(3rem, 8vw, 5.2rem);
+        margin: 0;
+        letter-spacing: -0.04em;
+        line-height: 0.92;
+        max-width: 10ch;
       }
-      .lede { max-width: 40rem; color: var(--muted); font-size: 1.05rem; margin: 0 0 28px; line-height: 1.55; }
-      .tiers {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 16px;
+      .hero-lede {
+        max-width: 34rem;
+        margin: 16px 0 0;
+        font-size: clamp(1.05rem, 2.2vw, 1.25rem);
+        line-height: 1.5;
+        color: rgba(247, 255, 253, 0.88);
       }
-      @media (max-width: 900px) { .tiers { grid-template-columns: 1fr; } }
-      .card {
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 18px;
-        padding: 22px;
+      .cta-row {
         display: flex;
-        flex-direction: column;
+        flex-wrap: wrap;
         gap: 10px;
-        min-height: 100%;
-        transition: transform 0.2s ease, border-color 0.2s ease;
+        margin-top: 22px;
       }
-      .card:hover { transform: translateY(-2px); border-color: var(--accent); }
-      .card.featured { border-color: var(--accent); box-shadow: 0 16px 40px rgba(11, 28, 36, 0.08); }
-      .card h2 { font-family: Fraunces, Georgia, serif; margin: 0; font-size: 1.6rem; }
-      .price { font-size: 2rem; font-weight: 800; letter-spacing: -0.02em; }
-      .price span { font-size: 0.95rem; font-weight: 500; color: var(--muted); }
-      ul { margin: 0; padding-left: 1.1rem; color: var(--muted); }
-      li { margin: 0.35rem 0; }
-      button, .ghost {
-        min-height: 44px;
-        border-radius: 12px;
+      button, .ghost, .btn {
+        min-height: 48px;
+        border-radius: 14px;
         border: none;
-        padding: 0 16px;
-        font-weight: 700;
+        padding: 0 18px;
+        font-weight: 800;
         cursor: pointer;
         font: inherit;
-      }
-      button { background: var(--accent); color: var(--accent-ink); }
-      button:hover { background: var(--accent-deep); }
-      .ghost {
-        background: transparent;
-        border: 1px solid var(--line);
-        color: var(--ink);
         text-decoration: none;
         display: inline-flex;
         align-items: center;
         justify-content: center;
       }
-      .signup, .license, .demo {
-        margin-top: 28px;
-        background: rgba(255,255,255,0.72);
+      button, .btn-primary {
+        background: #fff;
+        color: var(--deep);
+      }
+      button:hover, .btn-primary:hover { filter: brightness(0.97); }
+      .ghost {
+        background: transparent;
+        border: 1px solid rgba(255,255,255,0.35);
+        color: #f7fffd;
+      }
+      .section {
+        padding: 48px 0 64px;
+      }
+      .section h2 {
+        font-family: Fraunces, Georgia, serif;
+        font-size: clamp(1.8rem, 4vw, 2.4rem);
+        margin: 0 0 8px;
+        letter-spacing: -0.03em;
+      }
+      .section-lede {
+        color: var(--muted);
+        max-width: 40rem;
+        margin: 0 0 28px;
+        line-height: 1.55;
+      }
+      .why {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 36px;
+      }
+      @media (max-width: 800px) { .why { grid-template-columns: 1fr; } }
+      .why article {
+        padding: 4px 2px 8px;
+      }
+      .why h3 {
+        font-family: Fraunces, Georgia, serif;
+        margin: 0 0 6px;
+        font-size: 1.2rem;
+      }
+      .why p { margin: 0; color: var(--muted); line-height: 1.45; font-size: 0.95rem; }
+      .tiers {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+        align-items: stretch;
+      }
+      @media (max-width: 900px) { .tiers { grid-template-columns: 1fr; } }
+      .card {
+        background: var(--panel);
         border: 1px solid var(--line);
-        border-radius: 18px;
+        border-radius: 22px;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-height: 100%;
+        transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+      }
+      .card:hover {
+        transform: translateY(-3px);
+        border-color: var(--accent);
+      }
+      .card.featured {
+        border-color: var(--accent);
+        box-shadow: 0 22px 50px rgba(7, 22, 28, 0.1);
+        position: relative;
+      }
+      .badge {
+        align-self: flex-start;
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: #fff;
+        background: var(--accent);
+        border-radius: 999px;
+        padding: 5px 10px;
+      }
+      .card h3 {
+        font-family: Fraunces, Georgia, serif;
+        margin: 0;
+        font-size: 1.85rem;
+        letter-spacing: -0.02em;
+      }
+      .audience { margin: 0; color: var(--muted); font-size: 0.9rem; }
+      .tagline { margin: 0; font-weight: 600; line-height: 1.4; }
+      .price {
+        font-size: 2.35rem;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+      }
+      .price span { font-size: 0.95rem; font-weight: 600; color: var(--muted); }
+      .vat { font-size: 0.8rem; color: var(--muted); margin-top: -6px; }
+      ul { margin: 0; padding-left: 1.1rem; color: var(--muted); }
+      li { margin: 0.4rem 0; }
+      .card button {
+        margin-top: auto;
+        background: var(--accent);
+        color: #fff;
+      }
+      .card.featured button { background: var(--deep); }
+      .compare {
+        margin-top: 28px;
+        padding: 18px 0 0;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.95rem;
+        line-height: 1.55;
+      }
+      .signup, .license, .demo {
+        margin-top: 22px;
+        background: rgba(255,255,255,0.78);
+        border: 1px solid var(--line);
+        border-radius: 20px;
         padding: 22px;
       }
-      .signup h3, .license h3, .demo h3 { margin: 0 0 8px; font-family: Fraunces, Georgia, serif; }
+      .signup h3, .license h3, .demo h3 {
+        margin: 0 0 8px;
+        font-family: Fraunces, Georgia, serif;
+        font-size: 1.4rem;
+      }
       .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
       @media (max-width: 700px) { .row { grid-template-columns: 1fr; } }
-      label { display: grid; gap: 6px; font-size: 0.88rem; font-weight: 600; }
+      label { display: grid; gap: 6px; font-size: 0.88rem; font-weight: 700; }
       input, select {
-        min-height: 42px;
-        border-radius: 10px;
+        min-height: 44px;
+        border-radius: 12px;
         border: 1px solid var(--line);
         padding: 0 12px;
         font: inherit;
         background: #fff;
       }
-      .msg { margin-top: 12px; color: var(--accent-deep); font-weight: 600; white-space: pre-wrap; }
+      .msg { margin-top: 12px; color: var(--accent-deep); font-weight: 700; white-space: pre-wrap; }
       .err { color: #9b3b2e; }
       .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+      .actions .ghost {
+        border-color: var(--line);
+        color: var(--ink);
+      }
       .cred {
         margin-top: 12px;
         padding: 12px 14px;
@@ -114,74 +246,129 @@
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
         font-size: 0.9rem;
       }
+      .ink-section .ghost { border-color: var(--line); color: var(--ink); }
+      footer {
+        padding: 24px 0 48px;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      footer a { color: var(--accent-deep); font-weight: 700; }
     </style>
   </head>
   <body>
-    <div class="wrap">
-      <p style="letter-spacing:0.08em; text-transform:uppercase; font-size:0.75rem; font-weight:700; color:var(--accent-deep); margin:0 0 8px;">PurePOS UK · purepos.co.uk</p>
-      <h1 class="brand">Cloud till · back office · ordering</h1>
-      <p class="lede">
-        Hosted UK POS with offline tills. Start a <strong>real trial company</strong> (new store + owner PIN),
-        or try the seeded demo café. Plans: Starter £29 · Pro £59 · Multi-store £99.
-      </p>
-      <div class="tiers" id="tiers"></div>
-
-      <section class="demo" id="demo">
-        <h3>Try the demo store</h3>
-        <p style="margin:0 0 12px; color:var(--muted);">
-          Seeded café is ready now — no signup needed.
-          Owner PIN <strong>1234</strong> · cashier <strong>1111</strong> · email <strong>owner@purepos.demo</strong>.
+    <header class="hero">
+      <div class="wrap">
+        <p class="brand">PurePOS</p>
+        <p class="hero-lede">
+          The UK cloud POS built for real high streets — offline tills, one back office, and ordering customers actually finish.
         </p>
-        <div class="actions">
-          <a class="ghost" href="/pos/">Open till</a>
-          <a class="ghost" href="/bo/">Open back office</a>
-          <a class="ghost" href="/order/">Online ordering</a>
-          <a class="ghost" href="/">Marketing home</a>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="#packages">See UK packages</a>
+          <a class="ghost" href="#trial">Start 14-day trial</a>
+          <a class="ghost" href="/order/">Try ordering live</a>
         </div>
-      </section>
+      </div>
+    </header>
 
-      <form class="signup" id="signup">
-        <h3>Start a company trial</h3>
-        <p style="margin:0 0 14px; color:var(--muted);">
-          Creates a new store, owner login, starter catalog, and a license key. Stripe Checkout needs
-          <code>STRIPE_SECRET_KEY</code> + price IDs when you go live.
+    <main class="section ink-section">
+      <div class="wrap">
+        <h2 id="packages">Packages built for Britain</h2>
+        <p class="section-lede">
+          Transparent £ pricing. No forced card hardware. Hosted in the cloud your tills can trust —
+          including when the shop Wi‑Fi drops. 14-day trial on every package.
         </p>
-        <div class="row">
-          <label>Business name<input name="businessName" required placeholder="Northside Café" /></label>
-          <label>Work email<input name="email" type="email" required placeholder="you@business.co.uk" /></label>
-        </div>
-        <div class="row" style="margin-top:12px;">
-          <label>Plan
-            <select name="planId" id="planSelect">
-              <option value="starter">Starter · £29</option>
-              <option value="pro" selected>Pro · £59</option>
-              <option value="multi">Multi-store · £99</option>
-            </select>
-          </label>
-          <label>Your name<input name="ownerName" placeholder="Nick" /></label>
-        </div>
-        <div class="actions">
-          <button type="submit">Create trial company</button>
-          <a class="ghost" href="/bo/">Open back office</a>
-          <a class="ghost" href="/pos/">Open till</a>
-        </div>
-        <p class="msg" id="msg" hidden></p>
-        <div class="cred" id="cred" hidden></div>
-      </form>
 
-      <form class="license" id="license">
-        <h3>Activate a license key</h3>
-        <p style="margin:0 0 14px; color:var(--muted);">Demo-safe path when Stripe isn’t configured. Format: <code>PP-PRO-XXXX-XXXX-XXXX</code>.</p>
-        <div class="row">
-          <label>License key<input name="licenseKey" required placeholder="PP-PRO-...." /></label>
-          <label>Email (optional)<input name="email" type="email" placeholder="you@business.co.uk" /></label>
+        <div class="why" aria-label="Why PurePOS">
+          <article>
+            <h3>Offline-first tills</h3>
+            <p>Keep ringing sales when the broadband fails. Queue syncs the moment you’re back online.</p>
+          </article>
+          <article>
+            <h3>Ordering that converts</h3>
+            <p>Pickup, dine-in, delivery, live kitchen status — the Shop package includes the full customer flow.</p>
+          </article>
+          <article>
+            <h3>No hardware lock-in</h3>
+            <p>Use the devices you already have. Pay monthly software — not a till you can’t leave behind.</p>
+          </article>
         </div>
-        <div class="actions">
-          <button type="submit">Activate license</button>
-        </div>
-        <p class="msg" id="licMsg" hidden></p>
-      </form>
-    </div>
+
+        <div class="tiers" id="tiers"></div>
+
+        <p class="compare">
+          Compared with typical UK POS stacks that lean on card terminals and percentage fees,
+          PurePOS is <strong>software-first</strong>: clear monthly packages, GBP VAT-ready back office,
+          and a customer ordering experience included from Shop upward.
+        </p>
+
+        <section class="demo" id="demo">
+          <h3>Try the demo café</h3>
+          <p style="margin:0 0 12px; color:var(--muted);">
+            No signup needed. Owner PIN <strong>1234</strong> · cashier <strong>1111</strong> ·
+            email <strong>owner@purepos.demo</strong>.
+          </p>
+          <div class="actions">
+            <a class="ghost" href="/pos/">Open till</a>
+            <a class="ghost" href="/bo/">Open back office</a>
+            <a class="ghost" href="/order/">Online ordering</a>
+            <a class="ghost" href="/">Marketing home</a>
+          </div>
+        </section>
+
+        <form class="signup" id="trial">
+          <h3>Start a company trial</h3>
+          <p style="margin:0 0 14px; color:var(--muted);">
+            Creates your store, owner login, starter catalogue, and a license key.
+            Card billing via Stripe is optional when you’re ready — trial works without it.
+          </p>
+          <div class="row">
+            <label>Business name<input name="businessName" required placeholder="Harbour Coffee" /></label>
+            <label>Work email<input name="email" type="email" required placeholder="you@business.co.uk" /></label>
+          </div>
+          <div class="row" style="margin-top:12px;">
+            <label>Package
+              <select name="planId" id="planSelect">
+                <option value="starter">Solo · £29</option>
+                <option value="pro" selected>Shop · £59</option>
+                <option value="multi">Group · £99</option>
+              </select>
+            </label>
+            <label>Your name<input name="ownerName" placeholder="Nick" /></label>
+          </div>
+          <div class="actions">
+            <button type="submit">Create trial company</button>
+            <a class="ghost" href="/bo/">Open back office</a>
+            <a class="ghost" href="/pos/">Open till</a>
+          </div>
+          <p class="msg" id="msg" hidden></p>
+          <div class="cred" id="cred" hidden></div>
+        </form>
+
+        <form class="license" id="license">
+          <h3>Activate a license key</h3>
+          <p style="margin:0 0 14px; color:var(--muted);">
+            Format: <code>PP-PRO-XXXX-XXXX-XXXX</code> (or STARTER / MULTI).
+          </p>
+          <div class="row">
+            <label>License key<input name="licenseKey" required placeholder="PP-PRO-...." /></label>
+            <label>Email (optional)<input name="email" type="email" placeholder="you@business.co.uk" /></label>
+          </div>
+          <div class="actions">
+            <button type="submit">Activate license</button>
+          </div>
+          <p class="msg" id="licMsg" hidden></p>
+        </form>
+      </div>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        PurePOS UK · <a href="/">Home</a> ·
+        <a href="/admin">Platform admin</a> ·
+        Hosted on Railway · Prices exclude VAT unless stated
+      </div>
+    </footer>
+
     <script>
       const tiers = document.getElementById("tiers");
       const msg = document.getElementById("msg");
@@ -192,29 +379,33 @@
         .then((r) => r.json())
         .then((data) => {
           tiers.innerHTML = data.plans
-            .map(
-              (p, i) => `
-            <article class="card ${i === 1 ? "featured" : ""}">
-              <h2>${p.name}</h2>
-              <p>${p.tagline}</p>
+            .map((p, i) => {
+              const featured = p.badge || i === 1;
+              return `
+            <article class="card ${featured ? "featured" : ""}">
+              ${p.badge ? `<span class="badge">${p.badge}</span>` : featured ? `<span class="badge">Most UK shops</span>` : ""}
+              <h3>${p.name}</h3>
+              <p class="audience">${p.audience || ""}</p>
+              <p class="tagline">${p.tagline}</p>
               <div class="price">£${p.monthlyGbp}<span>/mo</span></div>
+              <p class="vat">ex VAT · ${p.trialDays || 14}-day trial</p>
               <ul>${p.highlights.map((h) => `<li>${h}</li>`).join("")}</ul>
-              <button type="button" data-plan="${p.id}" style="margin-top:auto;">Choose ${p.name}</button>
-            </article>`
-            )
+              <button type="button" data-plan="${p.id}">Choose ${p.name}</button>
+            </article>`;
+            })
             .join("");
           tiers.querySelectorAll("button[data-plan]").forEach((btn) => {
             btn.addEventListener("click", () => {
               document.getElementById("planSelect").value = btn.dataset.plan;
-              document.getElementById("signup").scrollIntoView({ behavior: "smooth" });
+              document.getElementById("trial").scrollIntoView({ behavior: "smooth" });
             });
           });
         })
         .catch(() => {
-          tiers.innerHTML = "<p class='err'>Could not load plans — check /api/health.</p>";
+          tiers.innerHTML = "<p class='err'>Could not load packages — check /api/health.</p>";
         });
 
-      document.getElementById("signup").addEventListener("submit", async (e) => {
+      document.getElementById("trial").addEventListener("submit", async (e) => {
         e.preventDefault();
         msg.hidden = false;
         cred.hidden = true;
@@ -234,7 +425,7 @@
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error || "Signup failed");
-          msg.textContent = `${data.message}\nPlan: ${data.account.planName} · trial to ${new Date(data.account.trialEndsAt).toLocaleDateString("en-GB")} · store /${data.account.storeSlug}`;
+          msg.textContent = `${data.message}\nPackage: ${data.account.planName} · trial to ${new Date(data.account.trialEndsAt).toLocaleDateString("en-GB")} · store /${data.account.storeSlug}`;
           if (data.credentials) {
             cred.hidden = false;
             cred.textContent = `Email: ${data.credentials.email}\nOwner PIN: ${data.credentials.ownerPin}\nCashier PIN: ${data.credentials.cashierPin}\nLicense: ${data.credentials.licenseKey}`;

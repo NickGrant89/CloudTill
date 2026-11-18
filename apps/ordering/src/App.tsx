@@ -1,6 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 
-const SLUG = "demo-cafe";
+const DEFAULT_SLUG = "demo-cafe";
+const CART_KEY = "purepos.order.cart.v1";
+
+function resolveStoreSlug() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const fromQuery = params.get("store") || params.get("slug");
+    if (fromQuery?.trim()) return fromQuery.trim().toLowerCase();
+    const parts = window.location.pathname.split("/").filter(Boolean);
+    // /order/<slug> or /order/?store=
+    if (parts[0] === "order" && parts[1] && parts[1] !== "index.html") {
+      return parts[1].toLowerCase();
+    }
+  } catch {
+    /* ignore */
+  }
+  return DEFAULT_SLUG;
+}
 
 interface Modifier {
   id: string;
@@ -182,13 +199,21 @@ function parseMods(json: string) {
 }
 
 export function App() {
+  const [slug] = useState(() => resolveStoreSlug());
   const [store, setStore] = useState<StoreInfo | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [taxRateBps, setTaxRateBps] = useState(0);
   const [categoryId, setCategoryId] = useState<string | "all">("all");
   const [query, setQuery] = useState("");
-  const [cart, setCart] = useState<CartLine[]>([]);
+  const [cart, setCart] = useState<CartLine[]>(() => {
+    try {
+      const raw = sessionStorage.getItem(`${CART_KEY}:${resolveStoreSlug()}`);
+      return raw ? (JSON.parse(raw) as CartLine[]) : [];
+    } catch {
+      return [];
+    }
+  });
   const [view, setView] = useState<View>("menu");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -217,7 +242,15 @@ export function App() {
   const [modError, setModError] = useState("");
 
   useEffect(() => {
-    void fetch(`/api/public/stores/${SLUG}/menu`)
+    try {
+      sessionStorage.setItem(`${CART_KEY}:${slug}`, JSON.stringify(cart));
+    } catch {
+      /* ignore quota */
+    }
+  }, [cart, slug]);
+
+  useEffect(() => {
+    void fetch(`/api/public/stores/${slug}/menu`)
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Could not load menu");
@@ -231,10 +264,11 @@ export function App() {
         );
         setTaxRateBps(data.tax?.rateBps ?? 0);
         if (data.delivery) setDeliveryQuote(data.delivery);
+        document.title = `Order · ${data.store?.name || "PurePOS"}`;
       })
       .catch((err) => setMenuError(err instanceof Error ? err.message : "Could not load menu"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [slug]);
 
   useEffect(() => {
     if (!placed) return;
@@ -432,7 +466,7 @@ export function App() {
     setBusy(true);
     setError("");
     try {
-      const res = await fetch(`/api/public/stores/${SLUG}/orders`, {
+      const res = await fetch(`/api/public/stores/${slug}/orders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -500,11 +534,19 @@ export function App() {
   const modEach = (modItem?.variants[0]?.priceCents ?? 0) + modExtra;
   const modTotal = modEach * modQty;
 
+  const popular = useMemo(() => {
+    return [...items]
+      .sort((a, b) => (b.variants[0]?.priceCents ?? 0) - (a.variants[0]?.priceCents ?? 0))
+      .slice(0, 6);
+  }, [items]);
+
   if (loading) {
     return (
       <div className="loading">
+        <div className="pulse-ring" aria-hidden="true" />
         <p className="eyebrow">PurePOS</p>
         <h1>Opening the menu…</h1>
+        <p className="muted">Fast, fair, and ready when you are.</p>
       </div>
     );
   }
@@ -580,15 +622,32 @@ export function App() {
   return (
     <div className={`shell view-${view}${inCheckout ? " view-checkout" : ""}${cartCount > 0 && view === "menu" ? " has-dock" : ""}`}>
       <div className="menu-col">
+        {view === "menu" && (
+          <section className="hero" aria-label={store?.name ?? "Store"}>
+            <p className="eyebrow">Order online · PurePOS</p>
+            <h1 className="hero-brand">{store?.name ?? "Café"}</h1>
+            <p className="hero-lede">
+              Order in seconds — pickup, dine-in, or delivery. Live kitchen tracking when you’re done.
+            </p>
+            <div className="hero-meta">
+              <span className="pill">
+                <span className="dot" aria-hidden="true" />
+                Accepting orders
+              </span>
+              <span className="pill">{fulfillmentLabel(fulfillment)} · ~{estimateLabel(fulfillment)}</span>
+              {store?.address && <span className="pill">{store.address}</span>}
+            </div>
+          </section>
+        )}
+
         <header className="topbar">
           <div>
-            <p className="eyebrow">Order online</p>
-            <h1>{store?.name ?? "Café"}</h1>
-            <p className="meta">
-              {[store?.address, `${fulfillmentLabel(fulfillment)} · about ${estimateLabel(fulfillment)}`]
-                .filter(Boolean)
-                .join(" · ")}
-            </p>
+            <p className="store-mini">{view === "menu" ? "Menu" : store?.name ?? "Order"}</p>
+            {view !== "menu" && (
+              <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
+                {fulfillmentLabel(fulfillment)} · ~{estimateLabel(fulfillment)}
+              </p>
+            )}
           </div>
           <button type="button" className="cart-jump" onClick={() => setView("cart")}>
             Cart
@@ -673,17 +732,22 @@ export function App() {
           </section>
         ) : (
           <section className="menu" aria-label="Menu">
+            <div className="trust">
+              <span>Live kitchen status</span>
+              <span>VAT shown at checkout</span>
+              <span>Card details not stored</span>
+            </div>
             <label className="search">
               <span className="sr">Search the menu</span>
               <input
                 type="search"
                 value={query}
-                placeholder="Search the menu"
+                placeholder="Search drinks, food, treats…"
                 onChange={(e) => setQuery(e.target.value)}
               />
             </label>
             {!query && (
-              <div className="chips">
+              <div className="chips" role="tablist" aria-label="Categories">
                 <button
                   type="button"
                   className={`chip ${categoryId === "all" ? "active" : ""}`}
@@ -703,6 +767,28 @@ export function App() {
                 ))}
               </div>
             )}
+            {!query && categoryId === "all" && popular.length > 0 && (
+              <div className="popular">
+                <div className="popular-head">
+                  <h2>Popular right now</h2>
+                  <span className="muted">Tap to add</span>
+                </div>
+                <div className="popular-rail">
+                  {popular.map((item) => (
+                    <button
+                      key={`pop-${item.id}`}
+                      type="button"
+                      className="popular-card"
+                      onClick={() => addItem(item)}
+                    >
+                      <span className="swatch" style={{ background: item.color || "#0d9488" }} />
+                      <strong>{item.name}</strong>
+                      <span className="price">{money(item.variants[0]?.priceCents ?? 0)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {menuError && <p className="error">{menuError}</p>}
             {sections.map((section) => (
               <div key={section.id} className="section">
@@ -711,12 +797,13 @@ export function App() {
                 <div className="dishes">
                   {section.items.map((item) => (
                     <button key={item.id} type="button" className="dish" onClick={() => addItem(item)}>
-                      <span className="swatch" style={{ background: item.color || "#2f6b4f" }} />
+                      <span className="swatch" style={{ background: item.color || "#0d9488" }} />
                       <span className="dish-copy">
                         <span className="dish-name">{item.name}</span>
                         {item.description && <span className="dish-desc">{item.description}</span>}
                         <span className="dish-hint">
-                          {item.modifierGroups.length > 0 ? "Choose options" : "Add"}
+                          {item.modifierGroups.length > 0 ? "Customise" : "Add to order"}
+                          <span className="add-chip" aria-hidden="true">+</span>
                         </span>
                       </span>
                       <span className="dish-price">{money(item.variants[0]?.priceCents ?? 0)}</span>
@@ -983,7 +1070,7 @@ function Checkout({
             <span>{money(subtotal)}</span>
           </div>
           <div className="row">
-            <span>Tax</span>
+            <span>VAT</span>
             <span>{money(tax)}</span>
           </div>
           {fulfillment === "delivery" && (
@@ -1069,7 +1156,9 @@ function Checkout({
           </p>
         </div>
         <h3 className="card-title">Card</h3>
-        <p className="pay-note">Demo checkout. Use 4242 4242 4242 4242. The full number is not saved.</p>
+        <p className="pay-note">
+        Secure demo checkout for UK shops. Try <strong>4242 4242 4242 4242</strong> — the full card number is never stored.
+      </p>
         <label className="field">
           <span>Name on card</span>
           <input
