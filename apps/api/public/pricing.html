@@ -8,6 +8,7 @@
       name="description"
       content="UK-built PurePOS packages from £29/mo. Solo, Shop, and Group — offline tills, cloud back office, online ordering. Start a 14-day trial."
     />
+    <link rel="canonical" href="https://purepos.co.uk/pricing" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -16,356 +17,522 @@
     />
     <style>
       :root {
-        --ink: #07161c;
-        --muted: #4d6570;
+        --ink: #0b1c24;
+        --muted: #5a6f7a;
         --panel: #ffffff;
-        --line: #cfe0dc;
+        --line: rgba(11, 28, 36, 0.12);
         --accent: #0d9488;
         --accent-deep: #0f766e;
         --deep: #083344;
-        --ember: #c2410c;
-        --bg: #e8f4f1;
+        --bg: #f3faf8;
+        --hero-ink: #f7fffd;
       }
       * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
       body {
         margin: 0;
         min-height: 100vh;
         font-family: Manrope, "Avenir Next", system-ui, sans-serif;
         color: var(--ink);
         background:
-          radial-gradient(ellipse 85% 50% at 5% -8%, #9fd9d0 0%, transparent 55%),
-          radial-gradient(ellipse 60% 40% at 100% 0%, rgba(194, 65, 12, 0.18) 0%, transparent 48%),
+          radial-gradient(ellipse 80% 45% at 0% 0%, #c5ebe4 0%, transparent 55%),
+          radial-gradient(ellipse 55% 35% at 100% 5%, rgba(194, 65, 12, 0.14) 0%, transparent 48%),
           var(--bg);
       }
+      a { color: inherit; }
+      .wrap {
+        width: min(1120px, calc(100% - 2rem));
+        margin: 0 auto;
+      }
+
+      .topnav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1rem 0;
+        position: relative;
+        z-index: 5;
+      }
+      .topnav .logo {
+        font-weight: 800;
+        letter-spacing: -0.03em;
+        text-decoration: none;
+        font-size: 1.1rem;
+      }
+      .topnav .logo span { color: var(--accent); font-weight: 700; }
+      .topnav nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem 1rem;
+        align-items: center;
+      }
+      .topnav nav a {
+        text-decoration: none;
+        color: var(--muted);
+        font-weight: 600;
+        font-size: 0.92rem;
+      }
+      .topnav nav a:hover { color: var(--accent-deep); }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 48px;
+        padding: 0 1.15rem;
+        border-radius: 12px;
+        border: none;
+        font: inherit;
+        font-weight: 700;
+        text-decoration: none;
+        cursor: pointer;
+        transition: transform 0.2s ease, background 0.2s ease, filter 0.2s ease;
+      }
+      .btn:hover { transform: translateY(-1px); }
+      .btn-primary { background: var(--accent); color: #fff; }
+      .btn-primary:hover { background: var(--accent-deep); }
+      .btn-on-hero {
+        background: #fff;
+        color: var(--deep);
+      }
+      .btn-on-hero-secondary {
+        background: rgba(8, 51, 68, 0.55);
+        color: #fff;
+        border: 1px solid rgba(255, 255, 255, 0.55);
+      }
+      .btn-dark { background: var(--deep); color: #fff; }
+      .btn-ghost-dark {
+        background: transparent;
+        border: 1px solid var(--line);
+        color: var(--ink);
+      }
+
       .hero {
         position: relative;
-        min-height: min(88vh, 720px);
+        margin: 0 calc(50% - 50vw);
+        width: 100vw;
+        min-height: min(72vh, 560px);
         display: grid;
         align-items: end;
-        padding: clamp(28px, 5vw, 56px) 0 clamp(40px, 6vw, 72px);
         overflow: hidden;
+        color: var(--hero-ink);
         isolation: isolate;
-        color: #f7fffd;
       }
-      .hero::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        z-index: -2;
-        background:
-          linear-gradient(145deg, rgba(8, 51, 68, 0.94) 0%, rgba(13, 148, 136, 0.62) 46%, rgba(194, 65, 12, 0.4) 100%),
-          radial-gradient(circle at 78% 18%, rgba(255,255,255,0.2), transparent 42%);
-      }
-      .hero::after {
-        content: "";
+      .hero-media {
         position: absolute;
         inset: 0;
         z-index: -1;
-        background: repeating-linear-gradient(-16deg, transparent 0 16px, rgba(255,255,255,0.03) 16px 17px);
+        background:
+          linear-gradient(115deg, rgba(8, 51, 68, 0.94) 12%, rgba(13, 148, 136, 0.72) 58%, rgba(194, 65, 12, 0.38) 100%),
+          radial-gradient(circle at 78% 18%, rgba(255,255,255,0.18), transparent 42%);
+        animation: drift 16s ease-in-out infinite alternate;
       }
-      .wrap { width: min(1120px, calc(100% - 32px)); margin: 0 auto; }
-      .brand {
+      .hero-inner {
+        width: min(1120px, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: 2.75rem 0 3.25rem;
+        max-width: 38rem;
+        animation: rise 0.75s ease both;
+      }
+      .hero .brand {
         font-family: Fraunces, Georgia, serif;
-        font-size: clamp(3rem, 8vw, 5.2rem);
-        margin: 0;
-        letter-spacing: -0.04em;
+        font-size: clamp(3.1rem, 9vw, 5rem);
         line-height: 0.92;
-        max-width: 10ch;
+        letter-spacing: -0.04em;
+        margin: 0 0 0.75rem;
+        font-weight: 700;
       }
-      .hero-lede {
-        max-width: 34rem;
-        margin: 16px 0 0;
-        font-size: clamp(1.05rem, 2.2vw, 1.25rem);
-        line-height: 1.5;
+      .hero h1 {
+        font-family: Fraunces, Georgia, serif;
+        font-size: clamp(1.25rem, 2.6vw, 1.7rem);
+        font-weight: 600;
+        margin: 0 0 0.75rem;
+        line-height: 1.25;
+        max-width: 22ch;
+      }
+      .hero p {
+        margin: 0 0 1.35rem;
         color: rgba(247, 255, 253, 0.88);
+        font-size: 1.05rem;
+        line-height: 1.55;
+        max-width: 34rem;
       }
       .cta-row {
         display: flex;
         flex-wrap: wrap;
-        gap: 10px;
-        margin-top: 22px;
+        gap: 0.75rem;
       }
-      button, .ghost, .btn {
-        min-height: 48px;
-        border-radius: 14px;
-        border: none;
-        padding: 0 18px;
-        font-weight: 800;
-        cursor: pointer;
-        font: inherit;
-        text-decoration: none;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
+
+      .section { padding: 3.5rem 0; }
+      .eyebrow {
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: var(--accent-deep);
+        margin: 0 0 0.5rem;
       }
-      button, .btn-primary {
-        background: #fff;
-        color: var(--deep);
-      }
-      button:hover, .btn-primary:hover { filter: brightness(0.97); }
-      .ghost {
-        background: transparent;
-        border: 1px solid rgba(255,255,255,0.35);
-        color: #f7fffd;
-      }
-      .section {
-        padding: 48px 0 64px;
-      }
-      .section h2 {
+      .section-title {
         font-family: Fraunces, Georgia, serif;
-        font-size: clamp(1.8rem, 4vw, 2.4rem);
-        margin: 0 0 8px;
-        letter-spacing: -0.03em;
+        font-size: clamp(1.75rem, 3.4vw, 2.35rem);
+        margin: 0 0 0.5rem;
+        letter-spacing: -0.02em;
       }
       .section-lede {
         color: var(--muted);
-        max-width: 40rem;
-        margin: 0 0 28px;
+        margin: 0 0 1.75rem;
+        max-width: 38rem;
         line-height: 1.55;
       }
-      .why {
+
+      .surfaces {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 14px;
-        margin-bottom: 36px;
+        gap: 1rem 1.25rem;
+        margin: 0 0 2.25rem;
+        padding: 0;
+        list-style: none;
       }
-      @media (max-width: 800px) { .why { grid-template-columns: 1fr; } }
-      .why article {
-        padding: 4px 2px 8px;
+      .surfaces li {
+        padding: 0;
+        border: none;
+        background: transparent;
       }
-      .why h3 {
+      .surfaces h3 {
         font-family: Fraunces, Georgia, serif;
-        margin: 0 0 6px;
-        font-size: 1.2rem;
+        margin: 0 0 0.35rem;
+        font-size: 1.15rem;
       }
-      .why p { margin: 0; color: var(--muted); line-height: 1.45; font-size: 0.95rem; }
+      .surfaces p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.95rem;
+        line-height: 1.45;
+      }
+
       .tiers {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 16px;
+        gap: 1rem;
         align-items: stretch;
       }
-      @media (max-width: 900px) { .tiers { grid-template-columns: 1fr; } }
-      .card {
+      .tier {
         background: var(--panel);
         border: 1px solid var(--line);
-        border-radius: 22px;
-        padding: 24px;
+        border-radius: 18px;
+        padding: 1.35rem 1.35rem 1.25rem;
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 0.55rem;
         min-height: 100%;
-        transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+        transition: transform 0.2s ease, border-color 0.2s ease;
       }
-      .card:hover {
-        transform: translateY(-3px);
+      .tier:hover {
+        transform: translateY(-2px);
         border-color: var(--accent);
       }
-      .card.featured {
+      .tier.featured {
         border-color: var(--accent);
-        box-shadow: 0 22px 50px rgba(7, 22, 28, 0.1);
-        position: relative;
+        box-shadow: 0 18px 40px rgba(11, 28, 36, 0.08);
       }
       .badge {
         align-self: flex-start;
-        font-size: 0.72rem;
+        font-size: 0.7rem;
         font-weight: 800;
         letter-spacing: 0.06em;
         text-transform: uppercase;
         color: #fff;
         background: var(--accent);
         border-radius: 999px;
-        padding: 5px 10px;
+        padding: 0.3rem 0.65rem;
       }
-      .card h3 {
+      .tier h3 {
         font-family: Fraunces, Georgia, serif;
         margin: 0;
-        font-size: 1.85rem;
+        font-size: 1.75rem;
         letter-spacing: -0.02em;
       }
-      .audience { margin: 0; color: var(--muted); font-size: 0.9rem; }
+      .audience { margin: 0; color: var(--muted); font-size: 0.88rem; }
       .tagline { margin: 0; font-weight: 600; line-height: 1.4; }
       .price {
-        font-size: 2.35rem;
+        font-size: 2.2rem;
         font-weight: 800;
         letter-spacing: -0.03em;
       }
       .price span { font-size: 0.95rem; font-weight: 600; color: var(--muted); }
-      .vat { font-size: 0.8rem; color: var(--muted); margin-top: -6px; }
-      ul { margin: 0; padding-left: 1.1rem; color: var(--muted); }
-      li { margin: 0.4rem 0; }
-      .card button {
-        margin-top: auto;
-        background: var(--accent);
-        color: #fff;
+      .vat { font-size: 0.8rem; color: var(--muted); margin-top: -0.25rem; }
+      .tier ul {
+        margin: 0.25rem 0 0.5rem;
+        padding-left: 1.1rem;
+        color: var(--muted);
+        flex: 1;
       }
-      .card.featured button { background: var(--deep); }
-      .compare {
-        margin-top: 28px;
-        padding: 18px 0 0;
-        border-top: 1px solid var(--line);
+      .tier li { margin: 0.35rem 0; }
+      .tier .btn { width: 100%; margin-top: auto; }
+
+      .note {
+        margin: 1.5rem 0 0;
         color: var(--muted);
         font-size: 0.95rem;
         line-height: 1.55;
       }
-      .signup, .license, .demo {
-        margin-top: 22px;
-        background: rgba(255,255,255,0.78);
+
+      .trial-block {
+        margin-top: 2.5rem;
+        padding-top: 2rem;
+        border-top: 1px solid var(--line);
+      }
+      .trial-grid {
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 1.25rem;
+        align-items: start;
+      }
+      form.panel {
+        background: rgba(255, 255, 255, 0.82);
         border: 1px solid var(--line);
-        border-radius: 20px;
-        padding: 22px;
+        border-radius: 18px;
+        padding: 1.35rem;
       }
-      .signup h3, .license h3, .demo h3 {
-        margin: 0 0 8px;
+      form.panel h3 {
+        margin: 0 0 0.4rem;
         font-family: Fraunces, Georgia, serif;
-        font-size: 1.4rem;
+        font-size: 1.35rem;
       }
-      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-      @media (max-width: 700px) { .row { grid-template-columns: 1fr; } }
-      label { display: grid; gap: 6px; font-size: 0.88rem; font-weight: 700; }
+      form.panel > p {
+        margin: 0 0 1rem;
+        color: var(--muted);
+        line-height: 1.45;
+        font-size: 0.95rem;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+      }
+      label {
+        display: grid;
+        gap: 0.35rem;
+        font-size: 0.85rem;
+        font-weight: 700;
+      }
       input, select {
         min-height: 44px;
         border-radius: 12px;
         border: 1px solid var(--line);
-        padding: 0 12px;
+        padding: 0 0.75rem;
         font: inherit;
         background: #fff;
+        width: 100%;
       }
-      .msg { margin-top: 12px; color: var(--accent-deep); font-weight: 700; white-space: pre-wrap; }
+      .actions {
+        display: flex;
+        gap: 0.65rem;
+        flex-wrap: wrap;
+        margin-top: 0.9rem;
+      }
+      .msg {
+        margin-top: 0.75rem;
+        color: var(--accent-deep);
+        font-weight: 700;
+        white-space: pre-wrap;
+      }
       .err { color: #9b3b2e; }
-      .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
-      .actions .ghost {
-        border-color: var(--line);
-        color: var(--ink);
-      }
       .cred {
-        margin-top: 12px;
-        padding: 12px 14px;
+        margin-top: 0.75rem;
+        padding: 0.75rem 0.9rem;
         background: rgba(13, 148, 136, 0.1);
         border-radius: 12px;
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        font-size: 0.9rem;
+        font-size: 0.88rem;
       }
-      .ink-section .ghost { border-color: var(--line); color: var(--ink); }
+      .apps {
+        display: grid;
+        gap: 0.55rem;
+      }
+      .apps a {
+        text-decoration: none;
+        font-weight: 700;
+        color: var(--accent-deep);
+      }
+      .apps a:hover { text-decoration: underline; }
+      .apps p {
+        margin: 0 0 0.35rem;
+        color: var(--muted);
+        line-height: 1.45;
+        font-size: 0.95rem;
+      }
+
       footer {
-        padding: 24px 0 48px;
+        padding: 1.5rem 0 3rem;
         color: var(--muted);
         font-size: 0.9rem;
       }
-      footer a { color: var(--accent-deep); font-weight: 700; }
+      footer a {
+        color: var(--accent-deep);
+        font-weight: 700;
+        text-decoration: none;
+      }
+
+      @keyframes drift {
+        from { transform: scale(1); }
+        to { transform: scale(1.04); }
+      }
+      @keyframes rise {
+        from { opacity: 0; transform: translateY(12px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      @media (max-width: 900px) {
+        .tiers, .surfaces, .trial-grid { grid-template-columns: 1fr; }
+        .row { grid-template-columns: 1fr; }
+        .cta-row .btn { width: 100%; }
+        .topnav {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+        .hero { min-height: auto; }
+        .hero-inner { padding: 2.25rem 0 2.5rem; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .hero-media, .hero-inner { animation: none; }
+        .tier:hover, .btn:hover { transform: none; }
+      }
     </style>
   </head>
   <body>
-    <header class="hero">
-      <div class="wrap">
+    <div class="wrap">
+      <div class="topnav">
+        <a class="logo" href="/">PurePOS <span>UK</span></a>
+        <nav aria-label="Primary">
+          <a href="/">Home</a>
+          <a href="/pos/">Till</a>
+          <a href="/bo/">Back office</a>
+          <a href="/order/">Ordering</a>
+          <a class="btn btn-primary" href="#trial">Start trial</a>
+        </nav>
+      </div>
+    </div>
+
+    <header class="hero" aria-label="Pricing hero">
+      <div class="hero-media" aria-hidden="true"></div>
+      <div class="hero-inner">
         <p class="brand">PurePOS</p>
-        <p class="hero-lede">
-          The UK cloud POS built for real high streets — offline tills, one back office, and ordering customers actually finish.
+        <h1>Till, back office, and ordering — one UK cloud.</h1>
+        <p>
+          Clear £ packages for high-street shops. Offline tills, one back office, and customer ordering into the same kitchen board.
         </p>
         <div class="cta-row">
-          <a class="btn btn-primary" href="#packages">See UK packages</a>
-          <a class="ghost" href="#trial">Start 14-day trial</a>
-          <a class="ghost" href="/order/">Try ordering live</a>
+          <a class="btn btn-on-hero" href="#packages">See UK packages</a>
+          <a class="btn btn-on-hero-secondary" href="#trial">Start 14-day trial</a>
         </div>
       </div>
     </header>
 
-    <main class="section ink-section">
-      <div class="wrap">
-        <h2 id="packages">Packages built for Britain</h2>
-        <p class="section-lede">
-          Transparent £ pricing. No forced card hardware. Hosted in the cloud your tills can trust —
-          including when the shop Wi‑Fi drops. 14-day trial on every package.
-        </p>
+    <main>
+      <section class="section" id="packages">
+        <div class="wrap">
+          <p class="eyebrow">Packages</p>
+          <h2 class="section-title">Built for Britain’s high street</h2>
+          <p class="section-lede">
+            Transparent monthly software. No forced card hardware. 14-day trial on every package — till, back office, and ordering stay one PurePOS.
+          </p>
 
-        <div class="why" aria-label="Why PurePOS">
-          <article>
-            <h3>Offline-first tills</h3>
-            <p>Keep ringing sales when the broadband fails. Queue syncs the moment you’re back online.</p>
-          </article>
-          <article>
-            <h3>Ordering & delivery apps</h3>
-            <p>Web ordering plus Just Eat, Deliveroo, Uber Eats and more into the same kitchen board from Shop upward.</p>
-          </article>
-          <article>
-            <h3>No hardware lock-in</h3>
-            <p>Use the devices you already have. Pay monthly software — not a till you can’t leave behind.</p>
-          </article>
+          <ul class="surfaces" aria-label="One product, three surfaces">
+            <li>
+              <h3>Cloud till</h3>
+              <p>Keep ringing sales when broadband fails. Queue syncs when you’re back online.</p>
+            </li>
+            <li>
+              <h3>Back office</h3>
+              <p>Items, stock, staff, and reports once — every till stays in sync.</p>
+            </li>
+            <li>
+              <h3>Online ordering</h3>
+              <p>Web orders plus Just Eat, Deliveroo, Uber Eats from Shop upward.</p>
+            </li>
+          </ul>
+
+          <div class="tiers" id="tiers" aria-live="polite"></div>
+
+          <p class="note">
+            Compared with typical UK POS stacks that lean on card terminals and percentage fees,
+            PurePOS is <strong>software-first</strong>: Solo / Shop / Group, GBP VAT-ready back office,
+            live till sync, backup/restore, and ordering + UK delivery-app ingest from Shop upward.
+          </p>
+
+          <div class="trial-block" id="trial">
+            <p class="eyebrow">Get started</p>
+            <h2 class="section-title">Trial, demo, or license</h2>
+            <p class="section-lede">
+              Create your own company trial, open the demo café, or activate a license key — same PurePOS apps either way.
+            </p>
+
+            <div class="trial-grid">
+              <form class="panel" id="trialForm">
+                <h3>Start a company trial</h3>
+                <p>
+                  Creates your store, owner login, starter catalogue, and a license key.
+                  Stripe billing is optional later — trial works without a card.
+                </p>
+                <div class="row">
+                  <label>Business name<input name="businessName" required placeholder="Harbour Coffee" autocomplete="organization" /></label>
+                  <label>Work email<input name="email" type="email" required placeholder="you@business.co.uk" autocomplete="email" /></label>
+                </div>
+                <div class="row" style="margin-top:0.75rem;">
+                  <label>Package
+                    <select name="planId" id="planSelect">
+                      <option value="starter">Solo · £29</option>
+                      <option value="pro" selected>Shop · £59</option>
+                      <option value="multi">Group · £99</option>
+                    </select>
+                  </label>
+                  <label>Your name<input name="ownerName" placeholder="Nick" autocomplete="name" /></label>
+                </div>
+                <div class="actions">
+                  <button class="btn btn-primary" type="submit">Create trial company</button>
+                </div>
+                <p class="msg" id="msg" hidden></p>
+                <div class="cred" id="cred" hidden></div>
+              </form>
+
+              <div class="panel apps">
+                <h3 style="font-family:Fraunces,Georgia,serif;margin:0 0 0.4rem;font-size:1.35rem;">Open PurePOS</h3>
+                <p>
+                  Demo café — no signup. Owner PIN <strong>1234</strong> · cashier <strong>1111</strong> ·
+                  <strong>owner@purepos.demo</strong>.
+                </p>
+                <a href="/pos/">Till → /pos/</a>
+                <a href="/bo/">Back office → /bo/</a>
+                <a href="/order/">Online ordering → /order/</a>
+
+                <form id="license" style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--line);">
+                  <h3 style="font-family:Fraunces,Georgia,serif;margin:0 0 0.4rem;font-size:1.2rem;">Activate a license</h3>
+                  <p style="margin:0 0 0.75rem;">Format: <code>PP-PRO-XXXX-XXXX-XXXX</code></p>
+                  <label>License key<input name="licenseKey" required placeholder="PP-PRO-...." autocomplete="off" /></label>
+                  <label style="margin-top:0.65rem;">Email (optional)<input name="email" type="email" placeholder="you@business.co.uk" /></label>
+                  <div class="actions">
+                    <button class="btn btn-dark" type="submit">Activate license</button>
+                  </div>
+                  <p class="msg" id="licMsg" hidden></p>
+                </form>
+              </div>
+            </div>
+          </div>
         </div>
-
-        <div class="tiers" id="tiers"></div>
-
-        <p class="compare">
-          Compared with typical UK POS stacks that lean on card terminals and percentage fees,
-          PurePOS is <strong>software-first</strong>: Solo / Shop / Group, GBP VAT-ready back office,
-          live till sync, backup/restore, and ordering + UK delivery-app ingest from Shop upward.
-        </p>
-
-        <section class="demo" id="demo">
-          <h3>Try the demo café</h3>
-          <p style="margin:0 0 12px; color:var(--muted);">
-            No signup needed. Owner PIN <strong>1234</strong> · cashier <strong>1111</strong> ·
-            email <strong>owner@purepos.demo</strong>.
-          </p>
-          <div class="actions">
-            <a class="ghost" href="/pos/">Open till</a>
-            <a class="ghost" href="/bo/">Open back office</a>
-            <a class="ghost" href="/order/">Online ordering</a>
-            <a class="ghost" href="/">Marketing home</a>
-          </div>
-        </section>
-
-        <form class="signup" id="trial">
-          <h3>Start a company trial</h3>
-          <p style="margin:0 0 14px; color:var(--muted);">
-            Creates your store, owner login, starter catalogue, and a license key.
-            Card billing via Stripe is optional when you’re ready — trial works without it.
-          </p>
-          <div class="row">
-            <label>Business name<input name="businessName" required placeholder="Harbour Coffee" /></label>
-            <label>Work email<input name="email" type="email" required placeholder="you@business.co.uk" /></label>
-          </div>
-          <div class="row" style="margin-top:12px;">
-            <label>Package
-              <select name="planId" id="planSelect">
-                <option value="starter">Solo · £29</option>
-                <option value="pro" selected>Shop · £59</option>
-                <option value="multi">Group · £99</option>
-              </select>
-            </label>
-            <label>Your name<input name="ownerName" placeholder="Nick" /></label>
-          </div>
-          <div class="actions">
-            <button type="submit">Create trial company</button>
-            <a class="ghost" href="/bo/">Open back office</a>
-            <a class="ghost" href="/pos/">Open till</a>
-          </div>
-          <p class="msg" id="msg" hidden></p>
-          <div class="cred" id="cred" hidden></div>
-        </form>
-
-        <form class="license" id="license">
-          <h3>Activate a license key</h3>
-          <p style="margin:0 0 14px; color:var(--muted);">
-            Format: <code>PP-PRO-XXXX-XXXX-XXXX</code> (or STARTER / MULTI).
-          </p>
-          <div class="row">
-            <label>License key<input name="licenseKey" required placeholder="PP-PRO-...." /></label>
-            <label>Email (optional)<input name="email" type="email" placeholder="you@business.co.uk" /></label>
-          </div>
-          <div class="actions">
-            <button type="submit">Activate license</button>
-          </div>
-          <p class="msg" id="licMsg" hidden></p>
-        </form>
-      </div>
+      </section>
     </main>
 
     <footer>
       <div class="wrap">
         PurePOS UK · <a href="/">Home</a> ·
-        <a href="/admin">Platform admin</a> ·
-        Hosted on Railway · Prices exclude VAT unless stated
+        <a href="/pos/">Till</a> ·
+        <a href="/bo/">Back office</a> ·
+        <a href="/order/">Ordering</a> ·
+        <a href="/admin">Platform admin</a>
+        · Prices exclude VAT unless stated
       </div>
     </footer>
 
@@ -375,37 +542,96 @@
       const cred = document.getElementById("cred");
       const licMsg = document.getElementById("licMsg");
 
-      fetch("/api/public/plans")
-        .then((r) => r.json())
-        .then((data) => {
-          tiers.innerHTML = data.plans
-            .map((p, i) => {
-              const featured = p.badge || i === 1;
-              return `
-            <article class="card ${featured ? "featured" : ""}">
-              ${p.badge ? `<span class="badge">${p.badge}</span>` : featured ? `<span class="badge">Most UK shops</span>` : ""}
+      const fallbackPlans = [
+        {
+          id: "starter",
+          name: "Solo",
+          tagline: "One till that keeps selling when the Wi‑Fi doesn’t.",
+          audience: "Independent counters, pop-ups, market traders",
+          monthlyGbp: 29,
+          trialDays: 14,
+          highlights: [
+            "Cloud back office + 1 offline-capable till",
+            "Items & groups, VAT, and receipts in £",
+            "Live open-ticket sync across tills in the store",
+            "Offline sales queue · sync when you’re back",
+            "Store backup & restore from Settings",
+          ],
+        },
+        {
+          id: "pro",
+          name: "Shop",
+          badge: "Most UK shops",
+          tagline: "The UK high-street package — till, kitchen, ordering, and delivery apps.",
+          audience: "Cafés, delis, bars, and single-site retail",
+          monthlyGbp: 59,
+          trialDays: 14,
+          highlights: [
+            "Everything in Solo",
+            "Customer online ordering (pickup, dine-in, delivery)",
+            "Kitchen board for web + Just Eat, Deliveroo, Uber Eats & more",
+            "CSV import · end-of-day & richer reports",
+          ],
+        },
+        {
+          id: "multi",
+          name: "Group",
+          tagline: "One cloud for every site — stock and items that move with you.",
+          audience: "Multi-site groups and growing brands",
+          monthlyGbp: 99,
+          trialDays: 14,
+          highlights: [
+            "Everything in Shop",
+            "Multi-store stock transfers",
+            "Assign items to branches from Items",
+            "Priority pilot support",
+          ],
+        },
+      ];
+
+      function renderPlans(plans) {
+        tiers.innerHTML = plans
+          .map((p, i) => {
+            const featured = Boolean(p.badge) || i === 1;
+            const badge = p.badge
+              ? `<span class="badge">${p.badge}</span>`
+              : featured
+                ? `<span class="badge">Most UK shops</span>`
+                : "";
+            return `
+            <article class="tier ${featured ? "featured" : ""}">
+              ${badge}
               <h3>${p.name}</h3>
               <p class="audience">${p.audience || ""}</p>
               <p class="tagline">${p.tagline}</p>
               <div class="price">£${p.monthlyGbp}<span>/mo</span></div>
               <p class="vat">ex VAT · ${p.trialDays || 14}-day trial</p>
-              <ul>${p.highlights.map((h) => `<li>${h}</li>`).join("")}</ul>
-              <button type="button" data-plan="${p.id}">Choose ${p.name}</button>
+              <ul>${(p.highlights || []).map((h) => `<li>${h}</li>`).join("")}</ul>
+              <button class="btn ${featured ? "btn-dark" : "btn-primary"}" type="button" data-plan="${p.id}">Choose ${p.name}</button>
             </article>`;
-            })
-            .join("");
-          tiers.querySelectorAll("button[data-plan]").forEach((btn) => {
-            btn.addEventListener("click", () => {
-              document.getElementById("planSelect").value = btn.dataset.plan;
-              document.getElementById("trial").scrollIntoView({ behavior: "smooth" });
-            });
+          })
+          .join("");
+
+        tiers.querySelectorAll("button[data-plan]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            document.getElementById("planSelect").value = btn.dataset.plan;
+            document.getElementById("trial").scrollIntoView({ behavior: "smooth" });
           });
+        });
+      }
+
+      renderPlans(fallbackPlans);
+
+      fetch("/api/public/plans")
+        .then((r) => r.json())
+        .then((data) => {
+          if (data?.plans?.length) renderPlans(data.plans);
         })
         .catch(() => {
-          tiers.innerHTML = "<p class='err'>Could not load packages — check /api/health.</p>";
+          /* keep fallback plans */
         });
 
-      document.getElementById("trial").addEventListener("submit", async (e) => {
+      document.getElementById("trialForm").addEventListener("submit", async (e) => {
         e.preventDefault();
         msg.hidden = false;
         cred.hidden = true;

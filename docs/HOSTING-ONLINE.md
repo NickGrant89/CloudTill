@@ -15,11 +15,11 @@ Platform admin: set `PLATFORM_ADMIN_SECRET` on Railway, open `/admin`
 | CNAME (or ANAME/ALIAS at apex) | `@` | `25iorx89.up.railway.app` |
 | TXT | `_railway-verify` | `railway-verify=ed28fa443c92ad85c284e9e8292630e6475d8a9b247115a2bc9694bd8bd69c9a` |
 
-Free plan: one custom domain (apex registered). Upgrade for `www` / `staging`.
+Apex `purepos.co.uk` should CNAME/ALIAS to Railway. Upgrade Railway if you need `www` / `staging` as extra custom domains.
 
 ## Permanent hosting (recommended)
 
-Product is already on Railway above. Fasthosts still serves the suspended holding page for the apex until DNS is cut over — that shared host can’t run this Node + Postgres stack anyway.
+Product is already on Railway above. Fasthosts shared hosting cannot run this Node + Postgres stack — keep DNS on Railway.
 
 Optional alternate PaaS:
 

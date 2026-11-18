@@ -1,14 +1,14 @@
-/** Product brand — GitHub/repo folder may still say CloudTill. */
+/** Product brand. GitHub repo folder may still be CloudTill; product is PurePOS. */
 
 export const PRODUCT_NAME = "PurePOS";
 export const PRODUCT_LEGAL = "PurePOS UK";
 export const PRODUCT_DOMAIN = "purepos.co.uk";
-export const PRODUCT_TAGLINE = "Cloud POS · offline tills · UK";
+export const PRODUCT_TAGLINE = "Cloud till · back office · online ordering";
 
-/** Production domain (hosting currently suspended). */
+/** Production apex — served by Railway when DNS points at the app. */
 export const PRODUCT_PUBLIC_URL = `https://${PRODUCT_DOMAIN}`;
 
-/** Documented staging host for pilots until production hosting is restored. */
+/** Optional staging host (create when DNS allows a second custom domain). */
 export const PRODUCT_STAGING_HOST = "staging.purepos.co.uk";
 export const PRODUCT_STAGING_URL = `https://${PRODUCT_STAGING_HOST}`;
 
