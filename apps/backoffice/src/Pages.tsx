@@ -1570,8 +1570,10 @@ function SettingsPage() {
             </button>
           </form>
           <p style={{ marginTop: 10, fontSize: "0.88rem", color: "var(--muted)" }}>
-            Feature gates: CSV import + online ordering need Shop+ · multi-store transfers need Group.
-            Stripe Checkout needs <code>STRIPE_SECRET_KEY</code> + price IDs when you go live.
+            Solo: till, Items/groups, live sync, backup. Shop+: online ordering, kitchen + delivery apps
+            (Just Eat / Deliveroo / Uber Eats…), CSV import, richer reports. Group: multi-store transfers +
+            assign items to branches. Stripe Checkout needs <code>STRIPE_SECRET_KEY</code> + price IDs when
+            you go live.
           </p>
         </div>
       )}
