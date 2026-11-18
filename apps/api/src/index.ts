@@ -19,6 +19,7 @@ import { printersRouter } from "./routes/printers.js";
 import { extrasRouter } from "./routes/extras.js";
 import { importRouter } from "./routes/import.js";
 import { billingRouter, publicBillingRouter } from "./routes/billing.js";
+import { adminRouter } from "./routes/admin.js";
 import { prisma } from "./db.js";
 
 const app = express();
@@ -61,14 +62,23 @@ app.get("/api/health", async (_req, res) => {
     },
     env: {
       hasJwtSecret: Boolean(process.env.JWT_SECRET),
+      hasPlatformAdminSecret: Boolean(process.env.PLATFORM_ADMIN_SECRET?.trim()),
       host: HOST,
       port: PORT,
     },
+    adminUrl: "/admin",
   });
 });
 
 app.get("/pricing", (_req, res) => {
   res.sendFile(path.join(__dirname, "../public/pricing.html"));
+});
+
+app.get("/admin", (_req, res) => {
+  res.sendFile(path.join(__dirname, "../public/admin.html"));
+});
+app.get("/admin/", (_req, res) => {
+  res.sendFile(path.join(__dirname, "../public/admin.html"));
 });
 
 /** Hosted all-in-one: static till / BO / ordering / marketing (see Dockerfile.webapp). */
@@ -105,6 +115,7 @@ app.use("/api/time-clock", timeClockRouter);
 app.use("/api/public", publicOrderingRouter);
 app.use("/api/public", publicBillingRouter);
 app.use("/api/billing", billingRouter);
+app.use("/api/admin", adminRouter);
 app.use("/api/kitchen", kitchenRouter);
 app.use("/api/printers", printersRouter);
 app.use("/api/extras", extrasRouter);

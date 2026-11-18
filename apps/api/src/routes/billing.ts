@@ -8,11 +8,14 @@ import { hashPin, requireAuth, requireRole, type AuthedRequest } from "../auth.j
 export const billingRouter = Router();
 export const publicBillingRouter = Router();
 
-const BILLING_PLAN_KEY = "billing.plan";
-const BILLING_TRIAL_KEY = "billing.trialEndsAt";
-const BILLING_STATUS_KEY = "billing.status";
-const BILLING_LICENSE_KEY = "billing.licenseKey";
-const BILLING_STRIPE_CUSTOMER = "billing.stripeCustomerId";
+export const BILLING_PLAN_KEY = "billing.plan";
+export const BILLING_TRIAL_KEY = "billing.trialEndsAt";
+export const BILLING_STATUS_KEY = "billing.status";
+export const BILLING_LICENSE_KEY = "billing.licenseKey";
+export const BILLING_LICENSE_LAST_KEY = "billing.licenseKeyLast";
+export const BILLING_STRIPE_CUSTOMER = "billing.stripeCustomerId";
+export const BILLING_AUDIT_KEY = "billing.auditLog";
+export const BILLING_LAST_SIGNUP_KEY = "billing.lastSignup";
 
 function slugify(name: string) {
   const base = name
@@ -33,16 +36,46 @@ async function uniqueSlug(name: string) {
   return `${base}-${Date.now().toString(36)}`;
 }
 
-function mintLicenseKey(planId: PlanId) {
+export function mintLicenseKey(planId: PlanId) {
   const body = randomBytes(12).toString("hex").toUpperCase();
   return `PP-${planId.toUpperCase()}-${body.slice(0, 4)}-${body.slice(4, 8)}-${body.slice(8, 12)}`;
 }
 
-function fingerprintLicense(key: string) {
+export function fingerprintLicense(key: string) {
   return createHash("sha256").update(key.trim().toUpperCase()).digest("hex").slice(0, 24);
 }
 
-async function readBilling(storeId: string) {
+export async function writeSetting(storeId: string, key: string, value: string) {
+  await prisma.setting.upsert({
+    where: { storeId_key: { storeId, key } },
+    create: { storeId, key, value },
+    update: { value },
+  });
+}
+
+export async function appendBillingAudit(
+  storeId: string,
+  event: { type: string; at?: string; detail?: Record<string, unknown> }
+) {
+  const existing = await prisma.setting.findUnique({
+    where: { storeId_key: { storeId, key: BILLING_AUDIT_KEY } },
+  });
+  let log: unknown[] = [];
+  try {
+    log = existing?.value ? (JSON.parse(existing.value) as unknown[]) : [];
+  } catch {
+    log = [];
+  }
+  if (!Array.isArray(log)) log = [];
+  log.unshift({
+    type: event.type,
+    at: event.at || new Date().toISOString(),
+    detail: event.detail || {},
+  });
+  await writeSetting(storeId, BILLING_AUDIT_KEY, JSON.stringify(log.slice(0, 50)));
+}
+
+export async function readBilling(storeId: string) {
   const settings = await prisma.setting.findMany({
     where: {
       storeId,
@@ -52,7 +85,10 @@ async function readBilling(storeId: string) {
           BILLING_TRIAL_KEY,
           BILLING_STATUS_KEY,
           BILLING_LICENSE_KEY,
+          BILLING_LICENSE_LAST_KEY,
           BILLING_STRIPE_CUSTOMER,
+          BILLING_AUDIT_KEY,
+          BILLING_LAST_SIGNUP_KEY,
         ],
       },
     },
@@ -60,9 +96,21 @@ async function readBilling(storeId: string) {
   const map = Object.fromEntries(settings.map((s) => [s.key, s.value]));
   const planId = (map[BILLING_PLAN_KEY] as PlanId | undefined) ?? "pro";
   const plan = getPlan(planId);
-  const trialEndsAt = map[BILLING_TRIAL_KEY] ?? null;
+  const trialEndsAt = map[BILLING_TRIAL_KEY] || null;
   const status = map[BILLING_STATUS_KEY] ?? (trialEndsAt ? "trialing" : "active");
   const stripeConfigured = Boolean(process.env.STRIPE_SECRET_KEY);
+  let audit: unknown[] = [];
+  try {
+    audit = map[BILLING_AUDIT_KEY] ? (JSON.parse(map[BILLING_AUDIT_KEY]) as unknown[]) : [];
+  } catch {
+    audit = [];
+  }
+  let lastSignup: unknown = null;
+  try {
+    lastSignup = map[BILLING_LAST_SIGNUP_KEY] ? JSON.parse(map[BILLING_LAST_SIGNUP_KEY]) : null;
+  } catch {
+    lastSignup = null;
+  }
   return {
     planId: plan.id,
     plan,
@@ -70,6 +118,9 @@ async function readBilling(storeId: string) {
     trialEndsAt,
     features: plan.features,
     licenseFingerprint: map[BILLING_LICENSE_KEY] ?? null,
+    licenseKeyLast: map[BILLING_LICENSE_LAST_KEY] ?? null,
+    lastSignup,
+    audit: Array.isArray(audit) ? audit : [],
     stripe: {
       configured: stripeConfigured,
       customerId: map[BILLING_STRIPE_CUSTOMER] ?? null,
@@ -80,14 +131,6 @@ async function readBilling(storeId: string) {
         : "No STRIPE_SECRET_KEY — use trial signup or license-key activation.",
     },
   };
-}
-
-async function writeSetting(storeId: string, key: string, value: string) {
-  await prisma.setting.upsert({
-    where: { storeId_key: { storeId, key } },
-    create: { storeId, key, value },
-    update: { value },
-  });
 }
 
 async function provisionStore(opts: {
@@ -167,11 +210,16 @@ async function provisionStore(opts: {
   await writeSetting(store.id, BILLING_TRIAL_KEY, trialEndsAt);
   await writeSetting(store.id, BILLING_STATUS_KEY, "trialing");
   await writeSetting(store.id, BILLING_LICENSE_KEY, fingerprintLicense(licenseKey));
+  await writeSetting(store.id, BILLING_LICENSE_LAST_KEY, licenseKey);
   await writeSetting(
     store.id,
-    "billing.lastSignup",
+    BILLING_LAST_SIGNUP_KEY,
     JSON.stringify({ email: opts.email, businessName: opts.businessName, at: new Date().toISOString() })
   );
+  await appendBillingAudit(store.id, {
+    type: "signup",
+    detail: { email: opts.email, planId: plan.id, licenseKey },
+  });
   await writeSetting(store.id, "receipt.header", opts.businessName);
   await writeSetting(store.id, "receipt.footer", "Thank you · PurePOS");
 
@@ -308,7 +356,12 @@ publicBillingRouter.post("/activate-license", async (req, res) => {
   await writeSetting(store.id, BILLING_PLAN_KEY, planId);
   await writeSetting(store.id, BILLING_STATUS_KEY, "active");
   await writeSetting(store.id, BILLING_LICENSE_KEY, fp);
+  await writeSetting(store.id, BILLING_LICENSE_LAST_KEY, key);
   await writeSetting(store.id, BILLING_TRIAL_KEY, "");
+  await appendBillingAudit(store.id, {
+    type: "activate_license",
+    detail: { planId, email: body.data.email || null },
+  });
 
   const billing = await readBilling(store.id);
   res.json({
@@ -375,7 +428,9 @@ billingRouter.post("/activate-license", requireRole("owner"), async (req: Authed
   await writeSetting(req.user!.storeId, BILLING_PLAN_KEY, planId);
   await writeSetting(req.user!.storeId, BILLING_STATUS_KEY, "active");
   await writeSetting(req.user!.storeId, BILLING_LICENSE_KEY, fingerprintLicense(key));
+  await writeSetting(req.user!.storeId, BILLING_LICENSE_LAST_KEY, key);
   await writeSetting(req.user!.storeId, BILLING_TRIAL_KEY, "");
+  await appendBillingAudit(req.user!.storeId, { type: "activate_license", detail: { planId, via: "bo" } });
   res.json(await readBilling(req.user!.storeId));
 });
 

@@ -4,8 +4,9 @@
 
 **https://web-production-b2a209a9.up.railway.app**
 
-`/` marketing · `/pos/` till · `/bo/` BO · `/order/` · `/pricing` · `/api/health`  
-Login: `owner@purepos.demo` / `1234`
+`/` marketing · `/pos/` till · `/bo/` BO · `/order/` · `/pricing` · `/admin` (platform licensing) · `/api/health`  
+Store login: `owner@purepos.demo` / `1234`  
+Platform admin: set `PLATFORM_ADMIN_SECRET` on Railway, open `/admin`
 
 ### DNS for purepos.co.uk
 

@@ -20,6 +20,7 @@ Or use the existing `cloudtill-dev` tmux session.
 | --- | --- | --- |
 | API health | http://localhost:4000/api/health | https://staging.purepos.co.uk/api/health |
 | Pricing / trial | http://localhost:4000/pricing | https://staging.purepos.co.uk/pricing |
+| Platform admin | http://localhost:4000/admin | https://purepos.co.uk/admin |
 | POS till | http://localhost:5173 | https://staging.purepos.co.uk/pos |
 | Back office | http://localhost:5174 | https://staging.purepos.co.uk/bo |
 | Online ordering | http://localhost:5175 | https://staging.purepos.co.uk/order |
@@ -38,8 +39,9 @@ Copy `apps/api/.env.example` → `apps/api/.env`:
 | `PORT` / `HOST` | `4000` / `0.0.0.0` | Behind reverse proxy |
 | `PUBLIC_BASE_URL` | `http://localhost:4000` | Local API origin |
 | `STAGING_BASE_URL` | `https://staging.purepos.co.uk` | Documented staging host |
+| `PLATFORM_ADMIN_SECRET` | `openssl rand -hex 24` | Unlocks `/admin` platform licensing (not BO) |
 
-`GET /api/health` reports `ok`, DB status, store count, and whether `JWT_SECRET` is set.
+`GET /api/health` reports `ok`, DB status, store count, and whether `JWT_SECRET` / `PLATFORM_ADMIN_SECRET` are set.
 
 ## Demo reset
 
