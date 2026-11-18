@@ -86,6 +86,7 @@ interface Ticket {
   subtotalCents: number;
   taxCents: number;
   totalCents: number;
+  note?: string | null;
   updatedAt?: string;
   createdAt?: string;
 }
@@ -117,6 +118,7 @@ interface Props {
 type Modal =
   | null
   | { type: "pay" }
+  | { type: "phoneOrder" }
   | { type: "held" }
   | { type: "customers" }
   | { type: "discount" }
@@ -169,6 +171,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   const [payAmounts, setPayAmounts] = useState<Record<string, number>>({});
   const [giftCardCode, setGiftCardCode] = useState("GC-DEMO50");
   const [textPayPhone, setTextPayPhone] = useState("");
+  const [textPayName, setTextPayName] = useState("");
   const [textPayMsg, setTextPayMsg] = useState("");
   const [textPayLink, setTextPayLink] = useState<{
     id: string;
@@ -771,21 +774,69 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     }
     setPayAmounts(amounts);
     setPayText(text);
-    setTextPayPhone(ticket.customer?.phone ?? "");
+    setTextPayPhone(ticket.customer?.phone ?? textPayPhone);
+    setTextPayName(ticket.customer?.name ?? textPayName);
     setTextPayMsg("");
     setTextPayLink(null);
     setMobilePane("ticket");
     setModal({ type: "pay" });
   }
 
+  /** Phone orders: ring items → send SMS/pay link (no cash/card tender UI). */
+  async function openPhoneOrder() {
+    setTextPayMsg("");
+    setTextPayLink(null);
+    try {
+      const t = ticketRef.current ?? (await ensureTicket());
+      const label =
+        textPayName.trim()
+          ? `Phone · ${textPayName.trim()}`
+          : t.name.startsWith("Phone")
+            ? t.name
+            : "Phone order";
+      if (!isLocalTicket(t) && offline.online) {
+        const updated = await api<Ticket>(`/pos/tickets/${t.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ name: label, note: "Phone order" }),
+        });
+        setCurrentTicket(updated);
+        setTextPayPhone((prev) => prev || updated.customer?.phone || "");
+        setTextPayName((prev) => prev || updated.customer?.name || textPayName);
+      } else {
+        setTextPayPhone((prev) => prev || t.customer?.phone || "");
+        setTextPayName((prev) => prev || t.customer?.name || "");
+      }
+      setMobilePane("ticket");
+      setModal({ type: "phoneOrder" });
+    } catch (e) {
+      fail("Phone order", e);
+    }
+  }
+
   async function sendTextToPay() {
     if (!ticket || isLocalTicket(ticket)) {
-      setTextPayMsg("Text to pay needs an online cloud ticket");
+      setTextPayMsg("Phone order pay link needs an online cloud ticket");
+      return;
+    }
+    if (!ticket.lines.length) {
+      setTextPayMsg("Add items to the phone order first");
       return;
     }
     setBusy(true);
     setTextPayMsg("");
     try {
+      const label = textPayName.trim()
+        ? `Phone · ${textPayName.trim()}`
+        : ticket.name.startsWith("Phone")
+          ? ticket.name
+          : "Phone order";
+      if (ticket.name !== label || ticket.note !== "Phone order") {
+        const renamed = await api<Ticket>(`/pos/tickets/${ticket.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ name: label, note: "Phone order" }),
+        });
+        setCurrentTicket(renamed);
+      }
       const result = await api<{
         message: string;
         link: { id: string; payUrl: string; status: string };
@@ -796,6 +847,8 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
         body: JSON.stringify({
           ticketId: ticket.id,
           phone: textPayPhone.trim() || undefined,
+          customerName: textPayName.trim() || undefined,
+          note: "Phone order",
           sendSms: Boolean(textPayPhone.trim()),
         }),
       });
@@ -824,8 +877,8 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             setMobilePane("items");
             setModal({
               type: "message",
-              title: "Text to pay · paid",
-              body: "Customer payment received. Sale is complete.",
+              title: "Phone order · paid",
+              body: "Customer paid the link. Sale is complete.",
             });
             void loadCatalog();
           }
@@ -1083,6 +1136,9 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
         <div className={`toolbar-actions${tillPhase === "options" || tillPhase === "pay" || tillPhase === "done" ? " is-quiet" : ""}`}>
         <button type="button" onClick={() => void openTicketsBoard()}>
           Tickets{openTickets.length ? ` · ${openTickets.length}` : ""}
+        </button>
+        <button type="button" onClick={() => void openPhoneOrder()}>
+          Phone order
         </button>
         <button type="button" onClick={() => void openKitchenBoard()}>
           Kitchen
@@ -1379,6 +1435,9 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             <button type="button" onClick={() => void openCustomers()}>
               Customer
             </button>
+            <button type="button" disabled={!ticket} onClick={() => void openPhoneOrder()}>
+              Phone order
+            </button>
             <button type="button" className="pay-btn" disabled={!hasLines} onClick={openPay}>
               Charge {money(ticket?.totalCents ?? 0)}
             </button>
@@ -1395,6 +1454,83 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
           Charge
         </button>
       </div>
+
+      {modal?.type === "phoneOrder" && (
+        <div className="modal-backdrop till-overlay" onClick={() => setModal(null)}>
+          <div className="modal tender-modal" onClick={(e) => e.stopPropagation()}>
+            <p className="step-kicker">Phone order</p>
+            <h3>Take order → send pay link</h3>
+            <ol className="hint" style={{ margin: "0 0 12px", paddingLeft: 18, lineHeight: 1.45 }}>
+              <li>Ring the caller’s items on the till</li>
+              <li>Enter their mobile (optional name)</li>
+              <li>
+                <strong>Send pay link</strong> — SMS when Twilio is set; otherwise copy the link
+              </li>
+            </ol>
+            <p className="pay-summary">
+              <span>
+                Due <strong>{money(ticket?.totalCents ?? 0)}</strong>
+              </span>
+              <span>{ticket?.name || "Phone order"}</span>
+            </p>
+            {!ticket?.lines.length && (
+              <p className="hint">Add items first, then send the link. This ticket is marked as a phone order.</p>
+            )}
+            <div className="field">
+              <label>Caller name (optional)</label>
+              <input
+                placeholder="Name on order"
+                value={textPayName}
+                onChange={(e) => setTextPayName(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label>Mobile</label>
+              <input
+                inputMode="tel"
+                placeholder="07… — leave blank to copy the link"
+                value={textPayPhone}
+                onChange={(e) => setTextPayPhone(e.target.value)}
+              />
+            </div>
+            <div className="tender-row" style={{ marginTop: 8 }}>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={busy || !ticket?.lines.length}
+                onClick={() => void sendTextToPay()}
+              >
+                {busy ? "…" : textPayPhone.trim() ? "Send pay link" : "Create pay link"}
+              </button>
+              {textPayLink?.payUrl && (
+                <button
+                  type="button"
+                  className="btn secondary"
+                  onClick={() => void navigator.clipboard?.writeText(textPayLink.payUrl)}
+                >
+                  Copy link
+                </button>
+              )}
+            </div>
+            {textPayLink && (
+              <p className="hint" style={{ marginTop: 10, wordBreak: "break-all" }}>
+                {textPayLink.status === "paid" ? "Paid" : "Waiting for customer…"} · {textPayLink.payUrl}
+              </p>
+            )}
+            {textPayMsg && <p className="hint">{textPayMsg}</p>}
+            <div className="modal-actions">
+              <button type="button" className="btn ghost" onClick={() => setModal(null)}>
+                {ticket?.lines.length ? "Keep ringing" : "Close"}
+              </button>
+              {!!ticket?.lines.length && (
+                <button type="button" className="btn secondary" onClick={openPay}>
+                  Cash / card instead
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {modal?.type === "pay" && ticket && (
         <div className="modal-backdrop till-overlay" onClick={() => setModal(null)}>
@@ -1454,7 +1590,11 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
               </div>
             ))}
             <div className="field" style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--line, #dce5e1)" }}>
-              <label>Text to pay (SMS / link)</label>
+              <label>Phone order · text to pay</label>
+              <p className="hint" style={{ marginTop: 0 }}>
+                For phone orders: send an SMS pay link (Twilio) or copy the link. Prefer the till{" "}
+                <strong>Phone order</strong> button for the guided flow.
+              </p>
               <input
                 inputMode="tel"
                 placeholder="07… mobile (optional — copy link if blank)"
@@ -1463,7 +1603,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
               />
               <div className="tender-row" style={{ marginTop: 8 }}>
                 <button type="button" className="btn secondary" disabled={busy} onClick={() => void sendTextToPay()}>
-                  {busy ? "…" : "Send payment link"}
+                  {busy ? "…" : "Send pay link"}
                 </button>
                 {textPayLink?.payUrl && (
                   <button

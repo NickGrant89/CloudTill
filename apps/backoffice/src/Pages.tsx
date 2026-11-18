@@ -1772,12 +1772,20 @@ function SettingsPage() {
       )}
 
       <div className="panel-box">
-        <h3>Text to pay</h3>
+        <h3>Phone orders · text to pay</h3>
         <p style={{ color: "var(--muted)", marginTop: 0 }}>
-          Send an SMS or shareable payment link for a custom amount (or use <strong>Charge → Text to pay</strong> on
-          the till for an open ticket). Stripe Checkout when <code>STRIPE_SECRET_KEY</code> is set; otherwise the
-          PurePOS hosted pay page. Twilio SMS when <code>TWILIO_*</code> env vars are set — otherwise copy the link.
+          For <strong>phone orders</strong>: take the order on the till → <strong>Phone order</strong> → send an SMS
+          pay link (or copy the link if Twilio is not set). Here you can also create a custom-amount link for a call-in
+          tab. Stripe Checkout when <code>STRIPE_SECRET_KEY</code> is set; otherwise the PurePOS hosted{" "}
+          <code>/pay/</code> page.
         </p>
+        <ol style={{ color: "var(--muted)", marginTop: 0, paddingLeft: 18, lineHeight: 1.45, fontSize: "0.92rem" }}>
+          <li>
+            Till: ring items → <strong>Phone order</strong> → mobile → <strong>Send pay link</strong>
+          </li>
+          <li>Customer opens the link and pays (Stripe or hosted confirm)</li>
+          <li>Till waits and completes the sale when paid</li>
+        </ol>
         {textPayStatus && (
           <p style={{ fontSize: "0.88rem", color: "var(--muted)" }}>
             Stripe: {textPayStatus.stripe.configured ? "configured" : "not set"} · Twilio:{" "}
@@ -1806,7 +1814,7 @@ function SettingsPage() {
             <label>Note</label>
             <input
               value={textPayForm.note}
-              placeholder="Invoice / tab"
+              placeholder="Phone order / caller name"
               onChange={(e) => setTextPayForm({ ...textPayForm, note: e.target.value })}
             />
           </div>
@@ -1826,7 +1834,7 @@ function SettingsPage() {
                 body: JSON.stringify({
                   amountCents: Math.round(pounds * 100),
                   phone: textPayForm.phone.trim() || undefined,
-                  note: textPayForm.note.trim() || undefined,
+                  note: textPayForm.note.trim() || "Phone order",
                   sendSms: Boolean(textPayForm.phone.trim()),
                 }),
               })
@@ -1838,7 +1846,7 @@ function SettingsPage() {
                 .finally(() => setTextPayBusy(false));
             }}
           >
-            {textPayBusy ? "…" : "Create link"}
+            {textPayBusy ? "…" : "Send pay link"}
           </button>
         </div>
         {textPayMsg && <p className="badge" style={{ marginTop: 10 }}>{textPayMsg}</p>}

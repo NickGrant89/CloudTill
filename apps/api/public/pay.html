@@ -125,6 +125,7 @@
           "<p class='meta'>" +
             (data.customerName ? data.customerName + "<br/>" : "") +
             (data.note ? data.note + "<br/>" : "") +
+            (data.note ? "" : "Phone order payment<br/>") +
             (data.stripeCheckout
               ? "Secure card payment via Stripe Checkout."
               : "Hosted PurePOS pay page (set STRIPE_SECRET_KEY for Stripe Checkout).") +
