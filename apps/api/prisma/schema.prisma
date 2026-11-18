@@ -38,6 +38,7 @@ model Store {
   onlineOrders       OnlineOrder[]
   printers           PrinterDevice[]
   printJobs          PrintJob[]
+  textPayLinks       TextPayLink[]
 }
 
 model Register {
@@ -492,4 +493,31 @@ model PrintJob {
 
   store   Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
   printer PrinterDevice? @relation(fields: [printerId], references: [id])
+}
+
+/// SMS / shareable payment link (text-to-pay) for a ticket or custom amount.
+model TextPayLink {
+  id              String    @id @default(cuid())
+  storeId         String
+  ticketId        String?
+  saleId          String?
+  token           String    @unique
+  amountCents     Int
+  currency        String    @default("gbp")
+  phone           String?
+  customerName    String?
+  status          String    @default("pending") // pending | sent | paid | cancelled | expired
+  payUrl          String
+  stripeSessionId String?
+  smsSid          String?
+  note            String?
+  createdById     String?
+  paidAt          DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, status])
+  @@index([ticketId])
 }

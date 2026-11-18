@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pay · PurePOS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --ink: #07161c;
+        --muted: #4d6570;
+        --accent: #0d9488;
+        --deep: #083344;
+        --bg: #e8f4f1;
+        --panel: #fff;
+        --line: #cfe0dc;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Manrope, system-ui, sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(ellipse 80% 50% at 10% -10%, #9fd9d0, transparent 55%),
+          var(--bg);
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+      .card {
+        width: min(420px, 100%);
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        padding: 28px 24px;
+        box-shadow: 0 18px 40px rgba(7, 22, 28, 0.08);
+      }
+      .brand {
+        font-family: Fraunces, Georgia, serif;
+        font-size: 1.8rem;
+        margin: 0 0 4px;
+        letter-spacing: -0.03em;
+      }
+      .store { color: var(--muted); margin: 0 0 20px; }
+      .amount {
+        font-size: 2.4rem;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+        margin: 8px 0;
+      }
+      .meta { color: var(--muted); font-size: 0.95rem; line-height: 1.45; }
+      button {
+        width: 100%;
+        min-height: 48px;
+        margin-top: 18px;
+        border: none;
+        border-radius: 14px;
+        background: var(--accent);
+        color: #fff;
+        font: inherit;
+        font-weight: 800;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: transparent;
+        border: 1px solid var(--line);
+        color: var(--ink);
+      }
+      button:disabled { opacity: 0.6; cursor: wait; }
+      .ok { color: var(--accent); font-weight: 700; margin-top: 14px; }
+      .err { color: #9b3b2e; font-weight: 700; margin-top: 14px; }
+      .badge {
+        display: inline-block;
+        font-size: 0.75rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: rgba(13, 148, 136, 0.12);
+        color: var(--deep);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card" id="app">
+      <p class="brand">PurePOS</p>
+      <p class="store" id="store">Loading…</p>
+    </main>
+    <script>
+      const token = location.pathname.split("/").filter(Boolean).pop();
+      const params = new URLSearchParams(location.search);
+      const app = document.getElementById("app");
+
+      function money(cents, currency) {
+        try {
+          return new Intl.NumberFormat("en-GB", {
+            style: "currency",
+            currency: (currency || "gbp").toUpperCase(),
+          }).format(cents / 100);
+        } catch {
+          return "£" + (cents / 100).toFixed(2);
+        }
+      }
+
+      async function load() {
+        const res = await fetch("/api/public/pay/" + encodeURIComponent(token));
+        const data = await res.json();
+        if (!res.ok) {
+          app.innerHTML = "<p class='brand'>PurePOS</p><p class='err'>" + (data.error || "Not found") + "</p>";
+          return;
+        }
+        const paid = data.status === "paid" || params.get("paid") === "1";
+        app.innerHTML =
+          "<p class='brand'>PurePOS</p>" +
+          "<p class='store'>" + data.store.name + "</p>" +
+          "<span class='badge'>" + (paid ? "Paid" : data.status) + "</span>" +
+          "<div class='amount'>" + money(data.amountCents, data.currency) + "</div>" +
+          "<p class='meta'>" +
+            (data.customerName ? data.customerName + "<br/>" : "") +
+            (data.note ? data.note + "<br/>" : "") +
+            (data.stripeCheckout
+              ? "Secure card payment via Stripe Checkout."
+              : "Hosted PurePOS pay page (set STRIPE_SECRET_KEY for Stripe Checkout).") +
+          "</p>" +
+          "<div id='actions'></div>" +
+          "<p class='meta' id='msg'></p>";
+
+        const actions = document.getElementById("actions");
+        const msg = document.getElementById("msg");
+        if (paid) {
+          msg.className = "ok";
+          msg.textContent = "Thank you — payment received.";
+          return;
+        }
+        if (params.get("cancelled") === "1") {
+          msg.className = "err";
+          msg.textContent = "Checkout cancelled — you can try again.";
+        }
+        if (data.stripeCheckout && data.payUrl && !data.payUrl.includes("/pay/" + token)) {
+          const a = document.createElement("button");
+          a.textContent = "Pay securely with card";
+          a.onclick = () => { location.href = data.payUrl; };
+          actions.appendChild(a);
+        } else {
+          const b = document.createElement("button");
+          b.textContent = "Confirm payment";
+          b.onclick = async () => {
+            b.disabled = true;
+            b.textContent = "Processing…";
+            const r = await fetch("/api/public/pay/" + encodeURIComponent(token) + "/pay", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+            const j = await r.json();
+            if (!r.ok) {
+              msg.className = "err";
+              msg.textContent = j.error || "Payment failed";
+              b.disabled = false;
+              b.textContent = "Confirm payment";
+              return;
+            }
+            location.search = "?paid=1";
+          };
+          actions.appendChild(b);
+          const note = document.createElement("p");
+          note.className = "meta";
+          note.style.marginTop = "10px";
+          note.textContent = "Demo / pilot: confirms payment on this page when Stripe is not configured.";
+          actions.appendChild(note);
+        }
+      }
+      load().catch((e) => {
+        app.innerHTML = "<p class='err'>" + (e.message || "Failed to load") + "</p>";
+      });
+    </script>
+  </body>
+</html>

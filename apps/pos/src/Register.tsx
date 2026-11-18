@@ -72,7 +72,13 @@ interface Ticket {
   registerId?: string | null;
   registerName?: string | null;
   customerId: string | null;
-  customer?: { id: string; name: string; loyaltyPoints: number; storeCreditCents: number } | null;
+  customer?: {
+    id: string;
+    name: string;
+    loyaltyPoints: number;
+    storeCreditCents: number;
+    phone?: string | null;
+  } | null;
   lines: TicketLine[];
   discountCents: number;
   discountPercent: number;
@@ -162,6 +168,14 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   const [liveSyncLabel, setLiveSyncLabel] = useState("");
   const [payAmounts, setPayAmounts] = useState<Record<string, number>>({});
   const [giftCardCode, setGiftCardCode] = useState("GC-DEMO50");
+  const [textPayPhone, setTextPayPhone] = useState("");
+  const [textPayMsg, setTextPayMsg] = useState("");
+  const [textPayLink, setTextPayLink] = useState<{
+    id: string;
+    payUrl: string;
+    status: string;
+    hostedPayUrl?: string;
+  } | null>(null);
   const [selectedMods, setSelectedMods] = useState<Record<string, Modifier[]>>({});
   const [busy, setBusy] = useState(false);
   const [clockedIn, setClockedIn] = useState(false);
@@ -757,9 +771,69 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     }
     setPayAmounts(amounts);
     setPayText(text);
+    setTextPayPhone(ticket.customer?.phone ?? "");
+    setTextPayMsg("");
+    setTextPayLink(null);
     setMobilePane("ticket");
     setModal({ type: "pay" });
   }
+
+  async function sendTextToPay() {
+    if (!ticket || isLocalTicket(ticket)) {
+      setTextPayMsg("Text to pay needs an online cloud ticket");
+      return;
+    }
+    setBusy(true);
+    setTextPayMsg("");
+    try {
+      const result = await api<{
+        message: string;
+        link: { id: string; payUrl: string; status: string };
+        hostedPayUrl: string;
+        smsError?: string | null;
+      }>("/text-pay/links", {
+        method: "POST",
+        body: JSON.stringify({
+          ticketId: ticket.id,
+          phone: textPayPhone.trim() || undefined,
+          sendSms: Boolean(textPayPhone.trim()),
+        }),
+      });
+      setTextPayLink({
+        id: result.link.id,
+        payUrl: result.link.payUrl,
+        status: result.link.status,
+        hostedPayUrl: result.hostedPayUrl,
+      });
+      setTextPayMsg(result.message);
+    } catch (e) {
+      setTextPayMsg(e instanceof Error ? e.message : "Could not create pay link");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!textPayLink || textPayLink.status === "paid") return;
+    const t = setInterval(() => {
+      void api<{ status: string; saleId?: string | null }>(`/text-pay/links/${textPayLink.id}`)
+        .then((link) => {
+          if (link.status === "paid") {
+            setTextPayLink((prev) => (prev ? { ...prev, status: "paid" } : prev));
+            setCurrentTicket(null);
+            setMobilePane("items");
+            setModal({
+              type: "message",
+              title: "Text to pay · paid",
+              body: "Customer payment received. Sale is complete.",
+            });
+            void loadCatalog();
+          }
+        })
+        .catch(() => undefined);
+    }, 3000);
+    return () => clearInterval(t);
+  }, [textPayLink]);
 
   async function toggleClock() {
     try {
@@ -1379,6 +1453,35 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
                 )}
               </div>
             ))}
+            <div className="field" style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--line, #dce5e1)" }}>
+              <label>Text to pay (SMS / link)</label>
+              <input
+                inputMode="tel"
+                placeholder="07… mobile (optional — copy link if blank)"
+                value={textPayPhone}
+                onChange={(e) => setTextPayPhone(e.target.value)}
+              />
+              <div className="tender-row" style={{ marginTop: 8 }}>
+                <button type="button" className="btn secondary" disabled={busy} onClick={() => void sendTextToPay()}>
+                  {busy ? "…" : "Send payment link"}
+                </button>
+                {textPayLink?.payUrl && (
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    onClick={() => void navigator.clipboard?.writeText(textPayLink.payUrl)}
+                  >
+                    Copy link
+                  </button>
+                )}
+              </div>
+              {textPayLink && (
+                <p className="hint" style={{ marginTop: 8, wordBreak: "break-all" }}>
+                  {textPayLink.status === "paid" ? "Paid" : "Waiting for customer…"} · {textPayLink.payUrl}
+                </p>
+              )}
+              {textPayMsg && <p className="hint">{textPayMsg}</p>}
+            </div>
             <div className="modal-actions">
               <button type="button" className="btn ghost" onClick={() => setModal(null)}>
                 Cancel

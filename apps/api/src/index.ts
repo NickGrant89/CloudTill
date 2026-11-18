@@ -22,6 +22,7 @@ import { billingRouter, publicBillingRouter } from "./routes/billing.js";
 import { adminRouter } from "./routes/admin.js";
 import { backupRouter } from "./routes/backup.js";
 import { deliveryRouter, publicDeliveryRouter } from "./routes/delivery.js";
+import { textPayRouter, publicTextPayRouter } from "./routes/textpay.js";
 import { prisma } from "./db.js";
 
 const app = express();
@@ -47,7 +48,7 @@ app.get("/api/health", async (_req, res) => {
     product: process.env.PRODUCT_NAME || "PurePOS",
     legalName: process.env.PRODUCT_LEGAL || "PurePOS UK",
     domain: process.env.PRODUCT_DOMAIN || "purepos.co.uk",
-    version: "0.5.5",
+    version: "0.5.6",
     database,
     storeCount,
     time: new Date().toISOString(),
@@ -81,6 +82,9 @@ app.get("/admin", (_req, res) => {
 });
 app.get("/admin/", (_req, res) => {
   res.sendFile(path.join(__dirname, "../public/admin.html"));
+});
+app.get("/pay/:token", (_req, res) => {
+  res.sendFile(path.join(__dirname, "../public/pay.html"));
 });
 
 /** Hosted all-in-one: static till / BO / ordering / marketing (see Dockerfile.webapp). */
@@ -117,11 +121,13 @@ app.use("/api/time-clock", timeClockRouter);
 app.use("/api/public", publicOrderingRouter);
 app.use("/api/public", publicBillingRouter);
 app.use("/api/public/delivery", publicDeliveryRouter);
+app.use("/api/public/pay", publicTextPayRouter);
 app.use("/api/billing", billingRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/extras", backupRouter);
 app.use("/api/kitchen", kitchenRouter);
 app.use("/api/delivery", deliveryRouter);
+app.use("/api/text-pay", textPayRouter);
 app.use("/api/printers", printersRouter);
 app.use("/api/extras", extrasRouter);
 app.use("/api/import", importRouter);

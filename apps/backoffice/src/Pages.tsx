@@ -1667,14 +1667,29 @@ function SettingsPage() {
   const [pilotMsg, setPilotMsg] = useState("");
   const [backupMsg, setBackupMsg] = useState("");
   const [backupBusy, setBackupBusy] = useState(false);
+  const [textPayStatus, setTextPayStatus] = useState<{
+    stripe: { configured: boolean; note: string; requiredEnv: string[] };
+    twilio: { configured: boolean; note: string; requiredEnv: string[] };
+    publicPayBase: string;
+  } | null>(null);
+  const [textPayForm, setTextPayForm] = useState({ amount: "10.00", phone: "", note: "" });
+  const [textPayMsg, setTextPayMsg] = useState("");
+  const [textPayBusy, setTextPayBusy] = useState(false);
+  const [textPayRecent, setTextPayRecent] = useState<
+    { id: string; amountCents: number; status: string; payUrl: string; phone: string | null; createdAt: string }[]
+  >([]);
 
   async function load() {
-    const [s, b] = await Promise.all([
+    const [s, b, tp, links] = await Promise.all([
       api<NonNullable<typeof settings>>("/settings"),
       api<NonNullable<typeof billing>>("/billing"),
+      api<NonNullable<typeof textPayStatus>>("/text-pay/status").catch(() => null),
+      api<typeof textPayRecent>("/text-pay/links").catch(() => [] as typeof textPayRecent),
     ]);
     setSettings(s);
     setBilling(b);
+    setTextPayStatus(tp);
+    setTextPayRecent(Array.isArray(links) ? links.slice(0, 8) : []);
     setReceipt({ header: s.receipt.header, footer: s.receipt.footer });
   }
 
@@ -1755,6 +1770,110 @@ function SettingsPage() {
           </p>
         </div>
       )}
+
+      <div className="panel-box">
+        <h3>Text to pay</h3>
+        <p style={{ color: "var(--muted)", marginTop: 0 }}>
+          Send an SMS or shareable payment link for a custom amount (or use <strong>Charge → Text to pay</strong> on
+          the till for an open ticket). Stripe Checkout when <code>STRIPE_SECRET_KEY</code> is set; otherwise the
+          PurePOS hosted pay page. Twilio SMS when <code>TWILIO_*</code> env vars are set — otherwise copy the link.
+        </p>
+        {textPayStatus && (
+          <p style={{ fontSize: "0.88rem", color: "var(--muted)" }}>
+            Stripe: {textPayStatus.stripe.configured ? "configured" : "not set"} · Twilio:{" "}
+            {textPayStatus.twilio.configured ? "configured" : "not set"} · Pay base{" "}
+            <code>{textPayStatus.publicPayBase}</code>
+          </p>
+        )}
+        <div className="toolbar" style={{ alignItems: "flex-end" }}>
+          <div className="field" style={{ margin: 0 }}>
+            <label>Amount (£)</label>
+            <input
+              value={textPayForm.amount}
+              onChange={(e) => setTextPayForm({ ...textPayForm, amount: e.target.value })}
+              style={{ width: 100 }}
+            />
+          </div>
+          <div className="field" style={{ margin: 0 }}>
+            <label>Mobile</label>
+            <input
+              value={textPayForm.phone}
+              placeholder="07…"
+              onChange={(e) => setTextPayForm({ ...textPayForm, phone: e.target.value })}
+            />
+          </div>
+          <div className="field" style={{ margin: 0, minWidth: 160 }}>
+            <label>Note</label>
+            <input
+              value={textPayForm.note}
+              placeholder="Invoice / tab"
+              onChange={(e) => setTextPayForm({ ...textPayForm, note: e.target.value })}
+            />
+          </div>
+          <button
+            type="button"
+            disabled={textPayBusy}
+            onClick={() => {
+              const pounds = parseFloat(textPayForm.amount);
+              if (!Number.isFinite(pounds) || pounds <= 0) {
+                setTextPayMsg("Enter a valid amount");
+                return;
+              }
+              setTextPayBusy(true);
+              setTextPayMsg("");
+              void api<{ message: string; link: { payUrl: string } }>("/text-pay/links", {
+                method: "POST",
+                body: JSON.stringify({
+                  amountCents: Math.round(pounds * 100),
+                  phone: textPayForm.phone.trim() || undefined,
+                  note: textPayForm.note.trim() || undefined,
+                  sendSms: Boolean(textPayForm.phone.trim()),
+                }),
+              })
+                .then((r) => {
+                  setTextPayMsg(`${r.message} · ${r.link.payUrl}`);
+                  return load();
+                })
+                .catch((e) => setTextPayMsg(e instanceof Error ? e.message : "Failed"))
+                .finally(() => setTextPayBusy(false));
+            }}
+          >
+            {textPayBusy ? "…" : "Create link"}
+          </button>
+        </div>
+        {textPayMsg && <p className="badge" style={{ marginTop: 10 }}>{textPayMsg}</p>}
+        {textPayRecent.length > 0 && (
+          <div className="table-wrap" style={{ marginTop: 12 }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th>Link</th>
+                </tr>
+              </thead>
+              <tbody>
+                {textPayRecent.map((l) => (
+                  <tr key={l.id}>
+                    <td>{new Date(l.createdAt).toLocaleString("en-GB")}</td>
+                    <td>{money(l.amountCents)}</td>
+                    <td>
+                      <span className="badge">{l.status}</span>
+                    </td>
+                    <td style={{ fontSize: "0.78rem", wordBreak: "break-all" }}>
+                      <a href={l.payUrl} target="_blank" rel="noreferrer">
+                        Open
+                      </a>
+                      {l.phone ? ` · ${l.phone}` : ""}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       <div className="panel-box">
         <h3>Backup &amp; restore</h3>
