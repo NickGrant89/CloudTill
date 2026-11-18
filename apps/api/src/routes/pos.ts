@@ -49,13 +49,15 @@ async function ticketTotals(ticketId: string) {
 async function serializeTicket(ticketId: string) {
   const ticket = await prisma.ticket.findUniqueOrThrow({
     where: { id: ticketId },
-    include: { lines: true, customer: true },
+    include: { lines: true, customer: true, register: true },
   });
   const totals = await ticketTotals(ticketId);
   return {
     id: ticket.id,
     name: ticket.name,
     status: ticket.status,
+    registerId: ticket.registerId,
+    registerName: ticket.register?.name ?? null,
     customerId: ticket.customerId,
     customer: ticket.customer,
     discountCents: ticket.discountCents,
@@ -190,6 +192,33 @@ posRouter.post("/tickets/:id/hold", async (req, res) => {
 posRouter.post("/tickets/:id/recall", async (req, res) => {
   await prisma.ticket.update({ where: { id: req.params.id }, data: { status: "open" } });
   res.json(await serializeTicket(req.params.id));
+});
+
+/** Pull an open/held ticket onto this till (live sync across registers). */
+posRouter.post("/tickets/:id/claim", async (req: AuthedRequest, res) => {
+  const body = z.object({ registerId: z.string() }).safeParse(req.body);
+  if (!body.success) return res.status(400).json({ error: "registerId required" });
+  const existing = await prisma.ticket.findFirst({
+    where: { id: req.params.id, storeId: req.user!.storeId },
+  });
+  if (!existing) return res.status(404).json({ error: "Ticket not found" });
+  if (existing.status !== "open" && existing.status !== "held") {
+    return res.status(400).json({ error: "Ticket is no longer open" });
+  }
+  const register = await prisma.register.findFirst({
+    where: { id: body.data.registerId, storeId: req.user!.storeId },
+  });
+  if (!register) return res.status(400).json({ error: "Register not found" });
+  await prisma.ticket.update({
+    where: { id: existing.id },
+    data: {
+      status: "open",
+      registerId: register.id,
+      employeeId: req.user!.sub,
+      updatedAt: new Date(),
+    },
+  });
+  res.json(await serializeTicket(existing.id));
 });
 
 posRouter.post("/tickets/:id/pay", async (req: AuthedRequest, res) => {

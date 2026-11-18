@@ -125,7 +125,7 @@ function Dashboard() {
       <div className="panel-box">
         <h3>Quick links</h3>
         <p style={{ color: "var(--muted)", margin: 0 }}>
-          Use the sidebar for catalog, inventory receiving, customer loyalty, employee PINs, sales void/refund,
+          Use the sidebar for items, inventory receiving, customer loyalty, employee PINs, sales void/refund,
           and PurePOS reports. Open the POS till on port 5173 for register sales.
         </p>
       </div>
@@ -202,7 +202,7 @@ function CatalogPage() {
     <div>
       <div className="page-head">
         <div>
-          <h2>Catalog</h2>
+          <h2>Items</h2>
           <p>Items, variants, categories, kits, SKU / barcode, stock toggle</p>
         </div>
         <button type="button" onClick={() => setShowForm((v) => !v)}>
@@ -334,7 +334,7 @@ function ModifiersPage() {
   }
 
   useEffect(() => {
-    void load().catch((err) => setError(err instanceof Error ? err.message : "Could not load catalog"));
+    void load().catch((err) => setError(err instanceof Error ? err.message : "Could not load items"));
   }, []);
 
   return (

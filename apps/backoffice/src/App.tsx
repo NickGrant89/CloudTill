@@ -96,7 +96,7 @@ export function App() {
 
   const nav: { id: PageId; label: string }[] = [
     { id: "dashboard", label: "Dashboard" },
-    { id: "catalog", label: "Catalog" },
+    { id: "catalog", label: "Items" },
     { id: "modifiers", label: "Modifiers" },
     { id: "inventory", label: "Inventory" },
     { id: "stocktake", label: "Stocktake" },

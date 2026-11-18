@@ -69,6 +69,8 @@ interface Ticket {
   id: string;
   name: string;
   status: string;
+  registerId?: string | null;
+  registerName?: string | null;
   customerId: string | null;
   customer?: { id: string; name: string; loyaltyPoints: number; storeCreditCents: number } | null;
   lines: TicketLine[];
@@ -78,6 +80,8 @@ interface Ticket {
   subtotalCents: number;
   taxCents: number;
   totalCents: number;
+  updatedAt?: string;
+  createdAt?: string;
 }
 
 interface PaymentType {
@@ -123,10 +127,12 @@ interface BoardTicket {
   status: string;
   source: string;
   kitchenStatus: string | null;
+  registerName?: string | null;
   lineCount: number;
   lines: { name: string; quantity: number }[];
   customerName: string | null;
   note: string | null;
+  updatedAt?: string;
 }
 
 interface KitchenOrder {
@@ -150,6 +156,8 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   const [modal, setModal] = useState<Modal>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [held, setHeld] = useState<Ticket[]>([]);
+  const [openTickets, setOpenTickets] = useState<Ticket[]>([]);
+  const [liveSyncLabel, setLiveSyncLabel] = useState("");
   const [payAmounts, setPayAmounts] = useState<Record<string, number>>({});
   const [giftCardCode, setGiftCardCode] = useState("GC-DEMO50");
   const [selectedMods, setSelectedMods] = useState<Record<string, Modifier[]>>({});
@@ -271,7 +279,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
         setPaymentTypes(cached.paymentTypes as PaymentType[]);
         if (cached.settings) setSettings(cached.settings as typeof settings);
         if (cached.favorites) setFavorites(cached.favorites as Item[]);
-        setCatalogError("Offline · using cached catalog (server wins when back online)");
+        setCatalogError("Offline · using cached items (server wins when back online)");
       } else {
         const broken = [cats, its, pts].find((result) => result.status === "rejected");
         setCatalogError(
@@ -329,9 +337,59 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     };
   }, []);
 
+  const refreshOpenTickets = useCallback(async () => {
+    if (!offlineRef.current.online) return;
+    try {
+      const list = await api<Ticket[]>("/pos/tickets?status=open");
+      setOpenTickets(Array.isArray(list) ? list : []);
+      const current = ticketRef.current;
+      if (!current || isLocalTicket(current)) return;
+      const remote = list.find((t) => t.id === current.id);
+      if (remote) {
+        const localUpdated = current.updatedAt || "";
+        const remoteUpdated = remote.updatedAt || "";
+        if (remoteUpdated && remoteUpdated > localUpdated) {
+          setCurrentTicket(remote);
+          setLiveSyncLabel("Updated from another till");
+        }
+        return;
+      }
+      try {
+        const fresh = await api<Ticket>(`/pos/tickets/${current.id}`);
+        if (fresh.status === "open" || fresh.status === "held") {
+          if ((fresh.updatedAt || "") > (current.updatedAt || "")) {
+            setCurrentTicket(fresh);
+            setLiveSyncLabel("Updated from another till");
+          }
+        } else {
+          setCurrentTicket(null);
+          setLiveSyncLabel("Ticket closed on another till");
+        }
+      } catch {
+        /* keep local view if fetch fails */
+      }
+    } catch {
+      setOpenTickets([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!offline.online) return;
+    void refreshOpenTickets();
+    const id = window.setInterval(() => void refreshOpenTickets(), 2500);
+    return () => window.clearInterval(id);
+  }, [offline.online, registerId, refreshOpenTickets]);
+
+  useEffect(() => {
+    if (!liveSyncLabel) return;
+    const id = window.setTimeout(() => setLiveSyncLabel(""), 2200);
+    return () => window.clearTimeout(id);
+  }, [liveSyncLabel]);
+
   useEffect(() => {
     setCurrentTicket(null);
     creatingRef.current = null;
+    setOpenTickets([]);
     void (async () => {
       try {
         const local = await readLocalTicket(registerId);
@@ -525,6 +583,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
       await api(`/pos/tickets/${ticket.id}/hold`, { method: "POST" });
       setCurrentTicket(null);
       setMobilePane("items");
+      void refreshOpenTickets();
     } catch (error) {
       fail("Could not hold ticket", error);
     }
@@ -546,6 +605,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
       });
       setCurrentTicket(null);
       setMobilePane("items");
+      void refreshOpenTickets();
     } catch (error) {
       fail("Could not clear ticket", error);
     }
@@ -554,9 +614,10 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   async function openHeld() {
     try {
       const list = await api<Ticket[]>("/pos/tickets?status=held");
-      setHeld(list);
+      setHeld(Array.isArray(list) ? list : []);
       setModal({ type: "held" });
     } catch (error) {
+      setHeld([]);
       fail("Held tickets", error);
     }
   }
@@ -567,8 +628,48 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
       setCurrentTicket(t);
       setModal(null);
       setMobilePane("ticket");
+      void refreshOpenTickets();
     } catch (error) {
       fail("Could not recall ticket", error);
+    }
+  }
+
+  /** Live-sync: open a store ticket on this till (any register). */
+  async function adoptTicket(id: string) {
+    try {
+      const t = await api<Ticket>(`/pos/tickets/${id}/claim`, {
+        method: "POST",
+        body: JSON.stringify({ registerId }),
+      });
+      setCurrentTicket(t);
+      setModal(null);
+      setMobilePane("ticket");
+      setLiveSyncLabel(`Opened from ${t.registerName || "store"}`);
+      void refreshOpenTickets();
+    } catch (error) {
+      fail("Could not open ticket on this till", error);
+    }
+  }
+
+  async function openTicketsBoard() {
+    try {
+      const b = await api<BoardTicket[]>("/extras/tickets-board");
+      setBoard(Array.isArray(b) ? b : []);
+      setModal({ type: "board" });
+    } catch (error) {
+      setBoard([]);
+      fail("Tickets", error);
+    }
+  }
+
+  async function openKitchenBoard() {
+    try {
+      const k = await api<KitchenOrder[]>("/kitchen/orders");
+      setKitchenOrders(Array.isArray(k) ? k : []);
+      setModal({ type: "kitchen" });
+    } catch (error) {
+      setKitchenOrders([]);
+      fail("Kitchen", error);
     }
   }
 
@@ -879,8 +980,8 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             offline.online
               ? offline.pendingSales
                 ? `${offline.pendingSales} sale(s) waiting to sync — click to sync, or Export backup`
-                : "Online · catalog follows server · storage persistence requested"
-              : "Offline · sales queue locally; catalog from cache"
+                : "Online · items follow server · storage persistence requested"
+              : "Offline · sales queue locally; items from cache"
           }
           onClick={() => {
             if (offline.online && offline.pendingSales) void syncQueuedSales();
@@ -904,26 +1005,10 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
           </button>
         ) : null}
         <div className={`toolbar-actions${tillPhase === "options" || tillPhase === "pay" || tillPhase === "done" ? " is-quiet" : ""}`}>
-        <button
-          type="button"
-          onClick={() =>
-            void api<BoardTicket[]>("/extras/tickets-board").then((b) => {
-              setBoard(b);
-              setModal({ type: "board" });
-            })
-          }
-        >
-          Tickets
+        <button type="button" onClick={() => void openTicketsBoard()}>
+          Tickets{openTickets.length ? ` · ${openTickets.length}` : ""}
         </button>
-        <button
-          type="button"
-          onClick={() =>
-            void api<KitchenOrder[]>("/kitchen/orders").then((k) => {
-              setKitchenOrders(k);
-              setModal({ type: "kitchen" });
-            })
-          }
-        >
+        <button type="button" onClick={() => void openKitchenBoard()}>
           Kitchen
         </button>
         <button type="button" className={clockedIn ? "is-live" : ""} onClick={() => void toggleClock()}>
@@ -1077,6 +1162,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
 
         <section className="panel ticket-panel">
           <div className="ticket-head">
+            {liveSyncLabel ? <p className="live-sync-toast" role="status">{liveSyncLabel}</p> : null}
             <button type="button" className="mobile-only back-items" onClick={() => setMobilePane("items")}>
               Items
             </button>
@@ -1084,11 +1170,48 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
               <h2>{ticket?.name ?? "New sale"}</h2>
               <div style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
                 {ticket?.customer ? `${ticket.customer.name} · ${ticket.customer.loyaltyPoints} pts` : "Walk-in"}
+                {ticket?.registerName ? ` · ${ticket.registerName}` : ""}
+                {offline.online ? " · live sync" : ""}
               </div>
             </div>
             <button type="button" className="btn ghost" onClick={() => void openCustomers()}>
               Customer
             </button>
+          </div>
+
+          <div className="open-tickets-rail" aria-label="Open tickets across tills">
+            <div className="open-tickets-label">
+              <span>Open tills{offline.online ? " · live" : ""}</span>
+              <button type="button" className="linkish" onClick={() => void refreshOpenTickets()}>
+                Refresh
+              </button>
+            </div>
+            {openTickets.length === 0 ? (
+              <p className="open-tickets-empty">No open tickets on any till — start a sale anytime.</p>
+            ) : (
+              <div className="open-tickets-chips">
+                {openTickets.map((t) => {
+                  const active = ticket?.id === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      className={`open-ticket-chip${active ? " active" : ""}`}
+                      onClick={() => {
+                        if (active) return;
+                        void adoptTicket(t.id);
+                      }}
+                    >
+                      <strong>{t.name}</strong>
+                      <span>
+                        {t.registerName || "Till"} · {t.lines.length} item{t.lines.length === 1 ? "" : "s"} ·{" "}
+                        {money(t.totalCents)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div className="ticket-lines">
@@ -1116,7 +1239,13 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
                 </div>
               );
             })}
-            {!ticket?.lines.length && <p className="empty-ticket">Tap an item to start the sale.</p>}
+            {!ticket?.lines.length && (
+              <p className="empty-ticket">
+                {openTickets.length
+                  ? "Tap an open ticket above to continue it here, or add an item for a new sale."
+                  : "No open orders — tap an item to start a new sale."}
+              </p>
+            )}
           </div>
 
           <div className="totals">
@@ -1328,19 +1457,25 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
       {modal?.type === "board" && (
         <div className="modal-backdrop" onClick={() => setModal(null)}>
           <div className="modal wide" onClick={(e) => e.stopPropagation()}>
-            <h3>Open tickets board</h3>
-            {board.length === 0 && <p style={{ color: "var(--muted)" }}>No open or held tickets.</p>}
+            <h3>Open tickets · all tills</h3>
+            <p style={{ color: "var(--muted)", marginTop: 0 }}>
+              Live across the store. Tap any ticket to continue it on this till.
+            </p>
+            {board.length === 0 && (
+              <p style={{ color: "var(--muted)" }}>No open or held tickets — tills are clear.</p>
+            )}
             {board.map((t) => (
               <button
                 key={t.id}
                 type="button"
                 className="list-btn"
-                onClick={() => void recall(t.id)}
+                onClick={() => void adoptTicket(t.id)}
               >
                 <strong>
                   {t.name} · {t.status}
                 </strong>
                 <div style={{ color: "var(--muted)" }}>
+                  {t.registerName ? `${t.registerName} · ` : ""}
                   {t.source}
                   {t.kitchenStatus ? ` · kitchen ${t.kitchenStatus}` : ""} · {t.lineCount} lines
                   {t.customerName ? ` · ${t.customerName}` : ""}
