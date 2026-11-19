@@ -12,15 +12,27 @@ interface Props {
 }
 
 export function Login({ onSuccess }: Props) {
+  const [email, setEmail] = useState("");
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
+  const [stores, setStores] = useState<{ id: string; name: string; slug?: string }[]>([]);
+  const [storeId, setStoreId] = useState("");
   const pinRef = useRef("");
+  const emailRef = useRef("");
+  const storeIdRef = useRef("");
   const busyRef = useRef(false);
 
   useEffect(() => {
-    api<{ id: string; name: string }[]>("/auth/stores").then(setStores).catch(() => undefined);
+    api<{ id: string; name: string; slug?: string }[]>("/auth/stores")
+      .then((list) => {
+        setStores(list);
+        if (list.length === 1) {
+          storeIdRef.current = list[0].id;
+          setStoreId(list[0].id);
+        }
+      })
+      .catch(() => undefined);
   }, []);
 
   function setPinValue(next: string) {
@@ -41,7 +53,11 @@ export function Login({ onSuccess }: Props) {
         registers: SessionRegister[];
       }>("/auth/login", {
         method: "POST",
-        body: JSON.stringify({ pin: nextPin }),
+        body: JSON.stringify({
+          pin: nextPin,
+          ...(emailRef.current.trim() ? { email: emailRef.current.trim() } : {}),
+          ...(storeIdRef.current ? { storeId: storeIdRef.current } : {}),
+        }),
       });
       onSuccess(data);
     } catch (e) {
@@ -73,13 +89,41 @@ export function Login({ onSuccess }: Props) {
     <div className="login">
       <div className="login-card">
         <h1 className="brand">PurePOS</h1>
-        <p className="tag">Enter your PIN</p>
+        <p className="tag">Sign in with email + PIN</p>
 
-        {stores.length > 0 && (
-          <p style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: -6 }}>
-            Demo store: {stores[0].name}
-          </p>
+        {stores.length > 1 && (
+          <label style={{ display: "grid", gap: 6, textAlign: "left", marginBottom: 10, fontSize: "0.85rem", fontWeight: 700 }}>
+            Store
+            <select
+              value={storeId}
+              onChange={(e) => {
+                storeIdRef.current = e.target.value;
+                setStoreId(e.target.value);
+              }}
+            >
+              <option value="">Any store (match PIN)</option>
+              {stores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
         )}
+
+        <label style={{ display: "grid", gap: 6, textAlign: "left", marginBottom: 10, fontSize: "0.85rem", fontWeight: 700 }}>
+          Email
+          <input
+            type="email"
+            autoComplete="username"
+            placeholder="you@business.co.uk (or leave blank for demo PIN)"
+            value={email}
+            onChange={(e) => {
+              emailRef.current = e.target.value;
+              setEmail(e.target.value);
+            }}
+          />
+        </label>
 
         <div className="pin-display">{pin ? "•".repeat(pin.length) : "Enter PIN"}</div>
 
