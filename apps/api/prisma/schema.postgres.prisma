@@ -1,0 +1,11 @@
+// Copy over schema.prisma (or swap provider) when deploying with Postgres.
+// Keep models identical to schema.prisma — only the datasource provider differs.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}

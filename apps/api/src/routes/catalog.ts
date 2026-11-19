@@ -1,0 +1,574 @@
+import { Router } from "express";
+import { z } from "zod";
+import { prisma } from "../db.js";
+import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
+
+export const catalogRouter = Router();
+catalogRouter.use(requireAuth);
+
+catalogRouter.get("/categories", async (req: AuthedRequest, res) => {
+  const cats = await prisma.category.findMany({
+    where: { storeId: req.user!.storeId },
+    orderBy: { sortOrder: "asc" },
+  });
+  res.json(cats);
+});
+
+catalogRouter.post("/categories", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const body = z
+    .object({ name: z.string().min(1), color: z.string().optional(), sortOrder: z.number().optional() })
+    .parse(req.body);
+  const cat = await prisma.category.create({
+    data: { storeId: req.user!.storeId, name: body.name, color: body.color ?? "#2F6F4E", sortOrder: body.sortOrder ?? 0 },
+  });
+  res.status(201).json(cat);
+});
+
+catalogRouter.patch("/categories/:id", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const body = z.object({ name: z.string().optional(), color: z.string().optional(), sortOrder: z.number().optional() }).parse(req.body);
+  const cat = await prisma.category.update({ where: { id: req.params.id }, data: body });
+  res.json(cat);
+});
+
+catalogRouter.delete("/categories/:id", requireRole("owner", "manager"), async (req, res) => {
+  await prisma.category.delete({ where: { id: req.params.id } });
+  res.status(204).end();
+});
+
+catalogRouter.get("/items", async (req: AuthedRequest, res) => {
+  const storeId = req.user!.storeId;
+  const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  const categoryId = typeof req.query.categoryId === "string" ? req.query.categoryId : undefined;
+  const barcode = typeof req.query.barcode === "string" ? req.query.barcode.trim() : undefined;
+
+  const items = await prisma.item.findMany({
+    where: {
+      storeId,
+      active: true,
+      ...(categoryId ? { categoryId } : {}),
+      ...(q
+        ? {
+            OR: [
+              { name: { contains: q } },
+              { variants: { some: { sku: { contains: q } } } },
+              { variants: { some: { barcode: { contains: q } } } },
+            ],
+          }
+        : {}),
+      ...(barcode ? { variants: { some: { barcode } } } : {}),
+    },
+    include: {
+      variants: { where: { active: true } },
+      modifierGroups: { include: { modifiers: { where: { active: true } } } },
+      kitComponents: true,
+    },
+    orderBy: { name: "asc" },
+  });
+
+  const levels = await prisma.inventoryLevel.findMany({ where: { storeId } });
+  const levelMap = new Map(levels.map((l) => [`${l.variantId}`, l]));
+
+  const mapped = items.map((item) => ({
+    ...item,
+    variants: item.variants.map((v) => ({
+      ...v,
+      stockQty: levelMap.get(v.id)?.quantity ?? 0,
+      lowStock: levelMap.get(v.id)?.lowStock ?? 5,
+    })),
+  }));
+
+  res.json(mapped);
+});
+
+catalogRouter.post("/items", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const body = z
+    .object({
+      name: z.string().min(1),
+      categoryId: z.string().nullable().optional(),
+      color: z.string().optional(),
+      description: z.string().optional(),
+      soldBy: z.enum(["each", "weight"]).optional(),
+      isComposite: z.boolean().optional(),
+      trackStock: z.boolean().optional(),
+      priceCents: z.number().int(),
+      costCents: z.number().int().optional(),
+      sku: z.string().min(1),
+      barcode: z.string().optional(),
+      stockQty: z.number().optional(),
+      modifiers: z
+        .array(
+          z.object({
+            name: z.string(),
+            minSelect: z.number().optional(),
+            maxSelect: z.number().optional(),
+            options: z.array(z.object({ name: z.string(), priceCents: z.number().int() })),
+          })
+        )
+        .optional(),
+    })
+    .parse(req.body);
+
+  const item = await prisma.item.create({
+    data: {
+      storeId: req.user!.storeId,
+      name: body.name,
+      categoryId: body.categoryId ?? null,
+      color: body.color ?? "#3D5A4C",
+      description: body.description,
+      soldBy: body.soldBy ?? "each",
+      isComposite: body.isComposite ?? false,
+      variants: {
+        create: {
+          name: "Regular",
+          sku: body.sku,
+          barcode: body.barcode,
+          priceCents: body.priceCents,
+          costCents: body.costCents ?? 0,
+          trackStock: body.trackStock ?? true,
+        },
+      },
+    },
+    include: { variants: true },
+  });
+
+  await prisma.inventoryLevel.create({
+    data: {
+      storeId: req.user!.storeId,
+      variantId: item.variants[0].id,
+      quantity: body.stockQty ?? 0,
+      lowStock: 5,
+    },
+  });
+
+  if (body.modifiers?.length) {
+    for (const g of body.modifiers) {
+      await prisma.modifierGroup.create({
+        data: {
+          itemId: item.id,
+          name: g.name,
+          minSelect: g.minSelect ?? 0,
+          maxSelect: g.maxSelect ?? 1,
+          modifiers: { create: g.options.map((o) => ({ name: o.name, priceCents: o.priceCents })) },
+        },
+      });
+    }
+  }
+
+  const full = await prisma.item.findUnique({
+    where: { id: item.id },
+    include: {
+      variants: true,
+      modifierGroups: { include: { modifiers: true } },
+    },
+  });
+  res.status(201).json(full);
+});
+
+/**
+ * Which other stores already have matching SKUs (for branch assign UI).
+ * Items remain store-scoped; “on a branch” means a copy exists there.
+ */
+catalogRouter.get("/items/store-presence", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const storeId = req.user!.storeId;
+  const items = await prisma.item.findMany({
+    where: { storeId, active: true },
+    include: { variants: { where: { active: true }, select: { sku: true } } },
+  });
+  const skus = [...new Set(items.flatMap((i) => i.variants.map((v) => v.sku).filter(Boolean)))];
+  const stores = await prisma.store.findMany({
+    select: { id: true, name: true, slug: true },
+    orderBy: { name: "asc" },
+  });
+  const elsewhere =
+    skus.length === 0
+      ? []
+      : await prisma.variant.findMany({
+          where: {
+            sku: { in: skus },
+            active: true,
+            item: { storeId: { not: storeId }, active: true },
+          },
+          select: {
+            sku: true,
+            item: { select: { storeId: true, store: { select: { id: true, name: true } } } },
+          },
+        });
+
+  const bySku = new Map<string, { storeId: string; storeName: string }[]>();
+  for (const row of elsewhere) {
+    const list = bySku.get(row.sku) ?? [];
+    if (!list.some((s) => s.storeId === row.item.storeId)) {
+      list.push({ storeId: row.item.storeId, storeName: row.item.store.name });
+    }
+    bySku.set(row.sku, list);
+  }
+
+  const presence = items.map((item) => {
+    const itemSkus = item.variants.map((v) => v.sku);
+    const storesPresent = new Map<string, string>();
+    for (const sku of itemSkus) {
+      for (const hit of bySku.get(sku) ?? []) {
+        storesPresent.set(hit.storeId, hit.storeName);
+      }
+    }
+    return {
+      itemId: item.id,
+      name: item.name,
+      skus: itemSkus,
+      stores: [...storesPresent.entries()].map(([id, name]) => ({ id, name })),
+    };
+  });
+
+  res.json({
+    currentStoreId: storeId,
+    stores,
+    presence,
+  });
+});
+
+/** Copy selected items onto other branches (by SKU; skip if already there). */
+catalogRouter.post("/items/assign-stores", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const body = z
+    .object({
+      itemIds: z.array(z.string()).min(1),
+      storeIds: z.array(z.string()).min(1),
+      stockQty: z.number().optional(),
+    })
+    .safeParse(req.body);
+  if (!body.success) return res.status(400).json({ error: "itemIds and storeIds required" });
+
+  const sourceStoreId = req.user!.storeId;
+  const targetIds = body.data.storeIds.filter((id) => id !== sourceStoreId);
+  if (!targetIds.length) return res.status(400).json({ error: "Pick at least one other branch/store" });
+
+  const targets = await prisma.store.findMany({ where: { id: { in: targetIds } } });
+  if (targets.length !== targetIds.length) {
+    return res.status(400).json({ error: "One or more target stores were not found" });
+  }
+
+  const sources = await prisma.item.findMany({
+    where: { id: { in: body.data.itemIds }, storeId: sourceStoreId, active: true },
+    include: {
+      variants: { where: { active: true } },
+      category: true,
+      modifierGroups: { include: { modifiers: { where: { active: true } } } },
+    },
+  });
+  if (!sources.length) return res.status(404).json({ error: "No items found in this store" });
+
+  const created: { itemName: string; storeName: string }[] = [];
+  const skipped: { itemName: string; storeName: string; reason: string }[] = [];
+  const openingStock = body.data.stockQty ?? 0;
+
+  for (const target of targets) {
+    for (const source of sources) {
+      const primarySku = source.variants[0]?.sku;
+      if (!primarySku) {
+        skipped.push({ itemName: source.name, storeName: target.name, reason: "No SKU" });
+        continue;
+      }
+      const existing = await prisma.variant.findFirst({
+        where: {
+          sku: primarySku,
+          active: true,
+          item: { storeId: target.id, active: true },
+        },
+      });
+      if (existing) {
+        skipped.push({ itemName: source.name, storeName: target.name, reason: "Already on branch (same SKU)" });
+        continue;
+      }
+
+      let categoryId: string | null = null;
+      if (source.category) {
+        const match =
+          (await prisma.category.findFirst({
+            where: { storeId: target.id, name: source.category.name },
+          })) ??
+          (await prisma.category.create({
+            data: {
+              storeId: target.id,
+              name: source.category.name,
+              color: source.category.color,
+              sortOrder: source.category.sortOrder,
+            },
+          }));
+        categoryId = match.id;
+      }
+
+      const copied = await prisma.item.create({
+        data: {
+          storeId: target.id,
+          name: source.name,
+          description: source.description,
+          color: source.color,
+          soldBy: source.soldBy,
+          isComposite: source.isComposite,
+          categoryId,
+          variants: {
+            create: source.variants.map((v) => ({
+              name: v.name,
+              sku: v.sku,
+              barcode: v.barcode,
+              priceCents: v.priceCents,
+              costCents: v.costCents,
+              trackStock: v.trackStock,
+            })),
+          },
+        },
+        include: { variants: true },
+      });
+
+      for (const v of copied.variants) {
+        await prisma.inventoryLevel.create({
+          data: {
+            storeId: target.id,
+            variantId: v.id,
+            quantity: openingStock,
+            lowStock: 5,
+          },
+        });
+      }
+
+      for (const g of source.modifierGroups) {
+        await prisma.modifierGroup.create({
+          data: {
+            itemId: copied.id,
+            name: g.name,
+            minSelect: g.minSelect,
+            maxSelect: g.maxSelect,
+            modifiers: {
+              create: g.modifiers.map((m) => ({
+                name: m.name,
+                priceCents: m.priceCents,
+              })),
+            },
+          },
+        });
+      }
+
+      created.push({ itemName: source.name, storeName: target.name });
+    }
+  }
+
+  res.json({
+    ok: true,
+    createdCount: created.length,
+    skippedCount: skipped.length,
+    created,
+    skipped,
+    message:
+      created.length === 0
+        ? "Nothing new to assign — those items may already be on the selected branches."
+        : `Assigned ${created.length} item(s) to branch(es).`,
+  });
+});
+
+catalogRouter.patch("/items/:id", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const body = z
+    .object({
+      name: z.string().optional(),
+      categoryId: z.string().nullable().optional(),
+      color: z.string().optional(),
+      description: z.string().nullable().optional(),
+      active: z.boolean().optional(),
+      priceCents: z.number().int().optional(),
+      sku: z.string().optional(),
+      barcode: z.string().nullable().optional(),
+      trackStock: z.boolean().optional(),
+    })
+    .parse(req.body);
+
+  const { priceCents, sku, barcode, trackStock, ...itemData } = body;
+  await prisma.item.update({ where: { id: req.params.id }, data: itemData });
+
+  if (priceCents !== undefined || sku || barcode !== undefined || trackStock !== undefined) {
+    const variant = await prisma.variant.findFirst({ where: { itemId: req.params.id } });
+    if (variant) {
+      await prisma.variant.update({
+        where: { id: variant.id },
+        data: {
+          ...(priceCents !== undefined ? { priceCents } : {}),
+          ...(sku ? { sku } : {}),
+          ...(barcode !== undefined ? { barcode } : {}),
+          ...(trackStock !== undefined ? { trackStock } : {}),
+        },
+      });
+    }
+  }
+
+  const full = await prisma.item.findUnique({
+    where: { id: req.params.id },
+    include: { variants: true, modifierGroups: { include: { modifiers: true } } },
+  });
+  res.json(full);
+});
+
+catalogRouter.delete("/items/:id", requireRole("owner", "manager"), async (req, res) => {
+  await prisma.item.update({ where: { id: req.params.id }, data: { active: false } });
+  res.status(204).end();
+});
+
+catalogRouter.get("/modifier-sets", async (req: AuthedRequest, res) => {
+  const groups = await prisma.modifierGroup.findMany({
+    where: { item: { storeId: req.user!.storeId, active: true } },
+    include: {
+      modifiers: { where: { active: true } },
+      item: { select: { id: true, name: true } },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  const byName = new Map<
+    string,
+    {
+      name: string;
+      minSelect: number;
+      maxSelect: number;
+      options: { name: string; priceCents: number }[];
+      assignments: { groupId: string; itemId: string; itemName: string }[];
+    }
+  >();
+
+  for (const group of groups) {
+    const assignment = { groupId: group.id, itemId: group.item.id, itemName: group.item.name };
+    const existing = byName.get(group.name.toLowerCase());
+    if (!existing) {
+      byName.set(group.name.toLowerCase(), {
+        name: group.name,
+        minSelect: group.minSelect,
+        maxSelect: group.maxSelect,
+        options: group.modifiers.map((modifier) => ({ name: modifier.name, priceCents: modifier.priceCents })),
+        assignments: [assignment],
+      });
+    } else {
+      existing.assignments.push(assignment);
+    }
+  }
+
+  res.json([...byName.values()]);
+});
+
+catalogRouter.post("/modifier-sets", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const body = z
+    .object({
+      name: z.string().min(1),
+      minSelect: z.number().int().min(0).default(0),
+      maxSelect: z.number().int().min(1).default(1),
+      options: z.array(z.object({ name: z.string().min(1), priceCents: z.number().int() })).min(1),
+      itemIds: z.array(z.string()).min(1),
+    })
+    .parse(req.body);
+
+  const items = await prisma.item.findMany({
+    where: { id: { in: body.itemIds }, storeId: req.user!.storeId, active: true },
+    include: { modifierGroups: { select: { name: true } } },
+  });
+
+  const created: { groupId: string; itemId: string; itemName: string }[] = [];
+  const skipped: string[] = [];
+  for (const item of items) {
+    if (item.modifierGroups.some((group) => group.name.toLowerCase() === body.name.toLowerCase())) {
+      skipped.push(item.name);
+      continue;
+    }
+    const group = await prisma.modifierGroup.create({
+      data: {
+        itemId: item.id,
+        name: body.name.trim(),
+        minSelect: Math.min(body.minSelect, body.maxSelect),
+        maxSelect: body.maxSelect,
+        modifiers: {
+          create: body.options.map((option) => ({ name: option.name.trim(), priceCents: option.priceCents })),
+        },
+      },
+    });
+    created.push({ groupId: group.id, itemId: item.id, itemName: item.name });
+  }
+
+  res.status(201).json({ created, skipped });
+});
+
+catalogRouter.get("/items/:id/modifiers", async (req, res) => {
+  const groups = await prisma.modifierGroup.findMany({
+    where: { itemId: req.params.id },
+    include: { modifiers: true },
+    orderBy: { name: "asc" },
+  });
+  res.json(groups);
+});
+
+catalogRouter.post("/items/:id/modifier-groups", requireRole("owner", "manager"), async (req, res) => {
+  const body = z
+    .object({
+      name: z.string().min(1),
+      minSelect: z.number().int().optional(),
+      maxSelect: z.number().int().optional(),
+      modifiers: z
+        .array(z.object({ name: z.string(), priceCents: z.number().int().default(0) }))
+        .optional(),
+    })
+    .parse(req.body);
+  const group = await prisma.modifierGroup.create({
+    data: {
+      itemId: req.params.id,
+      name: body.name,
+      minSelect: body.minSelect ?? 0,
+      maxSelect: body.maxSelect ?? 1,
+      modifiers: body.modifiers?.length
+        ? { create: body.modifiers.map((m) => ({ name: m.name, priceCents: m.priceCents })) }
+        : undefined,
+    },
+    include: { modifiers: true },
+  });
+  res.status(201).json(group);
+});
+
+catalogRouter.patch("/modifier-groups/:id", requireRole("owner", "manager"), async (req, res) => {
+  const body = z
+    .object({
+      name: z.string().optional(),
+      minSelect: z.number().int().optional(),
+      maxSelect: z.number().int().optional(),
+    })
+    .parse(req.body);
+  const group = await prisma.modifierGroup.update({
+    where: { id: req.params.id },
+    data: body,
+    include: { modifiers: true },
+  });
+  res.json(group);
+});
+
+catalogRouter.delete("/modifier-groups/:id", requireRole("owner", "manager"), async (req, res) => {
+  await prisma.modifier.deleteMany({ where: { groupId: req.params.id } });
+  await prisma.modifierGroup.delete({ where: { id: req.params.id } });
+  res.status(204).end();
+});
+
+catalogRouter.post("/modifier-groups/:id/modifiers", requireRole("owner", "manager"), async (req, res) => {
+  const body = z
+    .object({ name: z.string().min(1), priceCents: z.number().int().default(0) })
+    .parse(req.body);
+  const mod = await prisma.modifier.create({
+    data: { groupId: req.params.id, name: body.name, priceCents: body.priceCents },
+  });
+  res.status(201).json(mod);
+});
+
+catalogRouter.patch("/modifiers/:id", requireRole("owner", "manager"), async (req, res) => {
+  const body = z
+    .object({
+      name: z.string().optional(),
+      priceCents: z.number().int().optional(),
+      active: z.boolean().optional(),
+    })
+    .parse(req.body);
+  const mod = await prisma.modifier.update({ where: { id: req.params.id }, data: body });
+  res.json(mod);
+});
+
+catalogRouter.delete("/modifiers/:id", requireRole("owner", "manager"), async (req, res) => {
+  await prisma.modifier.update({ where: { id: req.params.id }, data: { active: false } });
+  res.status(204).end();
+});
