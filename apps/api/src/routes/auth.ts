@@ -85,3 +85,20 @@ authRouter.get("/stores", async (_req, res) => {
   });
   res.json(stores);
 });
+
+/** Public roster for till clock-in — no PINs, active staff only. */
+authRouter.get("/stores/:storeId/staff", async (req, res) => {
+  const store = await prisma.store.findUnique({ where: { id: req.params.storeId } });
+  if (!store) return res.status(404).json({ error: "Store not found" });
+
+  const staff = await prisma.employee.findMany({
+    where: { storeId: store.id, active: true },
+    orderBy: [{ role: "asc" }, { name: "asc" }],
+    select: { id: true, name: true, email: true, role: true },
+  });
+
+  res.json({
+    store: { id: store.id, name: store.name, slug: store.slug },
+    staff,
+  });
+});
