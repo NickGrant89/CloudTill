@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PurePOS UK | Cloud till, back office &amp; online ordering</title>
+    <meta
+      name="description"
+      content="PurePOS is the UK cloud POS: offline till, central back office, kitchen board, and customer ordering. Solo £29, Shop £59, Group £99."
+    />
+    <meta name="author" content="PurePOS UK" />
+    <link rel="canonical" href="https://purepos.co.uk/" />
+    <meta property="og:title" content="PurePOS UK | Till · back office · online ordering" />
+    <meta
+      property="og:description"
+      content="Cloud till, back office, kitchen, and online ordering. Offline tills. From £29/mo."
+    />
+    <meta property="og:url" content="https://purepos.co.uk/" />
+    <meta property="og:locale" content="en_GB" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --ink: #0b1c24;
+        --muted: #5a6f7a;
+        --paper: #f3faf8;
+        --line: rgba(11, 28, 36, 0.12);
+        --accent: #0d9488;
+        --accent-deep: #0f766e;
+        --accent-soft: rgba(13, 148, 136, 0.14);
+        --deep: #083344;
+        --warm: #c2410c;
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        font-family: Manrope, "Avenir Next", system-ui, sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(ellipse 80% 50% at 0% 0%, #c5ebe4 0%, transparent 55%),
+          radial-gradient(ellipse 55% 35% at 100% 6%, rgba(194, 65, 12, 0.12) 0%, transparent 48%),
+          linear-gradient(180deg, #f7fcfb 0%, var(--paper) 42%, #e7f3ef 100%);
+        min-height: 100vh;
+      }
+      a { color: inherit; }
+      .wrap { width: min(1120px, calc(100% - 2rem)); margin: 0 auto; }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1.05rem 0;
+        position: relative;
+        z-index: 5;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        text-decoration: none;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+      }
+      .brand img {
+        width: 40px;
+        height: 40px;
+        object-fit: cover;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+      }
+      .brand strong { font-size: 1.12rem; }
+      .brand em {
+        font-style: normal;
+        color: var(--accent);
+        font-weight: 700;
+        font-size: 0.9rem;
+      }
+      nav { display: flex; gap: 0.85rem 1rem; align-items: center; flex-wrap: wrap; }
+      nav a {
+        text-decoration: none;
+        color: var(--muted);
+        font-weight: 600;
+        font-size: 0.92rem;
+      }
+      nav a:hover { color: var(--accent-deep); }
+      nav a.btn {
+        color: #fff;
+        font-size: 0.92rem;
+      }
+      nav a.btn:hover { color: #fff; }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 48px;
+        padding: 0 1.2rem;
+        border-radius: 12px;
+        border: none;
+        font-weight: 700;
+        text-decoration: none;
+        cursor: pointer;
+        transition: transform 0.2s ease, background 0.2s ease, filter 0.2s ease;
+      }
+      .btn:hover { transform: translateY(-1px); }
+      .btn-primary { background: var(--accent); color: #fff; }
+      .btn-primary:hover { background: var(--accent-deep); }
+      .btn-ghost {
+        background: rgba(8, 51, 68, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.55);
+        color: #fff;
+      }
+      .btn-ghost-dark {
+        background: transparent;
+        border: 1px solid var(--line);
+        color: var(--ink);
+      }
+
+      .hero {
+        position: relative;
+        min-height: min(92vh, 780px);
+        margin: 0 calc(50% - 50vw);
+        width: 100vw;
+        display: grid;
+        align-items: end;
+        overflow: hidden;
+        color: #fff;
+      }
+      .hero-media {
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(105deg, rgba(8, 24, 32, 0.9) 16%, rgba(8, 24, 32, 0.52) 55%, rgba(13, 148, 136, 0.3) 100%),
+          url("./assets/hero-till.png") center / cover no-repeat;
+        transform: scale(1.04);
+        animation: drift 18s ease-in-out infinite alternate;
+      }
+      .hero-inner {
+        position: relative;
+        z-index: 1;
+        width: min(1120px, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: 3.5rem 0 4.25rem;
+        max-width: 38rem;
+        animation: rise 0.85s ease both;
+      }
+      .hero .product {
+        font-family: Fraunces, "Iowan Old Style", Georgia, serif;
+        font-size: clamp(3.4rem, 10vw, 5.6rem);
+        line-height: 0.92;
+        letter-spacing: -0.035em;
+        margin: 0 0 0.85rem;
+        font-weight: 700;
+      }
+      .hero h1 {
+        font-family: Fraunces, Georgia, serif;
+        font-size: clamp(1.35rem, 2.8vw, 1.85rem);
+        font-weight: 600;
+        margin: 0 0 0.85rem;
+        line-height: 1.25;
+        max-width: 22ch;
+      }
+      .hero p {
+        margin: 0 0 1.55rem;
+        color: rgba(255, 255, 255, 0.86);
+        font-size: 1.05rem;
+        max-width: 34rem;
+        line-height: 1.55;
+      }
+      .cta-row { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+
+      section { padding: 4.5rem 0; }
+      .eyebrow {
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: var(--accent-deep);
+        margin: 0 0 0.55rem;
+      }
+      .section-title {
+        font-family: Fraunces, Georgia, serif;
+        font-size: clamp(1.75rem, 3vw, 2.4rem);
+        margin: 0 0 0.55rem;
+        letter-spacing: -0.02em;
+      }
+      .section-lede {
+        color: var(--muted);
+        margin: 0 0 2rem;
+        max-width: 38rem;
+        line-height: 1.55;
+      }
+
+      .surface-list {
+        display: grid;
+        gap: 1.5rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .surface-list li {
+        display: grid;
+        grid-template-columns: 3rem 1fr;
+        gap: 1rem;
+        align-items: start;
+        animation: rise 0.7s ease both;
+      }
+      .surface-list li:nth-child(2) { animation-delay: 0.08s; }
+      .surface-list li:nth-child(3) { animation-delay: 0.16s; }
+      .surface-num {
+        width: 3rem;
+        height: 3rem;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        background: var(--accent-soft);
+        color: var(--accent-deep);
+        font-weight: 800;
+      }
+      .surface-list h3 { margin: 0 0 0.25rem; font-size: 1.12rem; }
+      .surface-list p { margin: 0; color: var(--muted); line-height: 1.5; }
+
+      .feature-band {
+        margin: 0 calc(50% - 50vw);
+        width: 100vw;
+        padding: 4.5rem 0;
+        background:
+          linear-gradient(180deg, rgba(8, 51, 68, 0.03), transparent 40%),
+          linear-gradient(90deg, rgba(13, 148, 136, 0.08), transparent 55%);
+      }
+      .feature-band.alt {
+        background:
+          linear-gradient(180deg, transparent, rgba(194, 65, 12, 0.05) 50%, transparent),
+          linear-gradient(270deg, rgba(13, 148, 136, 0.1), transparent 50%);
+      }
+      .split {
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+        gap: 2.5rem;
+        align-items: center;
+      }
+      .split.reverse { grid-template-columns: 0.95fr 1.05fr; }
+      .split.reverse .copy { order: 2; }
+      .split.reverse .visual { order: 1; }
+      .visual {
+        min-height: 320px;
+        border-radius: 0;
+        background-size: cover;
+        background-position: center;
+        box-shadow: none;
+        position: relative;
+        overflow: hidden;
+        animation: rise 0.9s ease both;
+      }
+      .visual::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(160deg, transparent 40%, rgba(8, 51, 68, 0.18));
+      }
+      .visual.till {
+        background-image:
+          linear-gradient(125deg, rgba(8, 51, 68, 0.35), transparent 55%),
+          url("./assets/hero-till.png");
+      }
+      .visual.order {
+        background-image:
+          linear-gradient(200deg, rgba(13, 148, 136, 0.25), transparent 50%),
+          url("./assets/surface-ordering.png");
+      }
+      .capability-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 0.95rem;
+      }
+      .capability-list li {
+        padding: 0 0 0.95rem;
+        border-bottom: 1px solid var(--line);
+        animation: rise 0.65s ease both;
+      }
+      .capability-list li:last-child { border-bottom: none; padding-bottom: 0; }
+      .capability-list li:nth-child(2) { animation-delay: 0.05s; }
+      .capability-list li:nth-child(3) { animation-delay: 0.1s; }
+      .capability-list li:nth-child(4) { animation-delay: 0.15s; }
+      .capability-list li:nth-child(5) { animation-delay: 0.2s; }
+      .capability-list strong {
+        display: block;
+        margin-bottom: 0.2rem;
+        font-size: 1.02rem;
+      }
+      .capability-list span {
+        color: var(--muted);
+        line-height: 1.5;
+        font-size: 0.95rem;
+      }
+
+      .atmosphere {
+        margin: 0 calc(50% - 50vw);
+        width: 100vw;
+        min-height: 300px;
+        background:
+          linear-gradient(90deg, rgba(11, 39, 64, 0.88), rgba(13, 148, 136, 0.55)),
+          url("./assets/surface-ordering.png") center / cover no-repeat;
+        color: #fff;
+        display: grid;
+        align-items: center;
+      }
+      .atmosphere .wrap { padding: 3.25rem 0; animation: fade 0.9s ease both; }
+      .atmosphere h2 {
+        font-family: Fraunces, Georgia, serif;
+        margin: 0 0 0.55rem;
+        font-size: clamp(1.6rem, 3vw, 2.15rem);
+        max-width: 18ch;
+      }
+      .atmosphere p {
+        margin: 0;
+        max-width: 38rem;
+        opacity: 0.92;
+        line-height: 1.55;
+      }
+
+      .matrix {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1.75rem 2rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .matrix li {
+        padding: 0;
+        animation: rise 0.7s ease both;
+      }
+      .matrix li:nth-child(2) { animation-delay: 0.06s; }
+      .matrix li:nth-child(3) { animation-delay: 0.12s; }
+      .matrix li:nth-child(4) { animation-delay: 0.18s; }
+      .matrix li:nth-child(5) { animation-delay: 0.24s; }
+      .matrix li:nth-child(6) { animation-delay: 0.3s; }
+      .matrix h3 {
+        font-family: Fraunces, Georgia, serif;
+        margin: 0 0 0.35rem;
+        font-size: 1.2rem;
+      }
+      .matrix p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.5;
+        font-size: 0.95rem;
+      }
+
+      .tiers {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1rem;
+      }
+      .tier {
+        background: rgba(255, 255, 255, 0.82);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 1.35rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+        min-height: 100%;
+        transition: border-color 0.2s ease, transform 0.2s ease;
+      }
+      .tier:hover { border-color: var(--accent); transform: translateY(-2px); }
+      .tier.featured {
+        border-color: var(--accent);
+        box-shadow: 0 18px 40px rgba(11, 28, 36, 0.08);
+      }
+      .tier h3 { font-family: Fraunces, Georgia, serif; margin: 0; font-size: 1.45rem; }
+      .tier .price { font-size: 2rem; font-weight: 800; letter-spacing: -0.02em; }
+      .tier .price span { font-size: 0.9rem; font-weight: 500; color: var(--muted); }
+      .tier ul { margin: 0; padding-left: 1.1rem; color: var(--muted); flex: 1; }
+      .tier li { margin: 0.35rem 0; }
+      .tier .btn { width: 100%; margin-top: 0.35rem; }
+
+      .try-links {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1rem;
+        margin: 1.5rem 0 0;
+      }
+      .try-links a {
+        display: block;
+        text-decoration: none;
+        font-weight: 700;
+        color: var(--accent-deep);
+        padding: 0.85rem 0;
+        border-top: 1px solid var(--line);
+      }
+      .try-links a:hover { color: var(--ink); }
+      .try-links span {
+        display: block;
+        margin-top: 0.25rem;
+        color: var(--muted);
+        font-weight: 500;
+        font-size: 0.9rem;
+        line-height: 1.4;
+      }
+      .note {
+        margin-top: 1.5rem;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      footer {
+        padding: 2.5rem 0 3rem;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      footer strong { color: var(--ink); }
+      footer a { color: var(--accent-deep); font-weight: 700; text-decoration: none; }
+
+      @keyframes fade {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes rise {
+        from { opacity: 0; transform: translateY(14px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes drift {
+        from { transform: scale(1.04) translate3d(0, 0, 0); }
+        to { transform: scale(1.08) translate3d(-1.2%, -0.8%, 0); }
+      }
+
+      @media (max-width: 900px) {
+        .hero { min-height: auto; }
+        .hero-inner { padding: 2.5rem 0 3rem; }
+        .cta-row .btn { width: 100%; }
+        .split, .split.reverse, .tiers, .matrix, .try-links { grid-template-columns: 1fr; }
+        .split.reverse .copy, .split.reverse .visual { order: initial; }
+        .visual { min-height: 240px; }
+        header { flex-direction: column; align-items: flex-start; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .hero-media,
+        .hero-inner,
+        .surface-list li,
+        .capability-list li,
+        .matrix li,
+        .visual,
+        .atmosphere .wrap { animation: none; }
+        .btn:hover, .tier:hover { transform: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <a class="brand" href="/">
+          <img src="./assets/purepos-logo-2.jpg" alt="" width="40" height="40" />
+          <div>
+            <strong>PurePOS</strong>
+            <em> UK</em>
+          </div>
+        </a>
+        <nav aria-label="Primary">
+          <a href="#features">Features</a>
+          <a href="#pricing">Pricing</a>
+          <a href="/pos/">Till</a>
+          <a href="/bo/">Back office</a>
+          <a href="/order/">Ordering</a>
+          <a class="btn btn-primary" href="/pricing#trial">Start trial</a>
+        </nav>
+      </header>
+    </div>
+
+    <section class="hero" aria-label="Hero">
+      <div class="hero-media" aria-hidden="true"></div>
+      <div class="hero-inner">
+        <p class="product">PurePOS</p>
+        <h1>Cloud till, back office, and online ordering.</h1>
+        <p>
+          One UK product for shops: sell offline, run the shop from back office, take orders into the same kitchen.
+        </p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="/pos/">Open the till</a>
+          <a class="btn btn-ghost" href="#features">See platform features</a>
+        </div>
+      </div>
+    </section>
+
+    <div class="wrap">
+      <section id="product">
+        <p class="eyebrow">The product</p>
+        <h2 class="section-title">Three surfaces. One PurePOS.</h2>
+        <p class="section-lede">
+          Till, back office, and ordering share the same items, tickets, and cloud — not a WordPress bolt-on, not a Loyverse wrapper.
+        </p>
+        <ul class="surface-list">
+          <li>
+            <div class="surface-num">1</div>
+            <div>
+              <h3>Cloud till</h3>
+              <p>Browser / tablet register with offline queue — keep selling when wifi drops, sync when you’re back.</p>
+            </div>
+          </li>
+          <li>
+            <div class="surface-num">2</div>
+            <div>
+              <h3>Back office</h3>
+              <p>Items, customers, stock, staff, billing, and reports — managed once for every till.</p>
+            </div>
+          </li>
+          <li>
+            <div class="surface-num">3</div>
+            <div>
+              <h3>Online ordering</h3>
+              <p>Customers order into the same store; kitchen sees web and delivery tickets from Shop upward.</p>
+            </div>
+          </li>
+        </ul>
+      </section>
+    </div>
+
+    <div class="feature-band" id="features">
+      <div class="wrap">
+        <div class="split">
+          <div class="copy">
+            <p class="eyebrow">Cloud till</p>
+            <h2 class="section-title">Built for the rush — even when Wi‑Fi isn’t</h2>
+            <p class="section-lede">
+              Open the register once online so the menu caches. If the network drops, sales queue locally and push up when you reconnect.
+            </p>
+            <ul class="capability-list">
+              <li>
+                <strong>Fast item grid &amp; barcodes</strong>
+                <span>Categories, SKU / barcode lookup, and favourites / quick keys for your busiest lines.</span>
+              </li>
+              <li>
+                <strong>Open tickets &amp; hold / recall</strong>
+                <span>Park a tab, reopen it on another till, and keep the floor moving with a live tickets board.</span>
+              </li>
+              <li>
+                <strong>Payments that match the counter</strong>
+                <span>Cash, card, gift card, split tender, discounts, VAT, and tip presets with round-up.</span>
+              </li>
+              <li>
+                <strong>Receipts &amp; drawer</strong>
+                <span>HTML and ESC/POS printing, drawer kick, voids, refunds, and reprints from the same sale.</span>
+              </li>
+              <li>
+                <strong>Shifts &amp; offline sync</strong>
+                <span>Cash-up shifts, Sync badge for queued sales, and export if you need a local backup before clearing browser data.</span>
+              </li>
+            </ul>
+          </div>
+          <div class="visual till" role="img" aria-label="PurePOS till on a café counter"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feature-band alt">
+      <div class="wrap">
+        <div class="split reverse">
+          <div class="copy">
+            <p class="eyebrow">Back office</p>
+            <h2 class="section-title">Run the shop once — every till stays in sync</h2>
+            <p class="section-lede">
+              Catalogue and people live in the cloud. Change an item, price, or stock level and the register picks it up on refresh.
+            </p>
+            <ul class="capability-list">
+              <li>
+                <strong>Items, modifiers &amp; kits</strong>
+                <span>Groups, variants, modifiers, and combo kits with branch assignment when you grow past one site.</span>
+              </li>
+              <li>
+                <strong>Stock, transfers &amp; stocktake</strong>
+                <span>Inventory counts, low-stock glances, multi-store transfers on Group, and barcode label helpers.</span>
+              </li>
+              <li>
+                <strong>Customers &amp; gift cards</strong>
+                <span>Loyalty, store credit, and gift cards that work on the till — import customers by CSV when you migrate.</span>
+              </li>
+              <li>
+                <strong>Staff, PINs &amp; time clock</strong>
+                <span>Owner, manager, and cashier roles with PIN login and a simple time clock for the floor.</span>
+              </li>
+              <li>
+                <strong>Reports, EOD &amp; backup</strong>
+                <span>Sales views, end-of-day CSV export, kitchen printer settings, and store backup / restore from Settings.</span>
+              </li>
+            </ul>
+          </div>
+          <div class="visual order" role="img" aria-label="PurePOS ordering and kitchen surface"></div>
+        </div>
+      </div>
+    </div>
+
+    <section class="atmosphere" aria-label="Ordering and kitchen">
+      <div class="wrap">
+        <h2>Ordering that lands on the kitchen board</h2>
+        <p>
+          Web ordering for pickup, dine-in, or delivery uses the same catalogue. From Shop upward, Just Eat, Deliveroo, Uber Eats and more feed the same kitchen queue the till already uses.
+        </p>
+      </div>
+    </section>
+
+    <div class="wrap">
+      <section id="platform">
+        <p class="eyebrow">Also in the platform</p>
+        <h2 class="section-title">Details that make a UK shop work</h2>
+        <p class="section-lede">
+          Software-first PurePOS — use the devices you already have, pay monthly in £, and keep VAT-ready receipts without locking into a till you can’t leave.
+        </p>
+        <ul class="matrix">
+          <li>
+            <h3>Kitchen display</h3>
+            <p>Open tickets from the till and online orders share one kitchen view so the pass stays clear.</p>
+          </li>
+          <li>
+            <h3>CSV import</h3>
+            <p>Bring items, customers, and stock across without retyping the whole catalogue.</p>
+          </li>
+          <li>
+            <h3>Multi-store Group</h3>
+            <p>Transfer stock between sites and assign items to branches from one back office.</p>
+          </li>
+          <li>
+            <h3>Mobile register</h3>
+            <p>Expo scaffold for grid, pay, kitchen, and print jobs when you need a phone or handheld.</p>
+          </li>
+          <li>
+            <h3>Licensing &amp; trials</h3>
+            <p>14-day trials, Solo / Shop / Group packages, and license keys from the pricing page.</p>
+          </li>
+          <li>
+            <h3>No hardware lock-in</h3>
+            <p>Browser tills and optional network / USB printer bridges — not a forced card terminal rent.</p>
+          </li>
+        </ul>
+      </section>
+
+      <section id="pricing">
+        <p class="eyebrow">Pricing</p>
+        <h2 class="section-title">UK packages for the high street</h2>
+        <p class="section-lede">Solo, Shop, Group — clear £ pricing, offline tills, delivery apps from Shop. Start a 14-day trial.</p>
+        <div class="tiers">
+          <article class="tier">
+            <h3>Solo</h3>
+            <p>One till that keeps selling when the Wi‑Fi doesn’t</p>
+            <div class="price">£29<span>/mo</span></div>
+            <ul>
+              <li>Cloud back office + offline till</li>
+              <li>Items, VAT, live ticket sync</li>
+              <li>Offline sale queue · backup &amp; restore</li>
+              <li>No hardware lock-in</li>
+            </ul>
+            <a class="btn btn-primary" href="/pricing">Choose Solo</a>
+          </article>
+          <article class="tier featured">
+            <h3>Shop</h3>
+            <p>Most UK shops — till, kitchen, ordering &amp; delivery apps</p>
+            <div class="price">£59<span>/mo</span></div>
+            <ul>
+              <li>Everything in Solo</li>
+              <li>Web ordering + kitchen board</li>
+              <li>Just Eat, Deliveroo, Uber Eats &amp; more</li>
+              <li>CSV import · reports / EOD</li>
+            </ul>
+            <a class="btn btn-primary" href="/pricing">Choose Shop</a>
+          </article>
+          <article class="tier">
+            <h3>Group</h3>
+            <p>One cloud for every site</p>
+            <div class="price">£99<span>/mo</span></div>
+            <ul>
+              <li>Everything in Shop</li>
+              <li>Multi-store stock transfers</li>
+              <li>Assign items to branches</li>
+              <li>Priority pilot support</li>
+            </ul>
+            <a class="btn btn-primary" href="/pricing">Choose Group</a>
+          </article>
+        </div>
+      </section>
+
+      <section id="try">
+        <p class="eyebrow">Try it</p>
+        <h2 class="section-title">Open PurePOS live</h2>
+        <p class="section-lede">
+          Demo café is ready now. Owner PIN <strong>1234</strong> · cashier PIN <strong>1111</strong> · email <strong>owner@purepos.demo</strong>.
+        </p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="/pos/">Try demo till</a>
+          <a class="btn btn-ghost-dark" href="/pricing#trial">Start company trial</a>
+        </div>
+        <div class="try-links">
+          <a href="/pos/">Till<span>Sell, hold tickets, take payment — even offline.</span></a>
+          <a href="/bo/">Back office<span>Items, stock, staff, reports, and settings.</span></a>
+          <a href="/order/">Online ordering<span>Customer menu into the same kitchen board.</span></a>
+        </div>
+        <p class="note">PurePOS UK · hello@purepos.co.uk</p>
+      </section>
+
+      <footer>
+        <p>
+          <strong>PurePOS UK</strong> ·
+          <a href="https://purepos.co.uk/">purepos.co.uk</a>
+          · cloud till · back office · online ordering
+        </p>
+      </footer>
+    </div>
+  </body>
+</html>

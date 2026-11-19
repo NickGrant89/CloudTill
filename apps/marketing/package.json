@@ -1,0 +1,10 @@
+{
+  "name": "@cloudtill/marketing",
+  "private": true,
+  "version": "0.0.1",
+  "description": "PurePOS UK marketing site (static)",
+  "scripts": {
+    "dev": "python3 -m http.server 5180 --bind 127.0.0.1",
+    "start": "python3 -m http.server 5180 --bind 127.0.0.1"
+  }
+}
