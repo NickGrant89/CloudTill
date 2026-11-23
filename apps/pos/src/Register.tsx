@@ -1586,10 +1586,20 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
                   entry.modifierGroups.length > 0
               );
               return (
-                <div key={line.key} className="line">
+                <div key={line.key} className={`line${canEditOptions ? " line-editable" : ""}`}>
                   <div>
-                    <div style={{ fontWeight: 600 }}>{line.name}</div>
-                    {line.modifiers.length > 0 && <ModifierList mods={line.modifiers} />}
+                    {canEditOptions ? (
+                      <button type="button" className="line-edit-hit" onClick={() => openLineEditor(line)}>
+                        <span className="line-edit-name">{line.name}</span>
+                        {line.modifiers.length > 0 && <ModifierList mods={line.modifiers} />}
+                        <span className="line-edit-hint">Edit options</span>
+                      </button>
+                    ) : (
+                      <>
+                        <div style={{ fontWeight: 600 }}>{line.name}</div>
+                        {line.modifiers.length > 0 && <ModifierList mods={line.modifiers} />}
+                      </>
+                    )}
                     <div className="qty-controls" style={{ marginTop: 6 }}>
                       <button type="button" onClick={() => void updateQty(line, line.quantity - 1)}>
                         −
@@ -1598,11 +1608,6 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
                       <button type="button" onClick={() => void updateQty(line, line.quantity + 1)}>
                         +
                       </button>
-                      {canEditOptions && (
-                        <button type="button" onClick={() => openLineEditor(line)}>
-                          Edit
-                        </button>
-                      )}
                     </div>
                   </div>
                   <div style={{ fontWeight: 600 }}>{money(lineTotal)}</div>

@@ -451,10 +451,10 @@ export function ModifierEditor({
                     }}
                   />
                   <button type="button" className="secondary" style={{ minHeight: 32 }} disabled={optionIndex === 0} onClick={() => void moveOptions(g, optionIndex, -1)}>
-                    Up
+                    Move up
                   </button>
                   <button type="button" className="secondary" style={{ minHeight: 32 }} disabled={optionIndex === active.length - 1} onClick={() => void moveOptions(g, optionIndex, 1)}>
-                    Down
+                    Move down
                   </button>
                   <button type="button" className="secondary" style={{ minHeight: 32 }} onClick={() => void removeOption(m.id)}>
                     Remove
@@ -811,41 +811,58 @@ export function ModifierLibrary({
               {selectedSet.minSelect > 0 ? "Required" : "Optional"} · {selectedSet.maxSelect > 1 ? "pick many" : "pick one"}
             </p>
             <p style={{ marginTop: 0 }}>
-              Change names and prices, then Save options. That updates every item that uses {selectedSet.name}. Up and Down set the till order.
+              Change names and prices, then Save options. That updates every item that uses {selectedSet.name}.
             </p>
-            <ul style={{ listStyle: "none", padding: 0, margin: "0 0 14px" }}>
+            <p style={{ marginTop: 0, color: "var(--muted)" }}>
+              Use <strong>Move up</strong> / <strong>Move down</strong> to set the order on the till and online menu.
+            </p>
+            <ul className="modifier-option-list">
               {editOptions.map((option, index) => (
-                <li key={`edit-${index}`} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 8 }}>
-                  <input
-                    value={option.name}
-                    placeholder="Option name"
-                    style={{ flex: "1 1 140px", minWidth: 120 }}
-                    onChange={(e) =>
-                      setEditOptions((rows) => rows.map((row, i) => (i === index ? { ...row, name: e.target.value } : row)))
-                    }
-                  />
-                  <input
-                    value={option.price}
-                    placeholder="0.00"
-                    style={{ width: 96 }}
-                    onChange={(e) =>
-                      setEditOptions((rows) => rows.map((row, i) => (i === index ? { ...row, price: e.target.value } : row)))
-                    }
-                  />
-                  <button type="button" className="secondary" style={{ minHeight: 32 }} disabled={index === 0} onClick={() => void moveSetOption(index, -1)}>
-                    Up
-                  </button>
-                  <button type="button" className="secondary" style={{ minHeight: 32 }} disabled={index === editOptions.length - 1} onClick={() => void moveSetOption(index, 1)}>
-                    Down
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary"
-                    style={{ minHeight: 32 }}
-                    onClick={() => setEditOptions((rows) => rows.filter((_, i) => i !== index))}
-                  >
-                    Remove
-                  </button>
+                <li key={`edit-${index}`} className="modifier-option-row">
+                  <div className="modifier-option-fields">
+                    <input
+                      value={option.name}
+                      placeholder="Option name"
+                      aria-label={`Option ${index + 1} name`}
+                      onChange={(e) =>
+                        setEditOptions((rows) => rows.map((row, i) => (i === index ? { ...row, name: e.target.value } : row)))
+                      }
+                    />
+                    <input
+                      value={option.price}
+                      placeholder="0.00"
+                      aria-label={`${option.name || `Option ${index + 1}`} price`}
+                      className="modifier-option-price"
+                      onChange={(e) =>
+                        setEditOptions((rows) => rows.map((row, i) => (i === index ? { ...row, price: e.target.value } : row)))
+                      }
+                    />
+                  </div>
+                  <div className="modifier-option-actions">
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={index === 0}
+                      onClick={() => void moveSetOption(index, -1)}
+                    >
+                      Move up
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={index === editOptions.length - 1}
+                      onClick={() => void moveSetOption(index, 1)}
+                    >
+                      Move down
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => setEditOptions((rows) => rows.filter((_, i) => i !== index))}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>

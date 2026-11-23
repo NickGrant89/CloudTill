@@ -482,6 +482,52 @@ tr:last-child td {
   min-height: 220px;
 }
 
+.modifier-option-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.modifier-option-row {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+  background: #fff;
+  display: grid;
+  gap: 8px;
+}
+
+.modifier-option-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.modifier-option-fields input {
+  flex: 1 1 140px;
+  min-width: 120px;
+}
+
+.modifier-option-price {
+  flex: 0 0 96px !important;
+  width: 96px;
+  min-width: 96px;
+}
+
+.modifier-option-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.modifier-option-actions button {
+  min-height: 40px;
+  flex: 1 1 auto;
+}
+
 @media (max-width: 860px) {
   .modifier-layout {
     grid-template-columns: 1fr;

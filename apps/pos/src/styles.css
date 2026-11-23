@@ -631,6 +631,39 @@ select:focus-visible {
   font-weight: 600;
 }
 
+.line-edit-hit {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.line-edit-name {
+  display: block;
+  font-weight: 600;
+}
+
+.line-edit-hint {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent, #1f6f5b);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.line-editable .line-edit-hit:focus-visible {
+  outline: 2px solid var(--accent, #1f6f5b);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
 .totals {
   flex: 0 0 auto;
   min-width: 0;
