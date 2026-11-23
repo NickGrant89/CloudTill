@@ -25,7 +25,11 @@ html,
 body,
 #root {
   height: 100%;
+  /* svh = chrome visible (Safari tabs/toolbar); dvh tracks show/hide */
+  height: 100svh;
   height: 100dvh;
+  max-height: 100svh;
+  max-height: 100dvh;
   margin: 0;
 }
 
@@ -68,13 +72,19 @@ select:focus-visible {
 
 .app-shell {
   height: 100%;
+  height: 100svh;
   height: 100dvh;
+  max-height: 100svh;
+  max-height: 100dvh;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
   padding-top: env(safe-area-inset-top);
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* Login */
@@ -172,12 +182,14 @@ select:focus-visible {
 
 /* Register layout */
 .register {
-  flex: 1;
+  flex: 1 1 auto;
   display: grid;
-  grid-template-columns: 1.4fr 0.9fr;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.85fr);
   gap: 14px;
   padding: 14px;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .mobile-only,
@@ -192,8 +204,15 @@ select:focus-visible {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.16);
+}
+
+.catalog-panel,
+.ticket-panel {
+  min-width: 0;
+  min-height: 0;
 }
 
 .topbar {
@@ -213,7 +232,7 @@ select:focus-visible {
 
 .search {
   flex: 1;
-  min-width: 180px;
+  min-width: 0;
   min-height: 44px;
   border-radius: 12px;
   border: 1px solid var(--line);
@@ -251,17 +270,27 @@ select:focus-visible {
 }
 
 .grid {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
   overflow: auto;
+  -webkit-overflow-scrolling: touch;
   padding: 10px 14px 16px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(128px, 100%), 1fr));
+  /* Fixed row tracks — Safari collapses aspect-ratio grid items inside flex overflow */
+  grid-auto-rows: 120px;
   gap: 10px;
   align-content: start;
+  align-items: stretch;
 }
 
 .item-tile {
-  aspect-ratio: 1;
+  aspect-ratio: auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
   border-radius: 16px;
   padding: 12px;
   display: flex;
@@ -477,8 +506,11 @@ select:focus-visible {
 }
 
 .ticket-lines {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
   overflow: auto;
+  -webkit-overflow-scrolling: touch;
   padding: 0 10px;
 }
 
@@ -514,16 +546,32 @@ select:focus-visible {
 }
 
 .totals {
+  flex: 0 0 auto;
+  min-width: 0;
   padding: 12px 16px;
   border-top: 1px solid var(--line);
   display: grid;
   gap: 6px;
   font-size: 0.95rem;
+  background: #f6f1e8;
 }
 
 .totals .row {
   display: flex;
   justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.totals .row > span {
+  min-width: 0;
+}
+
+.totals .row > span:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .totals .grand {
@@ -535,10 +583,13 @@ select:focus-visible {
 }
 
 .actions {
+  flex: 0 0 auto;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   padding: 0 12px 12px;
+  min-width: 0;
+  background: #f6f1e8;
 }
 
 .actions .pay-btn {
@@ -935,8 +986,8 @@ select:focus-visible {
   padding: 0 12px;
 }
 
-/* iPad / compact tablet: keep sale + ticket side-by-side */
-@media (max-width: 1100px) and (min-width: 700px) {
+/* iPad / tablet (incl. Pro landscape ~1180–1366): sale + ticket side-by-side */
+@media (max-width: 1366px) and (min-width: 700px) {
   .search,
   .field input,
   .field select,
@@ -945,58 +996,92 @@ select:focus-visible {
   }
 
   .toolbar-dark {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    align-items: center;
     gap: 8px;
-    margin: 10px 10px 0;
-    padding: 8px 10px;
+    margin: 8px 8px 0;
+    padding: 6px 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .toolbar-dark::-webkit-scrollbar {
+    display: none;
+  }
+
+  .toolbar-identity {
+    flex: 0 1 auto;
+    min-width: 0;
   }
 
   .toolbar-identity .store-name {
-    max-width: 22vw;
+    max-width: 18vw;
   }
 
   .toolbar-identity .who {
     display: none;
   }
 
+  .toolbar-identity select {
+    max-width: 128px;
+  }
+
+  .offline-badge,
+  .offline-export,
+  .lock-btn {
+    flex: 0 0 auto;
+  }
+
   .toolbar-actions {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     justify-content: flex-end;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     margin-left: auto;
     gap: 6px;
   }
 
   .toolbar-actions button {
-    min-height: 40px;
+    flex: 0 0 auto;
+    min-height: 36px;
     padding: 0 10px;
-    font-size: 0.82rem;
+    font-size: 0.8rem;
+    white-space: nowrap;
   }
 
   .till-steps {
-    margin: 8px 10px 0;
+    margin: 6px 8px 0;
+    flex: 0 0 auto;
+  }
+
+  .till-step {
+    min-height: 32px;
+    padding: 0 8px;
+    font-size: 0.75rem;
   }
 
   .register {
-    grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.95fr);
-    gap: 10px;
-    padding: 10px;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+    gap: 8px;
+    padding: 8px;
   }
 
   .grid {
-    grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(108px, 100%), 1fr));
+    grid-auto-rows: 108px;
     gap: 8px;
     padding: 8px 10px 12px;
   }
 
   .item-tile {
-    min-height: 108px;
-    aspect-ratio: 1;
+    aspect-ratio: auto;
+    height: 100%;
+    min-height: 0;
     padding: 10px;
   }
 
   .item-tile .name {
-    font-size: 0.9rem;
+    font-size: 0.88rem;
   }
 
   .qty-controls button {
@@ -1004,27 +1089,57 @@ select:focus-visible {
     min-height: 44px;
   }
 
+  .ticket-head {
+    flex-wrap: wrap;
+    padding: 10px 12px 6px;
+    gap: 6px;
+  }
+
+  .ticket-head h2 {
+    font-size: 1.2rem;
+  }
+
+  .open-tickets-rail {
+    padding: 0 10px 8px;
+    flex: 0 0 auto;
+    max-height: 72px;
+    overflow: hidden;
+  }
+
+  .open-ticket-chip {
+    min-width: 112px;
+    max-width: 150px;
+    min-height: 48px;
+  }
+
+  .totals {
+    padding: 8px 12px;
+    gap: 3px;
+    font-size: 0.88rem;
+  }
+
+  .totals .grand {
+    font-size: 1.28rem;
+    margin-top: 2px;
+    padding-top: 4px;
+  }
+
   .actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: 6px;
+    padding: 0 10px 10px;
   }
 
   .actions .pay-btn {
     grid-column: 1 / -1;
-    min-height: 52px;
+    order: -1;
+    min-height: 48px;
   }
 
   .actions button {
-    min-height: 46px;
-  }
-
-  .open-ticket-chip {
-    min-width: 124px;
-    max-width: 168px;
-  }
-
-  .ticket-head {
-    flex-wrap: wrap;
+    min-height: 42px;
+    font-size: 0.85rem;
+    padding: 0 6px;
   }
 
   .modal-backdrop {
@@ -1035,6 +1150,98 @@ select:focus-visible {
   .modal.wide {
     width: min(560px, 100%);
     max-height: min(88dvh, 760px);
+  }
+}
+
+/* Short Safari chrome (tabs + toolbar): reclaim vertical space, keep Charge on screen */
+@media (max-height: 820px) and (min-width: 700px) {
+  .toolbar-dark {
+    margin: 4px 6px 0;
+    padding: 4px 6px;
+  }
+
+  .toolbar-actions button,
+  .lock-btn,
+  .offline-badge {
+    min-height: 32px;
+  }
+
+  .till-steps {
+    display: none;
+  }
+
+  .register {
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .topbar {
+    padding: 8px 10px;
+  }
+
+  .chip-row {
+    padding: 6px 10px;
+  }
+
+  .chip {
+    min-height: 34px;
+  }
+
+  .grid {
+    grid-auto-rows: 92px;
+    gap: 6px;
+    padding: 6px 8px 10px;
+  }
+
+  .item-tile {
+    padding: 8px;
+  }
+
+  .open-tickets-rail {
+    max-height: 56px;
+  }
+
+  .open-tickets-empty {
+    font-size: 0.8rem;
+  }
+
+  .ticket-head {
+    padding: 8px 10px 4px;
+  }
+
+  .totals {
+    padding: 6px 10px;
+  }
+
+  .totals .grand {
+    font-size: 1.15rem;
+  }
+
+  .actions {
+    gap: 5px;
+    padding: 0 8px 8px;
+  }
+
+  .actions button {
+    min-height: 38px;
+  }
+
+  .actions .pay-btn {
+    min-height: 44px;
+  }
+}
+
+@media (max-height: 700px) and (min-width: 700px) {
+  .open-tickets-rail {
+    display: none;
+  }
+
+  .brand-mini {
+    display: none;
+  }
+
+  .grid {
+    grid-auto-rows: 84px;
   }
 }
 
@@ -1233,7 +1440,7 @@ select:focus-visible {
 
   .grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-auto-rows: minmax(132px, 18vw);
+    grid-auto-rows: 140px;
     gap: 8px;
     padding: 8px 10px 14px;
   }
