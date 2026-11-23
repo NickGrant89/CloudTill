@@ -1,5 +1,6 @@
 import { prisma } from "./db.js";
 import { parseNumber, parsePoundsToCents } from "./csv.js";
+import type { LoyverseCatalog, LoyverseVariant } from "./loyverseApi.js";
 
 export type LoyversePreviewRow = {
   line: number;
@@ -16,7 +17,7 @@ const CUSTOMER_NOTES =
   "Loyverse customer list. Imports name, email, phone, address, note, visits, spend, and points. Matched by email when one is present.";
 
 type OptionChoice = { name: string; priceCents: number };
-type OptionGroup = { name: string; options: OptionChoice[] };
+type OptionGroup = { name: string; minSelect?: number; options: OptionChoice[] };
 
 type ItemDraft = {
   line: number;
@@ -37,6 +38,8 @@ type ItemDraft = {
   options: { name: string; value: string }[];
   components: { sku: string; quantity: number }[];
   taxes: string[];
+  notes: string[];
+  attachedGroups: OptionGroup[];
 };
 
 function norm(header: string) {
@@ -182,6 +185,8 @@ function buildItems(headers: string[], rows: Record<string, string>[]) {
       options: readOptions(row, map, optionNames),
       components: [],
       taxes: taxes.length ? taxes : previous?.taxes ?? [],
+      notes: [],
+      attachedGroups: previous?.attachedGroups ?? [],
     };
     carriedOptions.set(key, optionNames);
     if (componentSku) {
@@ -216,6 +221,8 @@ function blankDraft(line: number): ItemDraft {
     options: [],
     components: [],
     taxes: [],
+    notes: [],
+    attachedGroups: [],
   };
 }
 
@@ -248,11 +255,12 @@ function buildChoices(list: ItemDraft[], base: ItemDraft): OptionGroup[] {
       if (byValue.has(key)) continue;
       byValue.set(key, { name, priceCents: (row.priceCents ?? base.priceCents ?? 0) - (base.priceCents ?? 0) });
     }
-    return [{ name: axes[0] || "Option", options: [...byValue.values()] }];
+    return [{ name: axes[0] || "Option", minSelect: 1, options: [...byValue.values()] }];
   }
   return [
     {
       name: axes.join(" · "),
+      minSelect: 1,
       options: ordered.map((row) => ({
         name: optionLabel(row) || "Regular",
         priceCents: (row.priceCents ?? base.priceCents ?? 0) - (base.priceCents ?? 0),
@@ -271,6 +279,10 @@ export async function previewLoyverseItems(
   headers: string[],
   rows: Record<string, string>[]
 ): Promise<LoyversePreviewRow[]> {
+  return previewItemGroups(storeId, buildItems(headers, rows));
+}
+
+async function previewItemGroups(storeId: string, groups: Map<string, ItemDraft[]>): Promise<LoyversePreviewRow[]> {
   const existing = await prisma.variant.findMany({
     where: { item: { storeId } },
     include: { item: true },
@@ -278,7 +290,6 @@ export async function previewLoyverseItems(
   const bySku = new Map(existing.map((variant) => [variant.sku.toLowerCase(), variant]));
   const seen = new Set<string>();
   const fileSkus = new Set<string>();
-  const groups = buildItems(headers, rows);
   for (const list of groups.values()) {
     for (const row of list) if (row.sku) fileSkus.add(row.sku.toLowerCase());
   }
@@ -310,9 +321,10 @@ export async function previewLoyverseItems(
       }
       if (row.sku) seen.add(row.sku.toLowerCase());
       if (row.priceInvalid) issues.push({ level: "error", message: "Price is not a number" });
-      else if (row.priceCents == null) {
+      else if (row.priceCents == null && row.notes.length === 0) {
         issues.push({ level: "warning", message: "No price in the file, so this uses the item price" });
       }
+      for (const note of row.notes) issues.push({ level: "warning", message: note });
       if (matchedIds.length > 1) issues.push({ level: "error", message: "These SKUs already belong to different items" });
       for (const component of row.components) {
         if (!fileSkus.has(component.sku.toLowerCase()) && !bySku.has(component.sku.toLowerCase())) {
@@ -380,7 +392,7 @@ export async function previewLoyverseItems(
               description: row.description,
               soldBy: row.soldBy,
               modifierFlags: row.modifierFlags,
-              optionGroups: choices,
+              optionGroups: [...choices, ...row.attachedGroups],
               components,
               isComposite: components.length > 0,
               itemId,
@@ -676,7 +688,7 @@ async function applyItems(storeId: string, rows: LoyversePreviewRow[]) {
           data: {
             itemId,
             name: group.name,
-            minSelect: 1,
+            minSelect: group.minSelect ?? 1,
             maxSelect: 1,
             modifiers: { create: group.options },
           },
@@ -725,4 +737,201 @@ async function applyItems(storeId: string, rows: LoyversePreviewRow[]) {
   }
 
   return { created, updated, categoriesCreated, modifiersLinked, componentsLinked };
+}
+
+const API_NOTES =
+  "Pulled from the Loyverse API. Items, categories, stock, barcodes, options, and modifier choices (with their prices) are included. Customers come in the same pull. Photos and old receipts are not imported.";
+
+function apiCents(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(Number(value))) return null;
+  return Math.round(Number(value) * 100);
+}
+
+function chosenStore(catalog: LoyverseCatalog) {
+  const ids = [
+    ...catalog.inventory.map((level) => level.store_id),
+    ...catalog.items.flatMap((item) => (item.variants ?? []).flatMap((variant) => (variant.stores ?? []).map((store) => store.store_id))),
+  ].filter((id): id is string => Boolean(id));
+  const unique = [...new Set(ids)].sort();
+  const id = unique[0];
+  const name = catalog.stores.find((store) => store.id === id)?.name?.trim();
+  const note =
+    unique.length > 1
+      ? `Stock and prices are from ${name || "the first Loyverse store"}. Other Loyverse stores were left out.`
+      : "";
+  return { id, note };
+}
+
+function variantPrice(variant: LoyverseVariant, storeId?: string) {
+  const store = variant.stores?.find((entry) => entry.store_id === storeId) ?? variant.stores?.[0];
+  const type = store?.pricing_type || variant.default_pricing_type || "FIXED";
+  const amount = store && store.price != null ? store.price : variant.default_price;
+  if (type === "VARIABLE" || amount == null) return { cents: null as number | null, variable: type === "VARIABLE" };
+  return { cents: apiCents(amount), variable: false };
+}
+
+function variantSku(variant: LoyverseVariant) {
+  const sku = variant.sku?.trim();
+  if (sku) return { sku, generated: false };
+  const id = (variant.variant_id || "unknown").replace(/-/g, "");
+  return { sku: `lv-${id}`, generated: true };
+}
+
+function groupsFromCatalog(catalog: LoyverseCatalog) {
+  const { id: storeId } = chosenStore(catalog);
+  const categories = new Map(
+    catalog.categories.filter((category) => category.id && !category.deleted_at).map((category) => [category.id!, category.name?.trim() || ""])
+  );
+  const modifiers = new Map(
+    catalog.modifiers.filter((modifier) => modifier.id && !modifier.deleted_at).map((modifier) => [modifier.id!, modifier])
+  );
+  const stock = new Map<string, number>();
+  for (const level of catalog.inventory) {
+    if (!level.variant_id) continue;
+    if (storeId && level.store_id && level.store_id !== storeId) continue;
+    stock.set(level.variant_id, Number(level.in_stock ?? 0));
+  }
+  const skuByVariant = new Map<string, string>();
+  for (const item of catalog.items) {
+    if (item.deleted_at) continue;
+    for (const variant of item.variants ?? []) {
+      if (variant.deleted_at || !variant.variant_id) continue;
+      skuByVariant.set(variant.variant_id, variantSku(variant).sku);
+    }
+  }
+
+  const groups = new Map<string, ItemDraft[]>();
+  let line = 1;
+  for (const item of catalog.items) {
+    if (item.deleted_at) continue;
+    const variants = (item.variants ?? []).filter((variant) => !variant.deleted_at);
+    if (!variants.length) continue;
+    const key = item.handle?.trim() || item.id || `item-${line}`;
+    const attachedGroups: OptionGroup[] = [];
+    const missingModifiers: string[] = [];
+    for (const modifierId of item.modifiers_ids ?? []) {
+      const modifier = modifiers.get(modifierId);
+      if (!modifier?.name) {
+        missingModifiers.push(modifierId);
+        continue;
+      }
+      const options = (modifier.modifier_options ?? [])
+        .filter((option) => option.name && !option.deleted_at)
+        .map((option) => ({ name: option.name!.trim(), priceCents: apiCents(option.price) ?? 0 }));
+      if (options.length) attachedGroups.push({ name: modifier.name.trim(), minSelect: 0, options });
+    }
+    const list: ItemDraft[] = [];
+    for (const variant of variants) {
+      const priced = variantPrice(variant, storeId);
+      const sku = variantSku(variant);
+      const store = variant.stores?.find((entry) => entry.store_id === storeId) ?? variant.stores?.[0];
+      const first = list.length === 0;
+      const notes: string[] = [];
+      if (sku.generated) notes.push("Loyverse left the SKU blank, so the variant id is used.");
+      if (priced.variable || priced.cents == null) notes.push("Loyverse asks for this price at the till, so it is £0.00 here.");
+      if (first && missingModifiers.length) notes.push("A modifier on this item was not in the Loyverse modifier list.");
+      if (first && attachedGroups.length) {
+        notes.push(
+          `Modifiers: ${attachedGroups
+            .map((group) => `${group.name} (${group.options.map((option) => option.name).join(", ")})`)
+            .join("; ")}`
+        );
+      }
+      const optionNames = [item.option1_name, item.option2_name, item.option3_name];
+      const optionValues = [variant.option1_value, variant.option2_value, variant.option3_value];
+      list.push({
+        line,
+        sku: sku.sku,
+        itemName: item.item_name?.trim() || "",
+        barcode: variant.barcode?.trim() || null,
+        priceCents: priced.cents,
+        priceInvalid: false,
+        costCents: apiCents(variant.cost ?? variant.purchase_cost) ?? 0,
+        trackStock: Boolean(item.track_stock),
+        stockQty: variant.variant_id ? stock.get(variant.variant_id) ?? 0 : 0,
+        lowStock: store?.low_stock != null ? Number(store.low_stock) : 5,
+        active: store?.available_for_sale !== false,
+        categoryName: (item.category_id && categories.get(item.category_id)) || "",
+        description: item.description?.trim() || null,
+        soldBy: item.sold_by_weight ? "weight" : "each",
+        modifierFlags: attachedGroups.length ? [] : [],
+        options: optionNames
+          .map((name, index) => ({ name: name?.trim() || "", value: optionValues[index]?.trim() || "" }))
+          .filter((option) => option.value),
+        components: first
+          ? (item.components ?? [])
+              .map((component) => ({
+                sku: (component.variant_id && skuByVariant.get(component.variant_id)) || "",
+                quantity: Number(component.quantity ?? 1),
+              }))
+              .filter((component) => component.sku)
+          : [],
+        taxes: [],
+        notes,
+        attachedGroups,
+      });
+      line += 1;
+    }
+    groups.set(key, list);
+  }
+  return groups;
+}
+
+export async function previewLoyverseAccount(storeId: string, catalog: LoyverseCatalog) {
+  const itemRows = await previewItemGroups(storeId, groupsFromCatalog(catalog));
+  const customerHeaders = [
+    "Customer name",
+    "Email",
+    "Phone number",
+    "Address",
+    "City",
+    "Region",
+    "Postal code",
+    "Country code",
+    "Note",
+    "Points balance",
+    "Total visits",
+    "Total spent",
+    "Customer code",
+  ];
+  const customerRows = catalog.customers
+    .filter((customer) => !customer.deleted_at)
+    .map((customer) => ({
+      "Customer name": customer.name?.trim() || "",
+      Email: customer.email?.trim() || "",
+      "Phone number": customer.phone_number?.trim() || "",
+      Address: customer.address?.trim() || "",
+      City: customer.city?.trim() || "",
+      Region: customer.region?.trim() || "",
+      "Postal code": customer.postal_code?.trim() || "",
+      "Country code": customer.country_code?.trim() || "",
+      Note: customer.note?.trim() || "",
+      "Points balance": customer.total_points == null ? "" : String(customer.total_points),
+      "Total visits": customer.total_visits == null ? "" : String(customer.total_visits),
+      "Total spent": customer.total_spent == null ? "" : String(customer.total_spent),
+      "Customer code": customer.customer_code?.trim() || "",
+    }));
+  const people = (await previewLoyverseCustomers(storeId, customerHeaders, customerRows)).map((row) => ({
+    ...row,
+    data: { ...row.data, role: "customer" },
+  }));
+  const storeNote = chosenStore(catalog).note;
+  return {
+    rows: [...itemRows, ...people],
+    notes: [API_NOTES, storeNote].filter(Boolean).join(" "),
+  };
+}
+
+export async function applyLoyverseAccount(storeId: string, rows: LoyversePreviewRow[]) {
+  const items = rows.filter((row) => row.data.role === "base" || row.data.role === "option");
+  const customers = rows.filter((row) => row.data.role === "customer");
+  const itemResult = await applyLoyverse(storeId, items, "items");
+  const customerResult = await applyLoyverse(storeId, customers, "customers");
+  return {
+    created: itemResult.created + customerResult.created,
+    updated: itemResult.updated + customerResult.updated,
+    categoriesCreated: itemResult.categoriesCreated,
+    modifiersLinked: itemResult.modifiersLinked,
+    componentsLinked: itemResult.componentsLinked,
+  };
 }

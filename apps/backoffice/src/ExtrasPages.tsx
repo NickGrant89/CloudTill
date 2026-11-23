@@ -312,7 +312,7 @@ const IMPORT_KINDS: { id: ImportKind; label: string; blurb: string }[] = [
     id: "loyverse",
     label: "Loyverse",
     blurb:
-      "Item list or customer export from Loyverse Back Office. Items, categories, stock, barcodes, and options come in. Modifier prices, images, and receipts are not in the Loyverse file.",
+      "Pull the catalogue with a Loyverse access token, or paste an item or customer CSV. The token is used once and not saved. A CSV has no modifier prices.",
   },
   { id: "items", label: "Items", blurb: "Name, group, SKU, price, stock" },
   { id: "customers", label: "Customers", blurb: "Name, email, phone, credit, loyalty" },
@@ -322,6 +322,8 @@ const IMPORT_KINDS: { id: ImportKind; label: string; blurb: string }[] = [
 export function ImportPage() {
   const [kind, setKind] = useState<ImportKind>("items");
   const [csv, setCsv] = useState("");
+  const [loyverseToken, setLoyverseToken] = useState("");
+  const [pulled, setPulled] = useState(false);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -349,11 +351,43 @@ export function ImportPage() {
     const text = await file.text();
     setCsv(text);
     setPreview(null);
+    setPulled(false);
     setMessage("");
     setError("");
   }
 
+  async function runPull() {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await api<PreviewResult>("/import/loyverse/preview", {
+        method: "POST",
+        body: JSON.stringify({ token: loyverseToken }),
+      });
+      setPreview(result);
+      setPulled(true);
+      setMessage(
+        result.errors
+          ? `${result.valid} ready · ${result.errors} row error(s) to fix`
+          : `${result.valid} row(s) ready to import`
+      );
+    } catch (e) {
+      setPreview(null);
+      setPulled(false);
+      const message = e instanceof Error ? e.message : "Loyverse pull failed";
+      setError(
+        /Shop or Group|csv_import|402/i.test(message)
+          ? `${message} Open Settings → Billing to upgrade.`
+          : message
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function runPreview() {
+    setPulled(false);
     setBusy(true);
     setError("");
     setMessage("");
@@ -392,9 +426,9 @@ export function ImportPage() {
         categoriesCreated?: number;
         modifiersLinked?: number;
         componentsLinked?: number;
-      }>("/import/apply", {
+      }>(pulled ? "/import/loyverse/apply" : "/import/apply", {
         method: "POST",
-        body: JSON.stringify({ kind, csv }),
+        body: JSON.stringify(pulled ? { token: loyverseToken } : { kind, csv }),
       });
       const bits = [
         result.created != null ? `${result.created} created` : null,
@@ -405,6 +439,10 @@ export function ImportPage() {
       ].filter(Boolean);
       setMessage(`Imported · ${bits.join(" · ")}`);
       setPreview(null);
+      if (pulled) {
+        setLoyverseToken("");
+        setPulled(false);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Import failed");
     } finally {
@@ -431,6 +469,7 @@ export function ImportPage() {
               onClick={() => {
                 setKind(entry.id);
                 setPreview(null);
+                setPulled(false);
                 setMessage("");
                 setError("");
               }}
@@ -442,6 +481,28 @@ export function ImportPage() {
         <p style={{ margin: "0 0 12px", color: "var(--muted)" }}>
           {IMPORT_KINDS.find((entry) => entry.id === kind)?.blurb}
         </p>
+        {kind === "loyverse" && (
+          <div className="field" style={{ marginBottom: 12 }}>
+            <label htmlFor="loyverse-token">Loyverse access token</label>
+            <input
+              id="loyverse-token"
+              type="password"
+              autoComplete="off"
+              value={loyverseToken}
+              placeholder="Back Office → Access tokens"
+              onChange={(e) => {
+                setLoyverseToken(e.target.value);
+                setPulled(false);
+                setPreview(null);
+              }}
+            />
+            <div className="toolbar" style={{ marginTop: 8 }}>
+              <button type="button" disabled={busy || loyverseToken.trim().length < 20} onClick={() => void runPull()}>
+                {busy ? "Working…" : "Pull from Loyverse"}
+              </button>
+            </div>
+          </div>
+        )}
         <div className="toolbar" style={{ marginBottom: 12 }}>
           <button type="button" className="secondary" onClick={downloadTemplate}>
             Download template
@@ -457,7 +518,7 @@ export function ImportPage() {
           </label>
         </div>
         <div className="field">
-          <label>CSV</label>
+          <label>{kind === "loyverse" ? "Or paste a CSV" : "CSV"}</label>
           <textarea
             rows={10}
             value={csv}
@@ -465,6 +526,7 @@ export function ImportPage() {
             onChange={(e) => {
               setCsv(e.target.value);
               setPreview(null);
+              setPulled(false);
             }}
             style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "0.85rem" }}
           />

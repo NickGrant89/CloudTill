@@ -4,10 +4,13 @@ import { prisma } from "../db.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 import { csvEscape, parseBool, parseCsv, parseNumber, parsePoundsToCents } from "../csv.js";
 import { storeAllowsFeature } from "./billing.js";
+import { LoyverseApiError, pullLoyverse } from "../loyverseApi.js";
 import {
   applyLoyverse,
+  applyLoyverseAccount,
   detectLoyverse,
   loyverseNotes,
+  previewLoyverseAccount,
   previewLoyverseCustomers,
   previewLoyverseItems,
 } from "../loyverseImport.js";
@@ -139,6 +142,52 @@ importRouter.get("/templates/:kind.csv", (req, res) => {
 const importBody = z.object({
   kind: z.enum(["items", "customers", "stock", "loyverse"]),
   csv: z.string().min(1),
+});
+
+const loyverseTokenBody = z.object({ token: z.string().min(1).max(500) });
+
+async function loyverseAccount(token: string) {
+  try {
+    return await pullLoyverse(token);
+  } catch (error) {
+    if (error instanceof LoyverseApiError) return error;
+    throw error;
+  }
+}
+
+importRouter.post("/loyverse/preview", async (req: AuthedRequest, res) => {
+  const body = loyverseTokenBody.safeParse(req.body);
+  if (!body.success) return res.status(400).json({ error: "Paste a Loyverse access token." });
+  const catalog = await loyverseAccount(body.data.token);
+  if (catalog instanceof LoyverseApiError) return res.status(catalog.status).json({ error: catalog.message });
+  const preview = await previewLoyverseAccount(req.user!.storeId, catalog);
+  res.json({
+    kind: "loyverse",
+    detected: "api",
+    notes: preview.notes,
+    total: preview.rows.length,
+    valid: preview.rows.filter((row) => row.action !== "error").length,
+    errors: preview.rows.filter((row) => row.action === "error").length,
+    rows: preview.rows,
+  });
+});
+
+importRouter.post("/loyverse/apply", async (req: AuthedRequest, res) => {
+  const body = loyverseTokenBody.safeParse(req.body);
+  if (!body.success) return res.status(400).json({ error: "Paste a Loyverse access token." });
+  const catalog = await loyverseAccount(body.data.token);
+  if (catalog instanceof LoyverseApiError) return res.status(catalog.status).json({ error: catalog.message });
+  const preview = await previewLoyverseAccount(req.user!.storeId, catalog);
+  const blockers = preview.rows.filter((row) => row.action === "error");
+  if (blockers.length) {
+    return res.status(400).json({
+      error: `Fix ${blockers.length} row error(s) before importing`,
+      errors: blockers.length,
+      rows: blockers.slice(0, 25),
+    });
+  }
+  const result = await applyLoyverseAccount(req.user!.storeId, preview.rows);
+  res.json({ kind: "loyverse", detected: "api", ...result });
 });
 
 importRouter.post("/preview", async (req: AuthedRequest, res) => {
