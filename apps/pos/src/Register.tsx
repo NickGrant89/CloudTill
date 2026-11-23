@@ -194,6 +194,11 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   const [shift, setShift] = useState<{ id: string; openingFloatCents: number } | null>(null);
   const [modal, setModal] = useState<Modal>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customerQuery, setCustomerQuery] = useState("");
+  const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerPhone, setNewCustomerPhone] = useState("");
+  const [customerFormMsg, setCustomerFormMsg] = useState("");
+  const [callerMatches, setCallerMatches] = useState<Customer[]>([]);
   const [held, setHeld] = useState<Ticket[]>([]);
   const [openTickets, setOpenTickets] = useState<Ticket[]>([]);
   const [liveSyncLabel, setLiveSyncLabel] = useState("");
@@ -823,24 +828,153 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     try {
       const list = await api<Customer[]>("/customers");
       setCustomers(list);
+      setCustomerQuery("");
+      setNewCustomerName("");
+      setNewCustomerPhone(textPayPhone.trim());
+      setCustomerFormMsg("");
       setModal({ type: "customers" });
     } catch (error) {
       fail("Customers", error);
     }
   }
 
-  async function attachCustomer(c: Customer) {
+  async function searchCustomers(q: string) {
+    setCustomerQuery(q);
+    try {
+      const list = await api<Customer[]>(`/customers${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ""}`);
+      setCustomers(list);
+    } catch (error) {
+      fail("Customers", error);
+    }
+  }
+
+  async function attachCustomer(c: Customer, opts?: { closeModal?: boolean }) {
     try {
       const t = ticketRef.current ?? (await ensureTicket());
+      if (isLocalTicket(t) || !offline.online) {
+        fail("Customer", new Error("Attach a customer when the till is online"));
+        return false;
+      }
       const updated = await api<Ticket>(`/pos/tickets/${t.id}`, {
         method: "PATCH",
         body: JSON.stringify({ customerId: c.id }),
       });
       setCurrentTicket(updated);
-      setModal(null);
+      setTextPayName(c.name);
+      if (c.phone) setTextPayPhone(c.phone);
+      if (opts?.closeModal !== false) setModal(null);
+      return true;
     } catch (error) {
       fail("Could not attach customer", error);
+      return false;
     }
+  }
+
+  async function createCustomerFromTill(opts?: { name?: string; phone?: string; closeModal?: boolean }) {
+    const name = (opts?.name ?? newCustomerName).trim();
+    const phone = (opts?.phone ?? newCustomerPhone).trim();
+    if (!name) {
+      setCustomerFormMsg("Enter a name");
+      return null;
+    }
+    if (!offline.online) {
+      setCustomerFormMsg("Go online to add a customer");
+      return null;
+    }
+    setCustomerFormMsg("");
+    try {
+      const created = await api<Customer>("/customers", {
+        method: "POST",
+        body: JSON.stringify({ name, phone: phone || undefined }),
+      });
+      setCustomers((prev) => [created, ...prev.filter((row) => row.id !== created.id)]);
+      await attachCustomer(created, { closeModal: opts?.closeModal !== false });
+      setNewCustomerName("");
+      setNewCustomerPhone("");
+      return created;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not add customer";
+      setCustomerFormMsg(message);
+      fail("Could not add customer", error);
+      return null;
+    }
+  }
+
+  async function lookupCallerId(phone: string) {
+    const q = phone.trim();
+    if (q.replace(/\D/g, "").length < 7) {
+      setCallerMatches([]);
+      return;
+    }
+    try {
+      const list = await api<Customer[]>(`/customers?q=${encodeURIComponent(q)}`);
+      const digits = q.replace(/\D/g, "");
+      setCallerMatches(
+        list.filter((row) => (row.phone || "").replace(/\D/g, "").includes(digits) || digits.includes((row.phone || "").replace(/\D/g, "")))
+      );
+    } catch {
+      setCallerMatches([]);
+    }
+  }
+
+  async function saveCallerAsCustomer() {
+    const phone = textPayPhone.trim();
+    const name = textPayName.trim() || phone || "Caller";
+    if (!phone && !textPayName.trim()) {
+      setTextPayMsg("Enter a caller ID (phone) or name first");
+      return;
+    }
+    const existing = callerMatches[0];
+    if (existing) {
+      if (await attachCustomer(existing, { closeModal: false })) {
+        setTextPayMsg(`Attached ${existing.name}`);
+      }
+      return;
+    }
+    const created = await createCustomerFromTill({ name, phone, closeModal: false });
+    if (created) {
+      setTextPayMsg(`Saved ${created.name} and attached to this sale`);
+    }
+  }
+
+  async function ensureCallerCustomerOnTicket(current: Ticket) {
+    if (current.customerId || isLocalTicket(current) || !offline.online) return current;
+    const phone = textPayPhone.trim();
+    const name = textPayName.trim();
+    if (!phone && !name) return current;
+    try {
+      if (phone) {
+        const list = await api<Customer[]>(`/customers?q=${encodeURIComponent(phone)}`);
+        const digits = phone.replace(/\D/g, "");
+        const match = list.find((row) => {
+          const rowDigits = (row.phone || "").replace(/\D/g, "");
+          return rowDigits && digits && (rowDigits.includes(digits) || digits.includes(rowDigits));
+        });
+        if (match) {
+          const updated = await api<Ticket>(`/pos/tickets/${current.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ customerId: match.id }),
+          });
+          setCurrentTicket(updated);
+          return updated;
+        }
+      }
+      if (name && phone) {
+        const created = await api<Customer>("/customers", {
+          method: "POST",
+          body: JSON.stringify({ name, phone }),
+        });
+        const updated = await api<Ticket>(`/pos/tickets/${current.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ customerId: created.id }),
+        });
+        setCurrentTicket(updated);
+        return updated;
+      }
+    } catch {
+      /* pay link can still go without a saved customer */
+    }
+    return current;
   }
 
   async function applyDiscount(discountCents: number, discountPercent: number) {
@@ -913,6 +1047,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   async function openPhoneOrder() {
     setTextPayMsg("");
     setTextPayLink(null);
+    setCallerMatches([]);
     try {
       const t = ticketRef.current ?? (await ensureTicket());
       const label =
@@ -921,18 +1056,25 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
           : t.name.startsWith("Phone")
             ? t.name
             : "Phone order";
+      let phone = textPayPhone;
+      let name = textPayName;
       if (!isLocalTicket(t) && offline.online) {
         const updated = await api<Ticket>(`/pos/tickets/${t.id}`, {
           method: "PATCH",
           body: JSON.stringify({ name: label, note: "Phone order" }),
         });
         setCurrentTicket(updated);
-        setTextPayPhone((prev) => prev || updated.customer?.phone || "");
-        setTextPayName((prev) => prev || updated.customer?.name || textPayName);
+        phone = phone || updated.customer?.phone || "";
+        name = name || updated.customer?.name || "";
+        setTextPayPhone(phone);
+        setTextPayName(name);
       } else {
-        setTextPayPhone((prev) => prev || t.customer?.phone || "");
-        setTextPayName((prev) => prev || t.customer?.name || "");
+        phone = phone || t.customer?.phone || "";
+        name = name || t.customer?.name || "";
+        setTextPayPhone(phone);
+        setTextPayName(name);
       }
+      if (phone) void lookupCallerId(phone);
       setMobilePane("ticket");
       setModal({ type: "phoneOrder" });
     } catch (e) {
@@ -952,17 +1094,18 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     setBusy(true);
     setTextPayMsg("");
     try {
+      let current = await ensureCallerCustomerOnTicket(ticket);
       const label = textPayName.trim()
         ? `Phone · ${textPayName.trim()}`
-        : ticket.name.startsWith("Phone")
-          ? ticket.name
+        : current.name.startsWith("Phone")
+          ? current.name
           : "Phone order";
-      if (ticket.name !== label || ticket.note !== "Phone order") {
-        const renamed = await api<Ticket>(`/pos/tickets/${ticket.id}`, {
+      if (current.name !== label || current.note !== "Phone order") {
+        current = await api<Ticket>(`/pos/tickets/${current.id}`, {
           method: "PATCH",
           body: JSON.stringify({ name: label, note: "Phone order" }),
         });
-        setCurrentTicket(renamed);
+        setCurrentTicket(current);
       }
       const result = await api<{
         message: string;
@@ -972,7 +1115,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
       }>("/text-pay/links", {
         method: "POST",
         body: JSON.stringify({
-          ticketId: ticket.id,
+          ticketId: current.id,
           phone: textPayPhone.trim() || undefined,
           customerName: textPayName.trim() || undefined,
           note: "Phone order",
@@ -1718,21 +1861,38 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             <p className="step-kicker">Phone order</p>
             <h3>Take order → send pay link</h3>
             <ol className="hint" style={{ margin: "0 0 12px", paddingLeft: 18, lineHeight: 1.45 }}>
-              <li>Ring the caller’s items on the till</li>
-              <li>Enter their mobile (optional name)</li>
+              <li>Enter caller ID (their number) and optional name</li>
+              <li>Ring their items on the till</li>
               <li>
-                <strong>Send pay link</strong> — SMS when Twilio is set; otherwise copy the link
+                <strong>Send pay link</strong> — SMS when set up; otherwise copy the link
               </li>
             </ol>
             <p className="pay-summary">
               <span>
                 Due <strong>{money(ticket?.totalCents ?? 0)}</strong>
               </span>
-              <span>{ticket?.name || "Phone order"}</span>
+              <span>
+                {ticket?.customer
+                  ? ticket.customer.name
+                  : ticket?.name || "Phone order"}
+              </span>
             </p>
             {!ticket?.lines.length && (
               <p className="hint">Add items first, then send the link. This ticket is marked as a phone order.</p>
             )}
+            <div className="field">
+              <label>Caller ID (phone)</label>
+              <input
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="07… — the number calling in"
+                value={textPayPhone}
+                onChange={(e) => {
+                  setTextPayPhone(e.target.value);
+                  void lookupCallerId(e.target.value);
+                }}
+              />
+            </div>
             <div className="field">
               <label>Caller name (optional)</label>
               <input
@@ -1741,16 +1901,32 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
                 onChange={(e) => setTextPayName(e.target.value)}
               />
             </div>
-            <div className="field">
-              <label>Mobile</label>
-              <input
-                inputMode="tel"
-                placeholder="07… — leave blank to copy the link"
-                value={textPayPhone}
-                onChange={(e) => setTextPayPhone(e.target.value)}
-              />
-            </div>
+            {callerMatches.length > 0 && (
+              <div style={{ display: "grid", gap: 6, marginBottom: 8 }}>
+                {callerMatches.slice(0, 4).map((match) => (
+                  <button
+                    key={match.id}
+                    type="button"
+                    className="list-btn"
+                    onClick={() => void attachCustomer(match, { closeModal: false })}
+                  >
+                    <strong>{match.name}</strong>
+                    <div style={{ color: "var(--muted)" }}>
+                      {match.phone || "No number"} · tap to attach
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="tender-row" style={{ marginTop: 8 }}>
+              <button
+                type="button"
+                className="btn secondary"
+                disabled={busy || (!textPayPhone.trim() && !textPayName.trim())}
+                onClick={() => void saveCallerAsCustomer()}
+              >
+                {callerMatches[0] ? "Attach caller" : "Save caller as customer"}
+              </button>
               <button
                 type="button"
                 className="btn primary"
@@ -1922,10 +2098,48 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
         <div className="modal-backdrop" onClick={() => setModal(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h3>Customers</h3>
+            <div className="field">
+              <label>Search</label>
+              <input
+                placeholder="Name or phone"
+                value={customerQuery}
+                onChange={(e) => void searchCustomers(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label>Add new customer</label>
+              <input
+                placeholder="Name"
+                value={newCustomerName}
+                onChange={(e) => setNewCustomerName(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label>Phone / caller ID (optional)</label>
+              <input
+                inputMode="tel"
+                placeholder="07…"
+                value={newCustomerPhone}
+                onChange={(e) => setNewCustomerPhone(e.target.value)}
+              />
+            </div>
+            <div className="tender-row" style={{ marginBottom: 10 }}>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={busy || !newCustomerName.trim()}
+                onClick={() => void createCustomerFromTill()}
+              >
+                Add &amp; attach to sale
+              </button>
+            </div>
+            {customerFormMsg && <p className="hint">{customerFormMsg}</p>}
+            {customers.length === 0 && <p style={{ color: "var(--muted)" }}>No customers yet — add one above.</p>}
             {customers.map((c) => (
               <button key={c.id} type="button" className="list-btn" onClick={() => void attachCustomer(c)}>
                 <strong>{c.name}</strong>
                 <div style={{ color: "var(--muted)" }}>
+                  {c.phone ? `${c.phone} · ` : ""}
                   {c.loyaltyPoints} pts · credit {money(c.storeCreditCents)}
                 </div>
               </button>
