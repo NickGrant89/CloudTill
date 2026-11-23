@@ -16,6 +16,8 @@ import {
   writeCompanySetting,
 } from "./billing.js";
 
+import { companyStoreIds, DEMO_COMPANY } from "../company.js";
+
 export const adminRouter = Router();
 
 function adminSecretConfigured() {
@@ -68,6 +70,8 @@ adminRouter.get("/overview", async (_req, res) => {
         id: store.id,
         name: store.name,
         slug: store.slug,
+        companyKey: store.companyKey || store.id,
+        address: store.address,
         currency: store.currency,
         timezone: store.timezone,
         createdAt: store.createdAt,
@@ -77,6 +81,7 @@ adminRouter.get("/overview", async (_req, res) => {
           planId: billing.planId,
           planName: billing.plan.name,
           status: billing.status,
+          licensedPlanId: billing.licensedPlanId,
           trialEndsAt: billing.trialEndsAt,
           licenseFingerprint: billing.licenseFingerprint,
           licenseKeyLast: billing.licenseKeyLast,
@@ -264,4 +269,26 @@ adminRouter.post("/stores/:storeId/license/revoke", async (req, res) => {
   await writeCompanySetting(store.id, BILLING_STATUS_KEY, "canceled");
   await appendBillingAudit(store.id, { type: "admin_revoke_license", detail: {} });
   res.json({ ok: true, storeId: store.id, billing: await readBilling(store.id) });
+});
+
+adminRouter.delete("/companies/:storeId", async (req, res) => {
+  const body = z.object({ confirmName: z.string() }).safeParse(req.body ?? {});
+  if (!body.success) return res.status(400).json({ error: "Type the business name to confirm" });
+  const store = await prisma.store.findUnique({ where: { id: req.params.storeId } });
+  if (!store) return res.status(404).json({ error: "Business not found" });
+  if (store.companyKey === DEMO_COMPANY) return res.status(400).json({ error: "The demo café can't be deleted" });
+  const ids = await companyStoreIds(store.id);
+  const first = await prisma.store.findFirst({ where: { id: { in: ids } }, orderBy: { createdAt: "asc" } });
+  if (body.data.confirmName.trim() !== first?.name) {
+    return res.status(400).json({ error: `Type the business name exactly: ${first?.name}` });
+  }
+  // Sales, ticket lines and online orders point at staff and products without cascades, so clear them first.
+  const inBusiness = { storeId: { in: ids } };
+  await prisma.$transaction([
+    prisma.onlineOrder.deleteMany({ where: inBusiness }),
+    prisma.ticket.deleteMany({ where: inBusiness }),
+    prisma.sale.deleteMany({ where: inBusiness }),
+    prisma.store.deleteMany({ where: { id: { in: ids } } }),
+  ]);
+  res.json({ ok: true, deletedStores: ids.length, name: first?.name });
 });

@@ -70,7 +70,7 @@ app.get("/api/health", async (_req, res) => {
     product: process.env.PRODUCT_NAME || "PurePOS",
     legalName: process.env.PRODUCT_LEGAL || "PurePOS UK",
     domain: process.env.PRODUCT_DOMAIN || "purepos.co.uk",
-    version: "0.8.0",
+    version: "0.9.0",
     database,
     storeCount,
     time: new Date().toISOString(),
@@ -83,7 +83,7 @@ app.get("/api/health", async (_req, res) => {
       stagingBase: process.env.STAGING_BASE_URL || "https://staging.purepos.co.uk",
       production: "https://purepos.co.uk",
       productionNote:
-        "Hosted on Railway (PUBLIC_BASE_URL). Apex purepos.co.uk needs Fasthosts DNS cutover.",
+        "Hosted on Railway (PUBLIC_BASE_URL). Live at purepos.co.uk; admin.purepos.co.uk needs the Railway Pro plan plus a DNS CNAME.",
     },
     env: {
       hasJwtSecret: Boolean(process.env.JWT_SECRET),

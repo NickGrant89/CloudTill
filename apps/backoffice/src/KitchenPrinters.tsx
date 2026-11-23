@@ -183,17 +183,18 @@ export function KitchenPage() {
       <div className="panel-box" style={{ marginTop: 18 }}>
         <h3>UK delivery apps</h3>
         <p style={{ color: "var(--muted)", marginTop: 0 }}>
-          Partner APIs need real credentials from Just Eat / Deliveroo / Uber Eats / HungryPanda / Foodhub (or a
-          middleware like Deliverect). PurePOS accepts signed webhooks now; simulate below without partner secrets.
+          Tick the apps you use, then give each app (or your Deliverect account) its order link below and your
+          shared password. Their orders then appear on the till and kitchen screen. Use <strong>Send test order</strong>{" "}
+          to try it before you go live.
         </p>
 
         {delivery && (
           <>
             <div className="field" style={{ maxWidth: 420 }}>
-              <label>Webhook secret (header X-PurePOS-Delivery-Secret)</label>
+              <label>Shared password for delivery apps</label>
               <input
                 type="password"
-                placeholder={delivery.webhookSecretSet ? "•••••••• (set — enter to replace)" : "Set a long secret"}
+                placeholder={delivery.webhookSecretSet ? "•••••••• (saved, type a new one to replace it)" : "At least 8 characters"}
                 value={secretDraft}
                 onChange={(e) => setSecretDraft(e.target.value)}
               />
@@ -205,7 +206,7 @@ export function KitchenPage() {
                 disabled={busy || secretDraft.trim().length < 8}
                 onClick={() => void saveDelivery({ webhookSecret: secretDraft.trim() })}
               >
-                Save secret
+                Save password
               </button>
               {delivery.webhookSecretSet && (
                 <button
@@ -213,11 +214,11 @@ export function KitchenPage() {
                   className="secondary"
                   disabled={busy}
                   onClick={() => {
-                    if (!confirm("Clear delivery webhook secret?")) return;
+                    if (!confirm("Remove the delivery app password? Orders from the apps will stop until you set a new one.")) return;
                     void saveDelivery({ webhookSecret: null });
                   }}
                 >
-                  Clear secret
+                  Remove password
                 </button>
               )}
             </div>
@@ -228,8 +229,8 @@ export function KitchenPage() {
                   <tr>
                     <th>App</th>
                     <th>On</th>
-                    <th>Webhook URL</th>
-                    <th>Partner store ID</th>
+                    <th>Order link to give the app</th>
+                    <th>Your store ID on the app</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -238,7 +239,7 @@ export function KitchenPage() {
                       <td>
                         <strong>{c.label}</strong>
                         {c.hasClientSecret ? (
-                          <div style={{ color: "var(--muted)", fontSize: "0.8rem" }}>Client secret stored</div>
+                          <div style={{ color: "var(--muted)", fontSize: "0.8rem" }}>Connected</div>
                         ) : null}
                       </td>
                       <td>
@@ -275,7 +276,7 @@ export function KitchenPage() {
             </div>
 
             <p style={{ fontSize: "0.88rem", color: "var(--muted)" }}>
-              Normalized middleware ingest: <code>{delivery.normalizedIngestUrl}</code>
+              Link for Deliverect or other order hubs: <code>{delivery.normalizedIngestUrl}</code>
             </p>
 
             <div className="toolbar" style={{ marginTop: 10 }}>
@@ -287,7 +288,7 @@ export function KitchenPage() {
                 ))}
               </select>
               <button type="button" disabled={busy} onClick={() => void simulate()}>
-                {busy ? "Working…" : "Simulate order → kitchen"}
+                {busy ? "Working…" : "Send test order"}
               </button>
             </div>
           </>
@@ -394,8 +395,8 @@ export function PrintersPage() {
           <thead>
             <tr>
               <th>Name</th>
-              <th>Driver</th>
-              <th>Endpoint</th>
+              <th>Connection</th>
+              <th>Address</th>
               <th>Default</th>
             </tr>
           </thead>

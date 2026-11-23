@@ -6,6 +6,24 @@ import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 export const extrasRouter = Router();
 extrasRouter.use(requireAuth);
 
+/** UTC instants for the start and end of `day` (YYYY-MM-DD) in the store's own time zone. */
+async function storeDayBounds(storeId: string, rawDay: unknown) {
+  const store = await prisma.store.findUnique({ where: { id: storeId }, select: { timezone: true } });
+  const tz = store?.timezone || "Europe/London";
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: tz });
+  const day = typeof rawDay === "string" && /^\d{4}-\d{2}-\d{2}$/.test(rawDay) ? rawDay : today;
+  const offsetAt = (utcMs: number) => {
+    const local = new Date(new Date(utcMs).toLocaleString("en-US", { timeZone: tz }));
+    const utc = new Date(new Date(utcMs).toLocaleString("en-US", { timeZone: "UTC" }));
+    return local.getTime() - utc.getTime();
+  };
+  const startGuess = Date.parse(`${day}T00:00:00.000Z`);
+  const from = new Date(startGuess - offsetAt(startGuess));
+  const nextGuess = startGuess + 24 * 60 * 60 * 1000;
+  const to = new Date(nextGuess - offsetAt(nextGuess) - 1);
+  return { day, from, to };
+}
+
 /** Open tickets board (POS + kitchen-adjacent) */
 extrasRouter.get("/tickets-board", async (req: AuthedRequest, res) => {
   const tickets = await prisma.ticket.findMany({
@@ -151,9 +169,7 @@ function escapeHtml(s: string) {
 
 /** End-of-day CSV export (sales + payments summary) */
 extrasRouter.get("/eod.csv", async (req: AuthedRequest, res) => {
-  const day = typeof req.query.date === "string" ? req.query.date : new Date().toISOString().slice(0, 10);
-  const from = new Date(`${day}T00:00:00.000Z`);
-  const to = new Date(`${day}T23:59:59.999Z`);
+  const { day, from, to } = await storeDayBounds(req.user!.storeId, req.query.date);
 
   const sales = await prisma.sale.findMany({
     where: {
@@ -200,33 +216,28 @@ extrasRouter.get("/eod.csv", async (req: AuthedRequest, res) => {
 });
 
 /** Stub “email EOD” — returns payload that a mailer would send */
-extrasRouter.post("/eod-email", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
-  const body = z
-    .object({
-      to: z.string().email().default("owner@purepos.demo"),
-      date: z.string().optional(),
-    })
-    .parse(req.body ?? {});
-  const day = body.date ?? new Date().toISOString().slice(0, 10);
-  const from = new Date(`${day}T00:00:00.000Z`);
-  const to = new Date(`${day}T23:59:59.999Z`);
+extrasRouter.get("/eod-summary", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const { day, from, to } = await storeDayBounds(req.user!.storeId, req.query.date);
   const sales = await prisma.sale.findMany({
-    where: { storeId: req.user!.storeId, status: "completed", createdAt: { gte: from, lte: to } },
+    where: { storeId: req.user!.storeId, createdAt: { gte: from, lte: to } },
+    include: { payments: true },
   });
-  const gross = sales.reduce((s, x) => s + x.totalCents, 0);
-  const payload = {
-    to: body.to,
-    subject: `PurePOS EOD ${day}`,
-    text: `End of day ${day}\nReceipts: ${sales.length}\nGross: $${(gross / 100).toFixed(2)}\nCSV available via GET /api/extras/eod.csv?date=${day}`,
-    queued: true,
-    provider: "stub",
-  };
-  await prisma.setting.upsert({
-    where: { storeId_key: { storeId: req.user!.storeId, key: `eod.lastEmail.${day}` } },
-    create: { storeId: req.user!.storeId, key: `eod.lastEmail.${day}`, value: JSON.stringify(payload) },
-    update: { value: JSON.stringify(payload) },
+  const completed = sales.filter((s) => s.status !== "voided");
+  const byPayment = new Map<string, number>();
+  for (const sale of completed) {
+    for (const p of sale.payments) byPayment.set(p.paymentTypeName, (byPayment.get(p.paymentTypeName) ?? 0) + p.amountCents);
+  }
+  res.json({
+    date: day,
+    receipts: completed.length,
+    voided: sales.length - completed.length,
+    refunded: sales.filter((s) => s.status === "refunded" || s.status === "partial_refund").length,
+    grossCents: completed.reduce((n, s) => n + s.totalCents, 0),
+    taxCents: completed.reduce((n, s) => n + s.taxCents, 0),
+    tipCents: completed.reduce((n, s) => n + s.tipCents, 0),
+    discountCents: completed.reduce((n, s) => n + s.discountCents, 0),
+    payments: [...byPayment.entries()].map(([name, amountCents]) => ({ name, amountCents })),
   });
-  res.json(payload);
 });
 
 function csvEscape(s: string) {

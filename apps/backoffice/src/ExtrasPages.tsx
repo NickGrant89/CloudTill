@@ -171,9 +171,32 @@ export function LabelsPage() {
   );
 }
 
+type EodSummary = {
+  date: string;
+  receipts: number;
+  voided: number;
+  refunded: number;
+  grossCents: number;
+  taxCents: number;
+  tipCents: number;
+  discountCents: number;
+  payments: { name: string; amountCents: number }[];
+};
+
 export function EodPage() {
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [emailResult, setEmailResult] = useState("");
+  const [date, setDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/London" }));
+  const [summary, setSummary] = useState<EodSummary | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setError("");
+    api<EodSummary>(`/extras/eod-summary?date=${date}`)
+      .then(setSummary)
+      .catch((e) => {
+        setSummary(null);
+        setError(e instanceof Error ? e.message : "Could not load the day");
+      });
+  }, [date]);
 
   function downloadCsv() {
     const token = getToken();
@@ -189,36 +212,78 @@ export function EodPage() {
       });
   }
 
-  async function sendEmail() {
-    const r = await api<{ to: string; subject: string; provider: string }>("/extras/eod-email", {
-      method: "POST",
-      body: JSON.stringify({ date, to: "owner@purepos.demo" }),
-    });
-    setEmailResult(`Queued stub email → ${r.to}: ${r.subject} (${r.provider})`);
-  }
-
   return (
     <div>
       <div className="page-head">
         <div>
           <h2>End of day</h2>
-          <p>CSV export + stub email for daily close</p>
+          <p>Takings for one day, by payment type · download every receipt as a spreadsheet</p>
         </div>
       </div>
       <div className="panel-box">
-        <div className="field">
-          <label>Date (UTC)</label>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </div>
-        <div className="toolbar">
+        <div className="toolbar" style={{ alignItems: "flex-end" }}>
+          <div className="field" style={{ margin: 0 }}>
+            <label htmlFor="eod-date">Day</label>
+            <input id="eod-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
           <button type="button" onClick={downloadCsv}>
             Download CSV
           </button>
-          <button type="button" className="secondary" onClick={() => void sendEmail()}>
-            Email EOD (stub)
+          <button type="button" className="secondary" onClick={() => window.print()}>
+            Print
           </button>
         </div>
-        {emailResult && <p>{emailResult}</p>}
+        {error && <p className="error">{error}</p>}
+        {summary && (
+          <>
+            <div className="cards" style={{ marginTop: 16 }}>
+              <div className="stat">
+                <div className="label">Takings</div>
+                <div className="value">{money(summary.grossCents)}</div>
+              </div>
+              <div className="stat">
+                <div className="label">Receipts</div>
+                <div className="value">{summary.receipts}</div>
+              </div>
+              <div className="stat">
+                <div className="label">VAT</div>
+                <div className="value">{money(summary.taxCents)}</div>
+              </div>
+              <div className="stat">
+                <div className="label">Tips</div>
+                <div className="value">{money(summary.tipCents)}</div>
+              </div>
+            </div>
+            <div className="table-wrap" style={{ marginTop: 16 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Payment type</th>
+                    <th>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {summary.payments.length ? (
+                    summary.payments.map((p) => (
+                      <tr key={p.name}>
+                        <td>{p.name}</td>
+                        <td>{money(p.amountCents)}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={2}>No sales on this day</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <p style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
+              Discounts given {money(summary.discountCents)} · {summary.refunded} refunded · {summary.voided} voided
+              (not counted in takings)
+            </p>
+          </>
+        )}
       </div>
     </div>
   );
@@ -301,7 +366,7 @@ export function ImportPage() {
       setPreview(null);
       const message = e instanceof Error ? e.message : "Preview failed";
       setError(
-        /Pro or Multi-store|csv_import|402/i.test(message)
+        /Shop or Group|csv_import|402/i.test(message)
           ? `${message} Open Settings → Billing to upgrade.`
           : message
       );
