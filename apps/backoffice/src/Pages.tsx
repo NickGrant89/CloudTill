@@ -1338,9 +1338,12 @@ function StoresPage() {
                 <td>
                   {s.name}
                   {settings?.store.id === s.id && <span className="badge" style={{ marginLeft: 8 }}>Current</span>}
+                  <div style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: 4 }}>
+                    {s.registers.length ? s.registers.map((r) => r.name).join(", ") : "No register yet"}
+                  </div>
                 </td>
                 <td>{s.address}</td>
-                <td>{s.registers.map((r) => r.name).join(", ")}</td>
+                <td>{s.registers.map((r) => r.name).join(", ") || "—"}</td>
                 <td>
                   {settings?.store.id !== s.id && (role === "owner" || role === "manager") && (
                     <button type="button" className="secondary" onClick={() => void switchStore(s.id)}>
