@@ -228,6 +228,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   >([]);
   const [mobilePane, setMobilePane] = useState<"items" | "ticket">("items");
   const [modifierItem, setModifierItem] = useState<Item | null>(null);
+  const [editingLineKey, setEditingLineKey] = useState<string | null>(null);
   const [modifierGroupId, setModifierGroupId] = useState("");
   const [offline, setOffline] = useState<OfflineStatus>({
     online: true,
@@ -469,6 +470,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     for (const group of item.modifierGroups) {
       initial[group.id] = group.minSelect > 0 && group.modifiers[0] ? [group.modifiers[0]] : [];
     }
+    setEditingLineKey(null);
     setSelectedMods(initial);
     setModifierGroupId(item.modifierGroups[0]?.id ?? "");
     setModifierItem(item);
@@ -571,6 +573,85 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     }
   }
 
+  function openLineEditor(line: TicketLine) {
+    const item = items.find((entry) => entry.variants.some((variant) => variant.id === line.variantId));
+    if (!item || item.modifierGroups.length === 0) {
+      fail(line.name, new Error("This item has no options to edit"));
+      return;
+    }
+    const initial: Record<string, Modifier[]> = {};
+    for (const group of item.modifierGroups) {
+      initial[group.id] = group.modifiers.filter((option) =>
+        line.modifiers.some(
+          (picked) =>
+            (picked.modifierId && picked.modifierId === option.id) ||
+            (!picked.modifierId && picked.name === option.name)
+        )
+      );
+    }
+    setEditingLineKey(line.key);
+    setSelectedMods(initial);
+    setModifierGroupId(item.modifierGroups[0]?.id ?? "");
+    setModifierItem(item);
+    setMobilePane("items");
+  }
+
+  function closeModifierPicker() {
+    setModifierItem(null);
+    setEditingLineKey(null);
+    setSelectedMods({});
+    setModifierGroupId("");
+  }
+
+  async function saveLineModifiers(
+    lineKey: string,
+    mods: { modifierId?: string; name: string; priceCents: number; groupName?: string }[]
+  ) {
+    try {
+      await enqueue(async () => {
+        const t = await ensureTicket();
+        if (isLocalTicket(t) || !offline.online) {
+          const local = await ensureLocalTicket(registerId);
+          const line = local.lines.find((entry) => entry.key === lineKey);
+          if (!line) throw new Error("Line not found");
+          line.modifiers = mods;
+          const saved = await persistLocalTicket(local);
+          setCurrentTicket(localToTicket(saved));
+          closeModifierPicker();
+          setMobilePane("ticket");
+          return;
+        }
+        const updated = await api<Ticket>(`/pos/tickets/${t.id}/lines/${lineKey}`, {
+          method: "PATCH",
+          body: JSON.stringify({ modifiers: mods }),
+        });
+        setCurrentTicket(updated);
+        closeModifierPicker();
+        setMobilePane("ticket");
+      });
+      return true;
+    } catch (error) {
+      if (error instanceof OfflineError) {
+        try {
+          const local = await ensureLocalTicket(registerId);
+          const line = local.lines.find((entry) => entry.key === lineKey);
+          if (!line) throw new Error("Line not found");
+          line.modifiers = mods;
+          const saved = await persistLocalTicket(local);
+          setCurrentTicket(localToTicket(saved));
+          closeModifierPicker();
+          setMobilePane("ticket");
+          return true;
+        } catch (inner) {
+          fail("Could not update item", inner);
+          return false;
+        }
+      }
+      fail("Could not update item", error);
+      return false;
+    }
+  }
+
   async function confirmModifiers() {
     if (!modifierItem) return;
     for (const group of modifierItem.modifierGroups) {
@@ -592,7 +673,14 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
         groupName: group.name,
       }))
     );
-    if (await addVariant(modifierItem, mods)) setModifierItem(null);
+    if (editingLineKey) {
+      await saveLineModifiers(editingLineKey, mods);
+      return;
+    }
+    if (await addVariant(modifierItem, mods)) {
+      setModifierItem(null);
+      setEditingLineKey(null);
+    }
   }
 
   async function onSearchKey(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -1314,10 +1402,10 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
           <div className="topbar">
             {modifierItem ? (
               <>
-                <button type="button" className="chip" onClick={() => setModifierItem(null)}>
-                  ← Menu
+                <button type="button" className="chip" onClick={() => closeModifierPicker()}>
+                  ← {editingLineKey ? "Sale" : "Menu"}
                 </button>
-                <div className="brand-mini">{modifierItem.name}</div>
+                <div className="brand-mini">{editingLineKey ? `Edit · ${modifierItem.name}` : modifierItem.name}</div>
               </>
             ) : (
               <>
@@ -1423,12 +1511,12 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
           {modifierItem && (
             <div className="modifier-bar">
               <div>
-                <p className="step-kicker">Step 2 · Options</p>
+                <p className="step-kicker">{editingLineKey ? "Edit options" : "Step 2 · Options"}</p>
                 <strong>{modifierItem.name}</strong>
                 {modifierPreview.length > 0 ? <ModifierList mods={modifierPreview} /> : <div className="meta">Choose options</div>}
               </div>
               <button type="button" className="pay-btn" onClick={() => void confirmModifiers()}>
-                Add {money(modifierTotal)}
+                {editingLineKey ? "Update" : "Add"} {money(modifierTotal)}
               </button>
             </div>
           )}
@@ -1492,6 +1580,11 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             {(ticket?.lines ?? []).map((line) => {
               const modSum = line.modifiers.reduce((s, m) => s + m.priceCents, 0);
               const lineTotal = Math.round((line.unitPriceCents + modSum) * line.quantity) - line.discountCents;
+              const canEditOptions = items.some(
+                (entry) =>
+                  entry.variants.some((variant) => variant.id === line.variantId) &&
+                  entry.modifierGroups.length > 0
+              );
               return (
                 <div key={line.key} className="line">
                   <div>
@@ -1505,6 +1598,11 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
                       <button type="button" onClick={() => void updateQty(line, line.quantity + 1)}>
                         +
                       </button>
+                      {canEditOptions && (
+                        <button type="button" onClick={() => openLineEditor(line)}>
+                          Edit
+                        </button>
+                      )}
                     </div>
                   </div>
                   <div style={{ fontWeight: 600 }}>{money(lineTotal)}</div>

@@ -164,16 +164,39 @@ posRouter.post("/tickets/:id/lines", owned("ticket"), async (req: AuthedRequest,
   res.status(201).json(await serializeTicket(req.params.id));
 });
 
-posRouter.patch("/tickets/:id/lines/:lineId", owned("ticket"), owned("ticketLine", "lineId"), async (req, res) => {
+posRouter.patch("/tickets/:id/lines/:lineId", owned("ticket"), owned("ticketLine", "lineId"), async (req: AuthedRequest, res) => {
   const body = z
     .object({
       quantity: z.number().positive().optional(),
       discountCents: z.number().int().optional(),
       note: z.string().nullable().optional(),
+      modifiers: z
+        .array(
+          z.object({
+            modifierId: z.string().optional(),
+            name: z.string(),
+            priceCents: z.number().int(),
+            groupName: z.string().max(80).optional(),
+          })
+        )
+        .optional(),
     })
     .parse(req.body);
-  await prisma.ticketLine.update({ where: { id: req.params.lineId }, data: body });
-  res.json(await serializeTicket(req.params.id));
+  if (body.modifiers && (await rejectForeign(res, "modifier", body.modifiers.map((mod) => mod.modifierId), req.user!.storeId))) {
+    return;
+  }
+  const { modifiers, ...rest } = body;
+  await prisma.ticketLine.update({
+    where: { id: String(req.params.lineId) },
+    data: {
+      ...rest,
+      ...(modifiers
+        ? { modifiersJson: JSON.stringify(await orderStoredModifiers(modifiers)) }
+        : {}),
+    },
+  });
+  await prisma.ticket.update({ where: { id: String(req.params.id) }, data: { updatedAt: new Date() } });
+  res.json(await serializeTicket(String(req.params.id)));
 });
 
 posRouter.delete("/tickets/:id/lines/:lineId", owned("ticket"), owned("ticketLine", "lineId"), async (req, res) => {
