@@ -101,3 +101,12 @@ employeesRouter.post("/registers", requireRole("owner", "manager"), async (req: 
   });
   res.status(201).json(register);
 });
+
+employeesRouter.patch("/registers/:id", owned("register"), requireRole("owner", "manager"), async (req, res) => {
+  const body = z.object({ name: z.string().min(1).max(80) }).parse(req.body);
+  const register = await prisma.register.update({
+    where: { id: String(req.params.id) },
+    data: { name: body.name.trim() },
+  });
+  res.json(register);
+});

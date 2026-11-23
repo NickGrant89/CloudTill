@@ -141,7 +141,7 @@ export function App() {
     { id: "kitchen", label: "Kitchen / delivery" },
     { id: "employees", label: "Employees" },
     { id: "timeclock", label: "Time clock" },
-    { id: "stores", label: "Stores & registers" },
+    { id: "stores", label: "Stores & tills" },
     { id: "sales", label: "Sales history" },
     { id: "eod", label: "End of day" },
     { id: "reports", label: "Reports" },

@@ -1393,23 +1393,31 @@ function StoresPage() {
     registers: { id: string; name: string }[];
   } | null>(null);
   const [stores, setStores] = useState<{ id: string; name: string; address: string | null; registers: { name: string }[] }[]>([]);
+  const [registers, setRegisters] = useState<{ id: string; name: string; createdAt?: string }[]>([]);
   const [regName, setRegName] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
+  const [tillMsg, setTillMsg] = useState("");
   const [branch, setBranch] = useState({ name: "", address: "", phone: "" });
   const [branchMsg, setBranchMsg] = useState("");
   const [role, setRole] = useState("");
   const [hasBranches, setHasBranches] = useState(false);
+  const tillUrl = `${window.location.origin}/pos/`;
+  const kitchenUrl = `${window.location.origin}/pos/kitchen`;
 
   async function load() {
-    const [sett, all, me, billing] = await Promise.all([
+    const [sett, all, me, billing, regs] = await Promise.all([
       api<NonNullable<typeof settings>>("/settings"),
       api<typeof stores>("/auth/stores"),
       api<{ user: { role: string } }>("/auth/me"),
       api<{ features: string[] }>("/billing").catch(() => ({ features: [] as string[] })),
+      api<{ id: string; name: string; createdAt?: string }[]>("/employees/registers"),
     ]);
     setSettings(sett);
     setStores(all);
     setRole(me.user.role);
     setHasBranches(billing.features.includes("multi_store"));
+    setRegisters(Array.isArray(regs) ? regs : []);
   }
 
   async function addBranch(e: React.FormEvent) {
@@ -1438,26 +1446,174 @@ function StoresPage() {
 
   async function addRegister(e: React.FormEvent) {
     e.preventDefault();
-    await api("/employees/registers", { method: "POST", body: JSON.stringify({ name: regName }) });
-    setRegName("");
-    await load();
+    setTillMsg("");
+    try {
+      await api("/employees/registers", { method: "POST", body: JSON.stringify({ name: regName.trim() }) });
+      setRegName("");
+      setTillMsg("Till added. Open it on a device at /pos/ and use Use this iPad as… to pin it.");
+      await load();
+    } catch (err) {
+      setTillMsg(err instanceof Error ? err.message : "Could not add till");
+    }
+  }
+
+  async function saveRegisterName(id: string) {
+    const name = editingName.trim();
+    if (!name) return;
+    setTillMsg("");
+    try {
+      await api(`/employees/registers/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+      });
+      setEditingId(null);
+      setEditingName("");
+      setTillMsg("Till name saved.");
+      await load();
+    } catch (err) {
+      setTillMsg(err instanceof Error ? err.message : "Could not rename till");
+    }
   }
 
   return (
     <div>
       <div className="page-head">
         <div>
-          <h2>Stores & registers</h2>
-          <p>Your business’s stores · registers for the active store</p>
+          <h2>Stores & tills</h2>
+          <p>Branches, till registers, and how to set them up on each device</p>
         </div>
       </div>
+
+      <div className="panel-box" style={{ marginBottom: 16 }}>
+        <h3 style={{ marginTop: 0 }}>Till support</h3>
+        <p style={{ color: "var(--muted)", marginTop: 0 }}>
+          Each till is a <strong>register</strong> (Front Counter, Patio Kiosk, Drive-thru…). Staff open the same
+          PurePOS till app on a phone, iPad or PC and pin that device to one register.
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+          <a className="secondary" href={tillUrl} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none", padding: "8px 12px", borderRadius: 10 }}>
+            Open till app
+          </a>
+          <a className="secondary" href={kitchenUrl} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none", padding: "8px 12px", borderRadius: 10 }}>
+            Open kitchen screen
+          </a>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => void navigator.clipboard?.writeText(tillUrl).then(() => setTillMsg("Till link copied"))}
+          >
+            Copy till link
+          </button>
+        </div>
+        <ol style={{ margin: "0 0 8px", paddingLeft: 18, lineHeight: 1.5, color: "var(--muted)" }}>
+          <li>
+            Add a till below (or use Front Counter). Name a kiosk something clear, e.g. <strong>Patio Kiosk</strong>.
+          </li>
+          <li>
+            On the device open <strong>{tillUrl}</strong>. First time: <strong>Use my business</strong> (owner email +
+            PIN).
+          </li>
+          <li>
+            Pick that till, then <strong>Use this iPad as…</strong> so it opens straight into it next time.
+          </li>
+          <li>
+            <strong>Lock</strong> is the staff PIN. <strong>Change till</strong> on the lock screen (owner/manager PIN)
+            moves the device to another register.
+          </li>
+          <li>
+            Open tickets sync live across tills. Kitchen screen shows web, delivery and till send-to-kitchen orders.
+          </li>
+        </ol>
+        <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>
+          There isn’t a separate kiosk app — a kiosk is just a till register pinned on a customer-facing or secondary
+          iPad. Same catalog, same live tickets.
+        </p>
+        {tillMsg && <p style={{ marginBottom: 0 }}>{tillMsg}</p>}
+      </div>
+
+      <div className="panel-box" style={{ marginBottom: 16 }}>
+        <h3 style={{ marginTop: 0 }}>Tills on {settings?.store.name ?? "this store"}</h3>
+        {registers.length === 0 && <p style={{ color: "var(--muted)" }}>No tills yet — add one below.</p>}
+        <ul style={{ listStyle: "none", padding: 0, margin: "0 0 12px" }}>
+          {registers.map((reg) => (
+            <li
+              key={reg.id}
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 8,
+                alignItems: "center",
+                marginBottom: 10,
+                paddingBottom: 10,
+                borderBottom: "1px solid var(--line)",
+              }}
+            >
+              {editingId === reg.id ? (
+                <>
+                  <input
+                    value={editingName}
+                    onChange={(e) => setEditingName(e.target.value)}
+                    style={{ flex: "1 1 160px", minWidth: 140 }}
+                    aria-label="Till name"
+                  />
+                  <button type="button" onClick={() => void saveRegisterName(reg.id)}>
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => {
+                      setEditingId(null);
+                      setEditingName("");
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <>
+                  <strong style={{ flex: "1 1 140px" }}>{reg.name}</strong>
+                  {(role === "owner" || role === "manager") && (
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => {
+                        setEditingId(reg.id);
+                        setEditingName(reg.name);
+                      }}
+                    >
+                      Rename
+                    </button>
+                  )}
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+        {(role === "owner" || role === "manager") && (
+          <form onSubmit={(e) => void addRegister(e)}>
+            <div className="field">
+              <label htmlFor="new-till-name">Add a till / kiosk</label>
+              <input
+                id="new-till-name"
+                required
+                placeholder="e.g. Patio Kiosk or Drive-thru"
+                value={regName}
+                onChange={(e) => setRegName(e.target.value)}
+              />
+            </div>
+            <button type="submit">Add till</button>
+          </form>
+        )}
+      </div>
+
       <div className="table-wrap" style={{ marginBottom: 16 }}>
         <table>
           <thead>
             <tr>
               <th>Store</th>
               <th>Address</th>
-              <th>Registers</th>
+              <th>Tills</th>
               <th />
             </tr>
           </thead>
@@ -1468,7 +1624,7 @@ function StoresPage() {
                   {s.name}
                   {settings?.store.id === s.id && <span className="badge" style={{ marginLeft: 8 }}>Current</span>}
                   <div style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: 4 }}>
-                    {s.registers.length ? s.registers.map((r) => r.name).join(", ") : "No register yet"}
+                    {s.registers.length ? s.registers.map((r) => r.name).join(", ") : "No till yet"}
                   </div>
                 </td>
                 <td>{s.address}</td>
@@ -1532,14 +1688,6 @@ function StoresPage() {
           {branchMsg && <p style={{ marginBottom: 0 }}>{branchMsg}</p>}
         </form>
       )}
-      <form className="panel-box" onSubmit={(e) => void addRegister(e)}>
-        <h3>Add register to current store</h3>
-        <div className="field">
-          <label>Name</label>
-          <input required value={regName} onChange={(e) => setRegName(e.target.value)} />
-        </div>
-        <button type="submit">Add register</button>
-      </form>
     </div>
   );
 }
