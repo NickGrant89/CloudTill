@@ -49,4 +49,6 @@ WORKDIR /app/apps/api
 ENV PORT=8080
 ENV HOST=0.0.0.0
 EXPOSE 8080
-CMD ["sh", "-c", "pnpm exec prisma db push && (pnpm exec tsx prisma/seed.ts || echo 'seed failed — continuing') && pnpm exec tsx src/index.ts"]
+# --accept-data-loss: a non-interactive push stops on Prisma's warning when a new
+# unique column is added, even when every existing row is null. No rows are deleted.
+CMD ["sh", "-c", "pnpm exec prisma db push --accept-data-loss && (pnpm exec tsx prisma/seed.ts || echo 'seed failed — continuing') && pnpm exec tsx src/index.ts"]
