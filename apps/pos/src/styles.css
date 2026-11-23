@@ -923,6 +923,10 @@ select:focus-visible {
   min-width: 0;
 }
 
+.toolbar-identity.is-choosing .register-badge {
+  display: none;
+}
+
 .toolbar-identity .store-name,
 .toolbar-identity .who {
   overflow: hidden;
@@ -977,6 +981,10 @@ select:focus-visible {
   background: #f4f0e8 !important;
   color: #0b1c24 !important;
   font-weight: 800;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 10px;
+  white-space: nowrap;
 }
 
 .guided-note {
@@ -991,6 +999,15 @@ select:focus-visible {
   color: #f4f0e8;
   font-size: 0.78rem;
   line-height: 1.35;
+}
+
+.guided-note.is-pinning {
+  background: rgba(244, 240, 232, 0.18);
+  border: 1px solid rgba(244, 240, 232, 0.35);
+}
+
+.guided-note .pin-till-btn {
+  order: -1;
 }
 
 .guided-note .fullscreen-btn {
@@ -1146,9 +1163,19 @@ select:focus-visible {
     font-size: 0.92rem;
   }
 
+  .toolbar-identity.is-choosing .register-badge {
+    display: none;
+  }
+
   .guided-note {
     margin: 6px 8px 0;
     font-size: 0.72rem;
+    flex-wrap: wrap;
+  }
+
+  .guided-note .pin-till-btn {
+    min-height: 36px;
+    font-size: 0.85rem;
   }
 
   .offline-badge,
@@ -1432,8 +1459,7 @@ select:focus-visible {
     font-size: 0.85rem;
   }
 
-  /* iPad pin controls stay on wider screens. A phone shows one register name. */
-  .pin-till-btn,
+  /* Phone: one register name; pin from lock-screen Change till. */
   .guided-note {
     display: none;
   }

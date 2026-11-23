@@ -1597,11 +1597,6 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
               ))}
             </select>
           )}
-          {pinnedId !== registerId && currentRegister && (
-            <button type="button" className="pin-till-btn" onClick={pinThisIpad}>
-              Use this iPad as…
-            </button>
-          )}
           <button type="button" className="lock-btn" onClick={onLogout}>
             Lock
           </button>
@@ -1644,9 +1639,6 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
         <button type="button" onClick={() => void openRecentSales()}>
           Receipts
         </button>
-        <button type="button" onClick={() => void openPhoneOrder()}>
-          Phone order
-        </button>
         <button type="button" onClick={() => void openKitchenBoard()}>
           Kitchen
         </button>
@@ -1661,13 +1653,19 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
         </button>
         </div>
       </div>
-      <p className="guided-note">
+      <p className={`guided-note${pinnedId !== registerId && currentRegister ? " is-pinning" : ""}`}>
+        {pinnedId !== registerId && currentRegister && (
+          <button type="button" className="pin-till-btn" onClick={pinThisIpad}>
+            Use this iPad as {currentRegister.name}
+          </button>
+        )}
         <button type="button" className="fullscreen-btn" onClick={() => void toggleFullScreen()}>
           {fullScreen ? "Exit full screen" : "Full screen"}
         </button>
         <span>
-          Full screen only fills this window. To keep an iPad on this till, use Guided Access: Settings, Accessibility,
-          Guided Access, then triple-click the side button. This page cannot lock the iPad.
+          {pinnedId !== registerId && currentRegister
+            ? `Pick the till above, then tap Use this iPad as ${currentRegister.name}. After that, Guided Access keeps Safari on this page.`
+            : "Full screen only fills this window. To keep an iPad on this till, use Guided Access: Settings, Accessibility, Guided Access, then triple-click the side button."}
         </span>
       </p>
 
@@ -2159,8 +2157,8 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             <div className="field pay-text-to-pay" style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--line, #dce5e1)" }}>
               <label>Phone order · text to pay</label>
               <p className="hint" style={{ marginTop: 0 }}>
-                For phone orders: send an SMS pay link (Twilio) or copy the link. Prefer the till{" "}
-                <strong>Phone order</strong> button for the guided flow.
+                For phone orders: send an SMS pay link (Twilio) or copy the link. Prefer{" "}
+                <strong>Phone order</strong> on the ticket pane for the guided flow.
               </p>
               <input
                 inputMode="tel"
