@@ -890,7 +890,7 @@ function ModifiersPage() {
       <div className="page-head">
         <div>
           <h2>Modifiers</h2>
-          <p>Reorder groups and menus for the till. Rename groups or menu names. Search when assigning lots of items.</p>
+          <p>Drag to reorder groups, menus and options. Rename groups on the left. Search when assigning lots of items.</p>
         </div>
       </div>
       {error && <p className="error">{error}</p>}

@@ -1,5 +1,80 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, money } from "./api";
+
+function applyReorder<T>(list: T[], from: number, to: number): T[] | null {
+  if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return null;
+  const next = [...list];
+  const [row] = next.splice(from, 1);
+  next.splice(to, 0, row!);
+  return next;
+}
+
+/** Pointer drag grip — works on iPad (HTML5 drag-and-drop does not). */
+function DragGrip({
+  index,
+  listLength,
+  group,
+  label,
+  onDrop,
+}: {
+  index: number;
+  listLength: number;
+  group: string;
+  label: string;
+  onDrop: (from: number, to: number) => void;
+}) {
+  const drag = useRef<{ from: number; over: number } | null>(null);
+
+  function clearMarks() {
+    document.querySelectorAll(`[data-drag-group="${group}"] .drag-over`).forEach((node) => {
+      node.classList.remove("drag-over");
+    });
+  }
+
+  return (
+    <button
+      type="button"
+      className="drag-grip"
+      aria-label={`Drag to reorder ${label}`}
+      title="Drag to reorder"
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        drag.current = { from: index, over: index };
+        e.currentTarget.classList.add("is-dragging");
+      }}
+      onPointerMove={(e) => {
+        const state = drag.current;
+        if (!state) return;
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const row = el?.closest(`[data-drag-group="${group}"] [data-drag-index]`) as HTMLElement | null;
+        if (!row) return;
+        const over = Number(row.getAttribute("data-drag-index"));
+        if (!Number.isFinite(over) || over < 0 || over >= listLength || over === state.over) return;
+        state.over = over;
+        clearMarks();
+        row.classList.add("drag-over");
+      }}
+      onPointerUp={(e) => {
+        const state = drag.current;
+        drag.current = null;
+        e.currentTarget.classList.remove("is-dragging");
+        clearMarks();
+        if (!state || state.from === state.over) return;
+        onDrop(state.from, state.over);
+      }}
+      onPointerCancel={(e) => {
+        drag.current = null;
+        e.currentTarget.classList.remove("is-dragging");
+        clearMarks();
+      }}
+    >
+      ⋮⋮
+    </button>
+  );
+}
 
 export function GiftCardsPage() {
   const [cards, setCards] = useState<
@@ -623,13 +698,10 @@ export function ModifierLibrary({
     void load().catch((err) => setError(err instanceof Error ? err.message : "Could not load modifiers"));
   }, []);
 
-  async function moveSetOption(index: number, dir: -1 | 1) {
+  async function reorderSetOptions(from: number, to: number) {
     if (!selectedSet) return;
-    const next = index + dir;
-    if (next < 0 || next >= editOptions.length) return;
-    const rows = [...editOptions];
-    const [row] = rows.splice(index, 1);
-    rows.splice(next, 0, row);
+    const rows = applyReorder(editOptions, from, to);
+    if (!rows) return;
     setEditOptions(rows);
     const names = rows.map((option) => option.name.trim()).filter(Boolean);
     if (names.length !== rows.length) return;
@@ -639,6 +711,7 @@ export function ModifierLibrary({
         method: "POST",
         body: JSON.stringify({ name: selectedSet.name, optionNames: names }),
       });
+      setNotice("Option order saved — till and online menu use this order.");
       await load(selectedSet.name);
       onChange();
     } catch (err) {
@@ -736,15 +809,12 @@ export function ModifierLibrary({
     });
   }
 
-  async function moveFolder(index: number, dir: -1 | 1) {
-    const nextIndex = index + dir;
-    if (nextIndex < 0 || nextIndex >= folderNames.length) return;
-    const next = [...folderNames];
-    const [row] = next.splice(index, 1);
-    next.splice(nextIndex, 0, row);
+  async function reorderFolders(from: number, to: number) {
+    const next = applyReorder(folderNames, from, to);
+    if (!next) return;
     try {
       await saveLayout({ folderOrder: next });
-      setNotice(`Group order updated. Till order follows menu order within each item.`);
+      setNotice("Group order updated. Drag groups to change till order.");
       await load(selected || undefined);
       onChange();
     } catch (err) {
@@ -752,13 +822,10 @@ export function ModifierLibrary({
     }
   }
 
-  async function moveMenu(folder: string, index: number, dir: -1 | 1) {
+  async function reorderMenus(folder: string, from: number, to: number) {
     const inFolder = menusInFolder(folder);
-    const nextIndex = index + dir;
-    if (nextIndex < 0 || nextIndex >= inFolder.length) return;
-    const swapped = [...inFolder];
-    const [row] = swapped.splice(index, 1);
-    swapped.splice(nextIndex, 0, row);
+    const swapped = applyReorder(inFolder, from, to);
+    if (!swapped) return;
     const nextMenu: string[] = [];
     for (const folderName of folderNames) {
       const names = folderName === folder ? swapped : menusInFolder(folderName);
@@ -771,7 +838,7 @@ export function ModifierLibrary({
     }
     try {
       await saveLayout({ menuOrder: nextMenu, folderOrder: folderNames });
-      setNotice(`Menu order saved — till and tickets use this order for groups on each item.`);
+      setNotice("Menu order saved — till and tickets follow this order.");
       await load(selected || undefined);
       onChange();
     } catch (err) {
@@ -945,91 +1012,102 @@ export function ModifierLibrary({
           </button>
         </div>
         <p className="modifier-menu-empty" style={{ marginTop: 0 }}>
-          Up/Down on groups and menus sets till and ticket order.
+          Drag ⋮⋮ to reorder groups and menus. Rename keeps the group name clear.
         </p>
         {sets.length === 0 && <p className="modifier-menu-empty">No modifiers yet</p>}
-        {folderNames.map((folder, folderIndex) => {
-          const rows = menusInFolder(folder);
-          const collapsed = Boolean(collapsedFolders[folder]);
-          return (
-            <div key={folder} className="modifier-folder">
-              <div className="modifier-folder-bar">
-                {renamingFolder === folder ? (
-                  <>
-                    <input
-                      value={renameFolderValue}
-                      onChange={(e) => setRenameFolderValue(e.target.value)}
-                      aria-label="Group name"
-                      style={{ flex: 1, minWidth: 0 }}
-                    />
-                    <button type="button" className="secondary" style={{ minHeight: 32 }} onClick={() => void renameFolder(folder, renameFolderValue)}>
-                      Save
-                    </button>
-                    <button type="button" className="secondary" style={{ minHeight: 32 }} onClick={() => setRenamingFolder(null)}>
-                      Cancel
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      className="modifier-folder-head"
-                      onClick={() => setCollapsedFolders((prev) => ({ ...prev, [folder]: !prev[folder] }))}
-                    >
-                      <span>
-                        {collapsed ? "▸" : "▾"} {folder}
-                      </span>
-                      <span className="modifier-menu-meta">{rows.length}</span>
-                    </button>
-                    <button type="button" className="secondary" style={{ minHeight: 32 }} disabled={folderIndex === 0} onClick={() => void moveFolder(folderIndex, -1)}>
-                      Up
-                    </button>
-                    <button type="button" className="secondary" style={{ minHeight: 32 }} disabled={folderIndex === folderNames.length - 1} onClick={() => void moveFolder(folderIndex, 1)}>
-                      Down
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary"
-                      style={{ minHeight: 32 }}
-                      onClick={() => {
-                        setRenamingFolder(folder);
-                        setRenameFolderValue(folder);
-                      }}
-                    >
-                      Rename
-                    </button>
-                  </>
-                )}
-              </div>
-              {!collapsed &&
-                rows.map((setName, menuIndex) => {
-                  const set = sets.find((entry) => entry.name === setName);
-                  if (!set) return null;
-                  return (
-                    <div key={set.name} className="modifier-menu-row">
+        <div data-drag-group="folders" className="modifier-folder-list">
+          {folderNames.map((folder, folderIndex) => {
+            const rows = menusInFolder(folder);
+            const collapsed = Boolean(collapsedFolders[folder]);
+            return (
+              <div key={folder} className="modifier-folder" data-drag-index={folderIndex}>
+                <div className="modifier-folder-bar">
+                  {renamingFolder === folder ? (
+                    <>
+                      <input
+                        value={renameFolderValue}
+                        onChange={(e) => setRenameFolderValue(e.target.value)}
+                        aria-label="Group name"
+                        style={{ flex: 1, minWidth: 0 }}
+                      />
+                      <button type="button" className="secondary" style={{ minHeight: 32 }} onClick={() => void renameFolder(folder, renameFolderValue)}>
+                        Save
+                      </button>
+                      <button type="button" className="secondary" style={{ minHeight: 32 }} onClick={() => setRenamingFolder(null)}>
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {folderNames.length > 1 && (
+                        <DragGrip
+                          index={folderIndex}
+                          listLength={folderNames.length}
+                          group="folders"
+                          label={folder}
+                          onDrop={(from, to) => void reorderFolders(from, to)}
+                        />
+                      )}
                       <button
                         type="button"
-                        className={`modifier-menu-btn${selected === set.name ? " active" : ""}`}
+                        className="modifier-folder-head"
+                        onClick={() => setCollapsedFolders((prev) => ({ ...prev, [folder]: !prev[folder] }))}
+                      >
+                        <span>
+                          {collapsed ? "▸" : "▾"} {folder}
+                        </span>
+                        <span className="modifier-menu-meta">{rows.length}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        style={{ minHeight: 32 }}
                         onClick={() => {
-                          setCreating(false);
-                          chooseSet(set.name);
+                          setRenamingFolder(folder);
+                          setRenameFolderValue(folder);
                         }}
                       >
-                        <span>{set.name}</span>
-                        <span className="modifier-menu-meta">{set.assignments.length}</span>
+                        Rename
                       </button>
-                      <button type="button" className="secondary" style={{ minHeight: 32 }} disabled={menuIndex === 0} onClick={() => void moveMenu(folder, menuIndex, -1)}>
-                        Up
-                      </button>
-                      <button type="button" className="secondary" style={{ minHeight: 32 }} disabled={menuIndex === rows.length - 1} onClick={() => void moveMenu(folder, menuIndex, 1)}>
-                        Down
-                      </button>
-                    </div>
-                  );
-                })}
-            </div>
-          );
-        })}
+                    </>
+                  )}
+                </div>
+                {!collapsed && (
+                  <div data-drag-group={`menus:${folder}`} className="modifier-menu-list">
+                    {rows.map((setName, menuIndex) => {
+                      const set = sets.find((entry) => entry.name === setName);
+                      if (!set) return null;
+                      return (
+                        <div key={set.name} className="modifier-menu-row" data-drag-index={menuIndex}>
+                          {rows.length > 1 && (
+                            <DragGrip
+                              index={menuIndex}
+                              listLength={rows.length}
+                              group={`menus:${folder}`}
+                              label={set.name}
+                              onDrop={(from, to) => void reorderMenus(folder, from, to)}
+                            />
+                          )}
+                          <button
+                            type="button"
+                            className={`modifier-menu-btn${selected === set.name ? " active" : ""}`}
+                            onClick={() => {
+                              setCreating(false);
+                              chooseSet(set.name);
+                            }}
+                          >
+                            <span>{set.name}</span>
+                            <span className="modifier-menu-meta">{set.assignments.length}</span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </aside>
 
       <div className="panel-box modifier-detail">
@@ -1157,12 +1235,21 @@ export function ModifierLibrary({
               Change names and prices, then Save options. That updates every item that uses {selectedSet.name}.
             </p>
             <p style={{ marginTop: 0, color: "var(--muted)" }}>
-              Use <strong>Move up</strong> / <strong>Move down</strong> to set the order on the till and online menu.
+              Drag ⋮⋮ to set the order on the till and online menu. Edit the name in the box (that is rename).
             </p>
-            <ul className="modifier-option-list">
+            <ul className="modifier-option-list" data-drag-group="options">
               {editOptions.map((option, index) => (
-                <li key={`edit-${index}`} className="modifier-option-row">
+                <li key={`edit-${index}`} className="modifier-option-row" data-drag-index={index}>
                   <div className="modifier-option-fields">
+                    {editOptions.length > 1 && (
+                      <DragGrip
+                        index={index}
+                        listLength={editOptions.length}
+                        group="options"
+                        label={option.name || `option ${index + 1}`}
+                        onDrop={(from, to) => void reorderSetOptions(from, to)}
+                      />
+                    )}
                     <input
                       value={option.name}
                       placeholder="Option name"
@@ -1182,22 +1269,6 @@ export function ModifierLibrary({
                     />
                   </div>
                   <div className="modifier-option-actions">
-                    <button
-                      type="button"
-                      className="secondary"
-                      disabled={index === 0}
-                      onClick={() => void moveSetOption(index, -1)}
-                    >
-                      Move up
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary"
-                      disabled={index === editOptions.length - 1}
-                      onClick={() => void moveSetOption(index, 1)}
-                    >
-                      Move down
-                    </button>
                     <button
                       type="button"
                       className="secondary"

@@ -477,11 +477,28 @@ tr:last-child td {
   font-weight: 600;
 }
 
+.modifier-folder-list,
+.modifier-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
 .modifier-folder {
   display: flex;
   flex-direction: column;
   gap: 4px;
   width: 100%;
+  border-radius: 10px;
+  transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+
+.modifier-folder.drag-over,
+.modifier-menu-row.drag-over,
+.modifier-option-row.drag-over {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .modifier-folder-bar {
@@ -490,6 +507,32 @@ tr:last-child td {
   gap: 4px;
   align-items: center;
   width: 100%;
+}
+
+.drag-grip {
+  flex: 0 0 auto;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0 8px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  font-size: 1rem;
+  letter-spacing: -0.08em;
+  line-height: 1;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.drag-grip:active,
+.drag-grip.is-dragging {
+  cursor: grabbing;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .modifier-folder-head {
