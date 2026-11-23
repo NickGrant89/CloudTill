@@ -659,6 +659,10 @@
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error || "Signup failed");
+          localStorage.removeItem("purepos_bo_token");
+          localStorage.removeItem("purepos_pos_token");
+          localStorage.removeItem("purepos.pos.device");
+          localStorage.removeItem("purepos.pos.till");
           form.hidden = true;
           const done = card.querySelector(".trial-done");
           done.replaceChildren();
@@ -672,9 +676,8 @@
           backOffice.className = "btn btn-primary";
           backOffice.href = "/bo/";
           backOffice.textContent = "Open back office";
-          backOffice.addEventListener("click", (click) => {
-            click.preventDefault();
-            fetch("/api/auth/login", {
+          function signIn(kind) {
+            return fetch("/api/auth/login", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -684,15 +687,37 @@
             })
               .then((loginRes) => loginRes.json().then((body) => ({ ok: loginRes.ok, body })))
               .then(({ ok, body }) => {
-                if (ok && body.token) localStorage.setItem("purepos_bo_token", body.token);
+                if (!ok || !body.token) {
+                  location.assign("/bo/?email=" + encodeURIComponent(data.credentials.email));
+                  return;
+                }
+                if (kind === "till") {
+                  localStorage.setItem("purepos_pos_token", body.token);
+                  localStorage.setItem(
+                    "purepos.pos.device",
+                    JSON.stringify({ storeId: body.store.id, storeName: body.store.name })
+                  );
+                  localStorage.removeItem("purepos.pos.till");
+                  location.assign("/pos/");
+                  return;
+                }
+                localStorage.setItem("purepos_bo_token", body.token);
                 location.assign("/bo/");
               })
-              .catch(() => location.assign("/bo/"));
+              .catch(() => location.assign("/bo/?email=" + encodeURIComponent(data.credentials.email)));
+          }
+          backOffice.addEventListener("click", (click) => {
+            click.preventDefault();
+            signIn("backoffice");
           });
           const till = document.createElement("a");
           till.className = "btn btn-ghost-dark";
           till.href = "/pos/";
           till.textContent = "Open till";
+          till.addEventListener("click", (click) => {
+            click.preventDefault();
+            signIn("till");
+          });
           done.append(
             lead,
             pinRow("Owner email", data.credentials.email),

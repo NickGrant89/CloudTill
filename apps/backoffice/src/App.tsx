@@ -18,7 +18,7 @@ export function App() {
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
   const [page, setPage] = useState<PageId>("dashboard");
   const [navOpen, setNavOpen] = useState(false);
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => new URLSearchParams(window.location.search).get("email") || "");
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
 
