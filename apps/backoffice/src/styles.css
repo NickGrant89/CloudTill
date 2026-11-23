@@ -477,6 +477,49 @@ tr:last-child td {
   font-weight: 600;
 }
 
+.modifier-folder {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.modifier-folder-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 6px 4px;
+  min-height: 32px;
+}
+
+.modifier-folder .modifier-menu-btn {
+  margin-left: 4px;
+}
+
+.modifier-folder-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.modifier-folder-pick select,
+.modifier-folder-pick input {
+  flex: 1 1 140px;
+  min-width: 120px;
+}
+
 .modifier-detail {
   margin-bottom: 0;
   min-height: 220px;

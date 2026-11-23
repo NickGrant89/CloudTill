@@ -231,10 +231,15 @@ export function TimeClockPage() {
 
 interface ModifierSet {
   name: string;
+  folder?: string;
   minSelect: number;
   maxSelect: number;
   options: { name: string; priceCents: number }[];
   assignments: { groupId: string; itemId: string; itemName: string }[];
+}
+
+function folderForSet(set: ModifierSet): string {
+  return (set.folder || "General").trim() || "General";
 }
 
 export function ModifierEditor({
@@ -510,6 +515,10 @@ export function ModifierLibrary({
   const [itemIds, setItemIds] = useState<string[]>([]);
   const [createItemIds, setCreateItemIds] = useState<string[]>([]);
   const [editOptions, setEditOptions] = useState<{ name: string; price: string }[]>([]);
+  const [editFolder, setEditFolder] = useState("General");
+  const [customFolder, setCustomFolder] = useState("");
+  const [addingFolder, setAddingFolder] = useState(false);
+  const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -522,10 +531,16 @@ export function ModifierLibrary({
       setSelected(match.name);
       setItemIds(match.assignments.map((assignment) => assignment.itemId));
       setEditOptions(match.options.map((option) => ({ name: option.name, price: (option.priceCents / 100).toFixed(2) })));
+      setEditFolder(folderForSet(match));
+      setCustomFolder("");
+      setAddingFolder(false);
     } else if (nameToKeep) {
       setSelected("");
       setItemIds([]);
       setEditOptions([]);
+      setEditFolder("General");
+      setCustomFolder("");
+      setAddingFolder(false);
     }
     return next;
   }
@@ -616,6 +631,30 @@ export function ModifierLibrary({
     setEditOptions(
       set ? set.options.map((option) => ({ name: option.name, price: (option.priceCents / 100).toFixed(2) })) : []
     );
+    setEditFolder(set ? folderForSet(set) : "General");
+    setCustomFolder("");
+    setAddingFolder(false);
+  }
+
+  async function saveFolder(folder: string) {
+    if (!selectedSet) return;
+    const cleaned = folder.trim();
+    if (!cleaned) return;
+    setError("");
+    try {
+      await api("/catalog/modifier-sets/folder", {
+        method: "PATCH",
+        body: JSON.stringify({ name: selectedSet.name, folder: cleaned }),
+      });
+      setEditFolder(cleaned);
+      setCustomFolder("");
+      setAddingFolder(false);
+      setNotice(`${selectedSet.name} moved to ${cleaned}.`);
+      await load(selectedSet.name);
+      onChange();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not move modifier");
+    }
   }
 
   async function saveOptions(e: React.FormEvent) {
@@ -705,6 +744,10 @@ export function ModifierLibrary({
   }
 
   const selectedSet = sets.find((set) => set.name === selected);
+  const folderNames = Array.from(new Set(sets.map(folderForSet))).sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: "base" })
+  );
+  const knownFolders = Array.from(new Set(["General", "Pizza", "Burgers", ...folderNames]));
 
   return (
     <div className="modifier-layout">
@@ -716,20 +759,39 @@ export function ModifierLibrary({
           </button>
         </div>
         {sets.length === 0 && <p className="modifier-menu-empty">No modifiers yet</p>}
-        {sets.map((set) => (
-          <button
-            key={set.name}
-            type="button"
-            className={`modifier-menu-btn${selected === set.name ? " active" : ""}`}
-            onClick={() => {
-              setCreating(false);
-              chooseSet(set.name);
-            }}
-          >
-            <span>{set.name}</span>
-            <span className="modifier-menu-meta">{set.assignments.length}</span>
-          </button>
-        ))}
+        {folderNames.map((folder) => {
+          const rows = sets.filter((set) => folderForSet(set) === folder);
+          const collapsed = Boolean(collapsedFolders[folder]);
+          return (
+            <div key={folder} className="modifier-folder">
+              <button
+                type="button"
+                className="modifier-folder-head"
+                onClick={() => setCollapsedFolders((prev) => ({ ...prev, [folder]: !prev[folder] }))}
+              >
+                <span>
+                  {collapsed ? "▸" : "▾"} {folder}
+                </span>
+                <span className="modifier-menu-meta">{rows.length}</span>
+              </button>
+              {!collapsed &&
+                rows.map((set) => (
+                  <button
+                    key={set.name}
+                    type="button"
+                    className={`modifier-menu-btn${selected === set.name ? " active" : ""}`}
+                    onClick={() => {
+                      setCreating(false);
+                      chooseSet(set.name);
+                    }}
+                  >
+                    <span>{set.name}</span>
+                    <span className="modifier-menu-meta">{set.assignments.length}</span>
+                  </button>
+                ))}
+            </div>
+          );
+        })}
       </aside>
 
       <div className="panel-box modifier-detail">
@@ -810,6 +872,45 @@ export function ModifierLibrary({
             <p style={{ color: "var(--muted)", marginTop: 0 }}>
               {selectedSet.minSelect > 0 ? "Required" : "Optional"} · {selectedSet.maxSelect > 1 ? "pick many" : "pick one"}
             </p>
+            <div className="field">
+              <label htmlFor="modifier-folder">Group</label>
+              <div className="modifier-folder-pick">
+                <select
+                  id="modifier-folder"
+                  value={addingFolder ? "__custom" : editFolder}
+                  onChange={(e) => {
+                    if (e.target.value === "__custom") {
+                      setAddingFolder(true);
+                      setCustomFolder("");
+                      return;
+                    }
+                    void saveFolder(e.target.value);
+                  }}
+                >
+                  {knownFolders.map((folder) => (
+                    <option key={folder} value={folder}>
+                      {folder}
+                    </option>
+                  ))}
+                  <option value="__custom">New group…</option>
+                </select>
+                {addingFolder && (
+                  <>
+                    <input
+                      placeholder="Group name"
+                      value={customFolder}
+                      onChange={(e) => setCustomFolder(e.target.value)}
+                    />
+                    <button type="button" className="secondary" onClick={() => void saveFolder(customFolder)}>
+                      Save group
+                    </button>
+                  </>
+                )}
+              </div>
+              <p style={{ margin: "6px 0 0", color: "var(--muted)", fontSize: "0.88rem" }}>
+                Groups only organise this list — the till still shows the modifier name on the item.
+              </p>
+            </div>
             <p style={{ marginTop: 0 }}>
               Change names and prices, then Save options. That updates every item that uses {selectedSet.name}.
             </p>

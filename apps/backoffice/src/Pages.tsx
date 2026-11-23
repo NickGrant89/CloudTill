@@ -890,7 +890,7 @@ function ModifiersPage() {
       <div className="page-head">
         <div>
           <h2>Modifiers</h2>
-          <p>Create modifier menus and assign them to items from the left list</p>
+          <p>Menus are grouped (Pizza, General, …). Open a group, edit options, or move a menu to another group.</p>
         </div>
       </div>
       {error && <p className="error">{error}</p>}

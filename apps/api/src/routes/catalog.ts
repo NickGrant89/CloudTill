@@ -5,6 +5,7 @@ import { owned, rejectForeign } from "../tenant.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 import { companyStoreIds, sameCompany } from "../company.js";
 import { ensurePizzaMenu } from "../pizzaMenu.js";
+import { defaultModifierFolder, readModifierFolders, setModifierFolder } from "../modifierFolders.js";
 
 export const catalogRouter = Router();
 catalogRouter.use(requireAuth);
@@ -450,19 +451,24 @@ catalogRouter.delete("/items/:id", owned("item"), requireRole("owner", "manager"
 });
 
 catalogRouter.get("/modifier-sets", async (req: AuthedRequest, res) => {
-  const groups = await prisma.modifierGroup.findMany({
-    where: { item: { storeId: req.user!.storeId, active: true } },
-    include: {
-      modifiers: { where: { active: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] },
-      item: { select: { id: true, name: true } },
-    },
-    orderBy: { name: "asc" },
-  });
+  const storeId = req.user!.storeId;
+  const [groups, folderMap] = await Promise.all([
+    prisma.modifierGroup.findMany({
+      where: { item: { storeId, active: true } },
+      include: {
+        modifiers: { where: { active: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] },
+        item: { select: { id: true, name: true } },
+      },
+      orderBy: { name: "asc" },
+    }),
+    readModifierFolders(storeId),
+  ]);
 
   const byName = new Map<
     string,
     {
       name: string;
+      folder: string;
       minSelect: number;
       maxSelect: number;
       options: { name: string; priceCents: number }[];
@@ -476,6 +482,7 @@ catalogRouter.get("/modifier-sets", async (req: AuthedRequest, res) => {
     if (!existing) {
       byName.set(group.name.toLowerCase(), {
         name: group.name,
+        folder: folderMap[group.name.toLowerCase()] || defaultModifierFolder(group.name),
         minSelect: group.minSelect,
         maxSelect: group.maxSelect,
         options: group.modifiers.map((modifier) => ({ name: modifier.name, priceCents: modifier.priceCents })),
@@ -486,7 +493,23 @@ catalogRouter.get("/modifier-sets", async (req: AuthedRequest, res) => {
     }
   }
 
-  res.json([...byName.values()]);
+  const rows = [...byName.values()].sort((a, b) => {
+    const folderCmp = a.folder.localeCompare(b.folder, undefined, { sensitivity: "base" });
+    if (folderCmp !== 0) return folderCmp;
+    return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  });
+  res.json(rows);
+});
+
+catalogRouter.patch("/modifier-sets/folder", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const body = z
+    .object({
+      name: z.string().min(1).max(80),
+      folder: z.string().min(1).max(40),
+    })
+    .parse(req.body);
+  const folder = await setModifierFolder(req.user!.storeId, body.name, body.folder);
+  res.json({ ok: true, name: body.name.trim(), folder });
 });
 
 catalogRouter.post("/modifier-sets", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {

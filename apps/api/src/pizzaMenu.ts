@@ -1,4 +1,5 @@
 import { prisma } from "./db.js";
+import { ensureModifierFolders } from "./modifierFolders.js";
 
 const SIZES = [
   { name: "Small", priceCents: 0 },
@@ -174,6 +175,23 @@ export async function ensurePizzaMenu(storeId: string) {
 
   const created = results.filter((row) => row.created).map((row) => row.item.name);
   const skipped = results.filter((row) => !row.created).map((row) => row.item.name);
+  await ensureModifierFolders(
+    storeId,
+    [
+      "Size",
+      "Sauce",
+      "Toppings",
+      "Pizza",
+      "Left half",
+      "Right half",
+      "Extra options",
+      "Left sauce",
+      "Left toppings",
+      "Right sauce",
+      "Right toppings",
+    ],
+    "Pizza"
+  );
   return {
     categoryId: category.id,
     created,
