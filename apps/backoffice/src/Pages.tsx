@@ -1387,16 +1387,54 @@ export async function switchStore(storeId: string) {
   window.location.reload();
 }
 
+type TillDeviceRow = {
+  id: string;
+  label: string;
+  registerId: string | null;
+  registerName: string | null;
+  lastEmployeeName: string | null;
+  lastUserAgent: string | null;
+  lastSeenAt: string;
+  supportNote: string | null;
+  online: boolean;
+};
+
+type RegisterRow = {
+  id: string;
+  name: string;
+  createdAt?: string;
+  lastSeenAt?: string | null;
+  lastEmployeeName?: string | null;
+  lastDeviceLabel?: string | null;
+  online?: boolean;
+};
+
+function formatSeenAt(iso: string | null | undefined) {
+  if (!iso) return "Never";
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "—";
+  const mins = Math.round((Date.now() - t) / 60_000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 48) return `${hours} h ago`;
+  return new Date(iso).toLocaleString("en-GB", { timeZone: "Europe/London" });
+}
+
 function StoresPage() {
   const [settings, setSettings] = useState<{
     store: { id: string; name: string; address: string | null; currency: string };
     registers: { id: string; name: string }[];
   } | null>(null);
   const [stores, setStores] = useState<{ id: string; name: string; address: string | null; registers: { name: string }[] }[]>([]);
-  const [registers, setRegisters] = useState<{ id: string; name: string; createdAt?: string }[]>([]);
+  const [registers, setRegisters] = useState<RegisterRow[]>([]);
+  const [devices, setDevices] = useState<TillDeviceRow[]>([]);
   const [regName, setRegName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+  const [editingDeviceId, setEditingDeviceId] = useState<string | null>(null);
+  const [editingDeviceLabel, setEditingDeviceLabel] = useState("");
+  const [editingDeviceNote, setEditingDeviceNote] = useState("");
   const [tillMsg, setTillMsg] = useState("");
   const [branch, setBranch] = useState({ name: "", address: "", phone: "" });
   const [branchMsg, setBranchMsg] = useState("");
@@ -1406,18 +1444,20 @@ function StoresPage() {
   const kitchenUrl = `${window.location.origin}/pos/kitchen`;
 
   async function load() {
-    const [sett, all, me, billing, regs] = await Promise.all([
+    const [sett, all, me, billing, regs, devs] = await Promise.all([
       api<NonNullable<typeof settings>>("/settings"),
       api<typeof stores>("/auth/stores"),
       api<{ user: { role: string } }>("/auth/me"),
       api<{ features: string[] }>("/billing").catch(() => ({ features: [] as string[] })),
-      api<{ id: string; name: string; createdAt?: string }[]>("/employees/registers"),
+      api<RegisterRow[]>("/employees/registers"),
+      api<TillDeviceRow[]>("/employees/devices").catch(() => [] as TillDeviceRow[]),
     ]);
     setSettings(sett);
     setStores(all);
     setRole(me.user.role);
     setHasBranches(billing.features.includes("multi_store"));
     setRegisters(Array.isArray(regs) ? regs : []);
+    setDevices(Array.isArray(devs) ? devs : []);
   }
 
   async function addBranch(e: React.FormEvent) {
@@ -1450,7 +1490,7 @@ function StoresPage() {
     try {
       await api("/employees/registers", { method: "POST", body: JSON.stringify({ name: regName.trim() }) });
       setRegName("");
-      setTillMsg("Till added. Open it on a device at /pos/ and use Use this iPad as… to pin it.");
+      setTillMsg("Till added. Open /pos/ on a device, sign in — it auto-registers here. Use this iPad as… to pin it.");
       await load();
     } catch (err) {
       setTillMsg(err instanceof Error ? err.message : "Could not add till");
@@ -1475,20 +1515,68 @@ function StoresPage() {
     }
   }
 
+  async function saveDevice(id: string) {
+    setTillMsg("");
+    try {
+      await api(`/employees/devices/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          label: editingDeviceLabel.trim() || undefined,
+          supportNote: editingDeviceNote.trim() || null,
+        }),
+      });
+      setEditingDeviceId(null);
+      setTillMsg("Device details saved.");
+      await load();
+    } catch (err) {
+      setTillMsg(err instanceof Error ? err.message : "Could not update device");
+    }
+  }
+
+  function copySupportPack() {
+    const storeName = settings?.store.name ?? "Store";
+    const online = devices.filter((d) => d.online).length;
+    const lines = [
+      `PurePOS till support — ${storeName}`,
+      `Till URL: ${tillUrl}`,
+      `Kitchen URL: ${kitchenUrl}`,
+      `Registers: ${registers.map((r) => r.name).join(", ") || "(none)"}`,
+      `Devices seen: ${devices.length} (${online} online now)`,
+      ...devices.slice(0, 12).map(
+        (d) =>
+          `• ${d.label}${d.online ? " [online]" : ""} — ${d.registerName ?? "unpinned"} — ${d.lastEmployeeName ?? "—"} — ${formatSeenAt(d.lastSeenAt)}${d.supportNote ? ` — note: ${d.supportNote}` : ""}`
+      ),
+    ];
+    void navigator.clipboard?.writeText(lines.join("\n")).then(() => setTillMsg("Support pack copied — paste into a ticket or chat"));
+  }
+
+  useEffect(() => {
+    if (!(role === "owner" || role === "manager")) return;
+    const timer = window.setInterval(() => {
+      void api<TillDeviceRow[]>("/employees/devices")
+        .then((devs) => setDevices(Array.isArray(devs) ? devs : []))
+        .catch(() => undefined);
+      void api<RegisterRow[]>("/employees/registers")
+        .then((regs) => setRegisters(Array.isArray(regs) ? regs : []))
+        .catch(() => undefined);
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [role]);
+
   return (
     <div>
       <div className="page-head">
         <div>
           <h2>Stores & tills</h2>
-          <p>Branches, till registers, and how to set them up on each device</p>
+          <p>Branches, till registers, live devices, and setup help</p>
         </div>
       </div>
 
       <div className="panel-box" style={{ marginBottom: 16 }}>
         <h3 style={{ marginTop: 0 }}>Till support</h3>
         <p style={{ color: "var(--muted)", marginTop: 0 }}>
-          Each till is a <strong>register</strong> (Front Counter, Patio Kiosk, Drive-thru…). Staff open the same
-          PurePOS till app on a phone, iPad or PC and pin that device to one register.
+          When staff open the till and enter their PIN, that phone or iPad <strong>registers itself here
+          automatically</strong>. You see who is signed in, which till they are on, and whether the device is online.
         </p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
           <a className="secondary" href={tillUrl} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none", padding: "8px 12px", borderRadius: 10 }}>
@@ -1504,36 +1592,147 @@ function StoresPage() {
           >
             Copy till link
           </button>
+          <button type="button" className="secondary" onClick={copySupportPack}>
+            Copy support pack
+          </button>
         </div>
         <ol style={{ margin: "0 0 8px", paddingLeft: 18, lineHeight: 1.5, color: "var(--muted)" }}>
           <li>
-            Add a till below (or use Front Counter). Name a kiosk something clear, e.g. <strong>Patio Kiosk</strong>.
+            Open <strong>{tillUrl}</strong> on the device. First time: <strong>Use my business</strong> (owner email +
+            PIN). After that staff only need their PIN.
           </li>
           <li>
-            On the device open <strong>{tillUrl}</strong>. First time: <strong>Use my business</strong> (owner email +
-            PIN).
+            The device appears under <strong>Devices signed in</strong> below as soon as they log in — no manual add
+            step.
           </li>
           <li>
-            Pick that till, then <strong>Use this iPad as…</strong> so it opens straight into it next time.
+            If you have more than one till, pick it then tap <strong>Use this iPad as…</strong>. A store with no tills
+            yet gets <strong>Front Counter</strong> automatically.
           </li>
           <li>
             <strong>Lock</strong> is the staff PIN. <strong>Change till</strong> on the lock screen (owner/manager PIN)
             moves the device to another register.
           </li>
           <li>
-            Open tickets sync live across tills. Kitchen screen shows web, delivery and till send-to-kitchen orders.
+            Stuck? Copy the support pack, check the device is online here after a PIN login, and confirm they are on
+            this store (not demo).
           </li>
         </ol>
         <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>
-          There isn’t a separate kiosk app — a kiosk is just a till register pinned on a customer-facing or secondary
-          iPad. Same catalog, same live tickets.
+          A kiosk is just another till register pinned on a customer-facing iPad — same app, same live tickets. Kitchen
+          screen: {kitchenUrl}
         </p>
         {tillMsg && <p style={{ marginBottom: 0 }}>{tillMsg}</p>}
       </div>
 
+      {(role === "owner" || role === "manager") && (
+        <div className="panel-box" style={{ marginBottom: 16 }}>
+          <h3 style={{ marginTop: 0 }}>Devices signed in</h3>
+          <p style={{ color: "var(--muted)", marginTop: 0 }}>
+            Live from till login. Online means a heartbeat in the last 3 minutes. Refresh happens about every 30
+            seconds while you keep this page open.
+          </p>
+          {devices.length === 0 ? (
+            <p style={{ color: "var(--muted)" }}>
+              No devices yet — open the till app on a phone or iPad and sign in with a PIN. It will show up here.
+            </p>
+          ) : (
+            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+              {devices.map((dev) => (
+                <li
+                  key={dev.id}
+                  style={{
+                    marginBottom: 12,
+                    paddingBottom: 12,
+                    borderBottom: "1px solid var(--line)",
+                  }}
+                >
+                  {editingDeviceId === dev.id ? (
+                    <div style={{ display: "grid", gap: 8 }}>
+                      <div className="field" style={{ margin: 0 }}>
+                        <label htmlFor={`dev-label-${dev.id}`}>Device name</label>
+                        <input
+                          id={`dev-label-${dev.id}`}
+                          value={editingDeviceLabel}
+                          onChange={(e) => setEditingDeviceLabel(e.target.value)}
+                        />
+                      </div>
+                      <div className="field" style={{ margin: 0 }}>
+                        <label htmlFor={`dev-note-${dev.id}`}>Support note</label>
+                        <input
+                          id={`dev-note-${dev.id}`}
+                          placeholder="e.g. Patio iPad — Guided Access on"
+                          value={editingDeviceNote}
+                          onChange={(e) => setEditingDeviceNote(e.target.value)}
+                        />
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button type="button" onClick={() => void saveDevice(dev.id)}>
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => setEditingDeviceId(null)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-start" }}>
+                      <span
+                        title={dev.online ? "Online" : "Offline"}
+                        style={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: "50%",
+                          marginTop: 6,
+                          background: dev.online ? "#2F6F4E" : "#9aa3ad",
+                          flex: "0 0 auto",
+                        }}
+                      />
+                      <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+                        <strong>{dev.label}</strong>
+                        <div style={{ color: "var(--muted)", fontSize: "0.9rem", marginTop: 2 }}>
+                          {dev.registerName ? `Till: ${dev.registerName}` : "Not pinned to a till yet"}
+                          {" · "}
+                          {dev.lastEmployeeName ? `Last: ${dev.lastEmployeeName}` : "No staff yet"}
+                          {" · "}
+                          {formatSeenAt(dev.lastSeenAt)}
+                          {dev.online ? " · Online" : ""}
+                        </div>
+                        {dev.supportNote && (
+                          <div style={{ fontSize: "0.9rem", marginTop: 4 }}>{dev.supportNote}</div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => {
+                          setEditingDeviceId(dev.id);
+                          setEditingDeviceLabel(dev.label);
+                          setEditingDeviceNote(dev.supportNote ?? "");
+                        }}
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       <div className="panel-box" style={{ marginBottom: 16 }}>
         <h3 style={{ marginTop: 0 }}>Tills on {settings?.store.name ?? "this store"}</h3>
-        {registers.length === 0 && <p style={{ color: "var(--muted)" }}>No tills yet — add one below.</p>}
+        {registers.length === 0 && (
+          <p style={{ color: "var(--muted)" }}>
+            No tills yet — the first till login creates Front Counter, or add one below.
+          </p>
+        )}
         <ul style={{ listStyle: "none", padding: 0, margin: "0 0 12px" }}>
           {registers.map((reg) => (
             <li
@@ -1572,7 +1771,24 @@ function StoresPage() {
                 </>
               ) : (
                 <>
-                  <strong style={{ flex: "1 1 140px" }}>{reg.name}</strong>
+                  <span
+                    title={reg.online ? "Online" : "Offline"}
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: "50%",
+                      background: reg.online ? "#2F6F4E" : "#9aa3ad",
+                      flex: "0 0 auto",
+                    }}
+                  />
+                  <div style={{ flex: "1 1 160px", minWidth: 0 }}>
+                    <strong>{reg.name}</strong>
+                    <div style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: 2 }}>
+                      {reg.lastSeenAt
+                        ? `${formatSeenAt(reg.lastSeenAt)}${reg.lastEmployeeName ? ` · ${reg.lastEmployeeName}` : ""}${reg.lastDeviceLabel ? ` · ${reg.lastDeviceLabel}` : ""}`
+                        : "No device signed in yet"}
+                    </div>
+                  </div>
                   {(role === "owner" || role === "manager") && (
                     <button
                       type="button"

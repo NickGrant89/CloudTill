@@ -34,7 +34,12 @@ async function session(emp: EmployeeRow, storeId = emp.storeId) {
     email: emp.email,
   });
   const store = await prisma.store.findUniqueOrThrow({ where: { id: storeId } });
-  const registers = await prisma.register.findMany({ where: { storeId } });
+  let registers = await prisma.register.findMany({ where: { storeId }, orderBy: { name: "asc" } });
+  // New stores (and tills that never had a register added) get one automatically so login always lands on a till.
+  if (registers.length === 0) {
+    await prisma.register.create({ data: { storeId, name: "Front Counter" } });
+    registers = await prisma.register.findMany({ where: { storeId }, orderBy: { name: "asc" } });
+  }
   const stores = worksAcrossBranches(emp.role)
     ? await prisma.store.findMany({
         where: { id: { in: await companyStoreIds(emp.storeId) } },
