@@ -935,7 +935,111 @@ select:focus-visible {
   padding: 0 12px;
 }
 
-@media (max-width: 840px) {
+/* iPad / compact tablet: keep sale + ticket side-by-side */
+@media (max-width: 1100px) and (min-width: 700px) {
+  .search,
+  .field input,
+  .field select,
+  .toolbar-identity select {
+    font-size: 16px;
+  }
+
+  .toolbar-dark {
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 10px 10px 0;
+    padding: 8px 10px;
+  }
+
+  .toolbar-identity .store-name {
+    max-width: 22vw;
+  }
+
+  .toolbar-identity .who {
+    display: none;
+  }
+
+  .toolbar-actions {
+    flex: 1 1 auto;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    margin-left: auto;
+    gap: 6px;
+  }
+
+  .toolbar-actions button {
+    min-height: 40px;
+    padding: 0 10px;
+    font-size: 0.82rem;
+  }
+
+  .till-steps {
+    margin: 8px 10px 0;
+  }
+
+  .register {
+    grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.95fr);
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+    gap: 8px;
+    padding: 8px 10px 12px;
+  }
+
+  .item-tile {
+    min-height: 108px;
+    aspect-ratio: 1;
+    padding: 10px;
+  }
+
+  .item-tile .name {
+    font-size: 0.9rem;
+  }
+
+  .qty-controls button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .actions .pay-btn {
+    grid-column: 1 / -1;
+    min-height: 52px;
+  }
+
+  .actions button {
+    min-height: 46px;
+  }
+
+  .open-ticket-chip {
+    min-width: 124px;
+    max-width: 168px;
+  }
+
+  .ticket-head {
+    flex-wrap: wrap;
+  }
+
+  .modal-backdrop {
+    padding: 16px;
+  }
+
+  .modal,
+  .modal.wide {
+    width: min(560px, 100%);
+    max-height: min(88dvh, 760px);
+  }
+}
+
+/* Phone: single-pane catalog ↔ ticket with dock */
+@media (max-width: 699px) {
   .login {
     padding: 16px;
     align-items: safe center;
@@ -966,37 +1070,24 @@ select:focus-visible {
   }
 
   .toolbar-dark {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-    margin: 8px 8px 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    margin: 6px 6px 0;
     padding: 8px;
   }
 
-  .till-steps {
-    margin: 8px 8px 0;
-    gap: 4px;
-  }
-
-  .till-step {
-    min-height: 34px;
-    padding: 0 6px;
-    font-size: 0.72rem;
-  }
-
-  .till-step .till-dot {
-    width: 18px;
-    height: 18px;
-    font-size: 0.68rem;
-  }
-
-  .toolbar-actions.is-quiet {
-    display: none;
+  .toolbar-identity {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .toolbar-identity .store-name {
     max-width: none;
     flex: 1;
+    min-width: 0;
+    font-size: 0.92rem;
   }
 
   .toolbar-identity .who {
@@ -1004,14 +1095,73 @@ select:focus-visible {
   }
 
   .toolbar-identity select {
-    max-width: 132px;
+    flex: 1 1 auto;
+    max-width: 136px;
+    min-width: 0;
+    min-height: 36px;
+    padding: 0 8px;
+    font-size: 0.85rem;
+  }
+
+  .lock-btn {
+    min-height: 36px;
+    padding: 0 10px;
+  }
+
+  .offline-badge,
+  .offline-export {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: 0 10px;
+    font-size: 0.7rem;
+  }
+
+  .toolbar-actions.is-quiet {
+    display: none;
   }
 
   .toolbar-actions {
+    flex: 1 1 100%;
     margin-left: 0;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
     padding-bottom: 2px;
-    scroll-padding-inline: 12px;
+    mask-image: linear-gradient(90deg, #000 0%, #000 calc(100% - 28px), transparent);
+  }
+
+  .toolbar-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .toolbar-actions button {
+    flex: 0 0 auto;
+    min-width: max-content;
+    min-height: 36px;
+    padding: 0 12px;
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+
+  .till-steps {
+    margin: 6px 6px 0;
+    gap: 4px;
+  }
+
+  .till-step {
+    min-height: 30px;
+    padding: 0 4px;
+    font-size: 0.68rem;
+    gap: 4px;
+  }
+
+  .till-step .till-dot {
+    width: 16px;
+    height: 16px;
+    font-size: 0.65rem;
   }
 
   .qty-controls button {
@@ -1019,16 +1169,12 @@ select:focus-visible {
     min-height: 44px;
   }
 
-  .toolbar-actions button {
-    flex: 0 0 auto;
-    white-space: nowrap;
-  }
-
   .register {
     display: flex;
     flex-direction: column;
-    padding: 8px;
+    padding: 6px;
     gap: 0;
+    min-height: 0;
   }
 
   .register.pane-items .ticket-panel {
@@ -1052,6 +1198,7 @@ select:focus-visible {
 
   .register.pane-items + .mobile-dock {
     display: flex;
+    flex: 0 0 auto;
   }
 
   .register.pane-items + .mobile-dock.is-hidden {
@@ -1059,22 +1206,36 @@ select:focus-visible {
   }
 
   .topbar {
-    padding: 10px;
+    padding: 8px 10px;
+    gap: 8px;
   }
 
   .brand-mini {
-    font-size: 1.05rem;
+    font-size: 1rem;
+    margin-right: 0;
   }
 
   .search {
     min-width: 0;
   }
 
+  .chip-row {
+    padding: 8px 10px;
+    gap: 6px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .chip {
+    min-height: 36px;
+    padding: 0 12px;
+    font-size: 0.88rem;
+  }
+
   .grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-auto-rows: 148px;
+    grid-auto-rows: minmax(132px, 18vw);
     gap: 8px;
-    padding: 8px 10px 12px;
+    padding: 8px 10px 14px;
   }
 
   .item-tile {
@@ -1086,10 +1247,89 @@ select:focus-visible {
 
   .ticket-head {
     padding: 10px 12px 6px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .ticket-head .btn.ghost {
+    min-height: 40px;
+  }
+
+  .live-sync-toast {
+    flex: 1 0 100%;
+    order: -1;
+  }
+
+  .open-tickets-rail {
+    padding: 0 10px 8px;
+  }
+
+  .open-ticket-chip {
+    min-width: 120px;
+    max-width: 160px;
+    min-height: 48px;
+  }
+
+  .ticket-lines {
+    min-height: 0;
+  }
+
+  .line {
+    padding: 10px 6px;
+  }
+
+  .totals {
+    flex-shrink: 0;
+    padding: 8px 12px 6px;
+    gap: 3px;
+    font-size: 0.88rem;
+    background: #f6f1e8;
+  }
+
+  .totals .grand {
+    font-size: 1.28rem;
+  }
+
+  .actions {
+    flex-shrink: 0;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    padding: 0 10px calc(10px + env(safe-area-inset-bottom));
+    background: #f6f1e8;
+  }
+
+  .actions .pay-btn {
+    grid-column: 1 / -1;
+    order: -1;
+    min-height: 50px;
   }
 
   .actions button {
-    min-height: 46px;
+    min-height: 42px;
+    font-size: 0.8rem;
+    padding: 0 4px;
+  }
+
+  .modifier-bar {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .modifier-bar .pay-btn {
+    margin-left: 0;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .mobile-dock {
+    gap: 8px;
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .dock-ticket,
+  .dock-pay {
+    min-height: 52px;
   }
 
   .modal-backdrop {
@@ -1120,6 +1360,56 @@ select:focus-visible {
 
   .modal-actions button {
     width: 100%;
+  }
+
+  .pay-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .tender-row {
+    flex-wrap: nowrap;
+    align-items: stretch;
+  }
+
+  .tender-row input {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .tender-row .btn {
+    flex: 0 0 auto;
+    padding: 0 14px;
+  }
+
+  .tender-row .btn.secondary,
+  .tender-row .btn.ghost:not(:only-child) {
+    flex: 1 1 auto;
+  }
+
+  .quick-amounts {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .quick-amounts button {
+    flex: none;
+    min-width: 0;
+    padding: 0 4px;
+    font-size: 0.85rem;
+  }
+
+  .tender-modal h3 {
+    margin-bottom: 8px;
+  }
+
+  .tender-modal .field {
+    margin-bottom: 6px;
+  }
+
+  /* Phone-order link lives on the dedicated Phone order flow; keep pay sheet short */
+  .pay-text-to-pay {
+    display: none;
   }
 }
 

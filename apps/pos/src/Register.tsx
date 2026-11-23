@@ -1589,7 +1589,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
                 )}
               </div>
             ))}
-            <div className="field" style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--line, #dce5e1)" }}>
+            <div className="field pay-text-to-pay" style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--line, #dce5e1)" }}>
               <label>Phone order · text to pay</label>
               <p className="hint" style={{ marginTop: 0 }}>
                 For phone orders: send an SMS pay link (Twilio) or copy the link. Prefer the till{" "}
