@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 import { storeAllowsFeature } from "./billing.js";
+import { companyStoreIds, sameCompany } from "../company.js";
 
 export const inventoryRouter = Router();
 inventoryRouter.use(requireAuth);
@@ -10,11 +11,15 @@ inventoryRouter.use(requireAuth);
 inventoryRouter.get("/levels", async (req: AuthedRequest, res) => {
   const lowOnly = req.query.low === "1" || req.query.low === "true";
   const storeParam = typeof req.query.storeId === "string" ? req.query.storeId : "all";
+  const companyIds = await companyStoreIds(req.user!.storeId);
   const storeFilter =
     storeParam === "all" ? undefined : storeParam === "current" ? req.user!.storeId : storeParam;
+  if (storeFilter && !companyIds.includes(storeFilter)) {
+    return res.status(403).json({ error: "That store is not part of your business" });
+  }
 
   const levels = await prisma.inventoryLevel.findMany({
-    where: storeFilter ? { storeId: storeFilter } : undefined,
+    where: storeFilter ? { storeId: storeFilter } : { storeId: { in: companyIds } },
     include: {
       variant: { include: { item: { include: { category: true } } } },
       store: true,
@@ -52,6 +57,9 @@ inventoryRouter.post("/receive", requireRole("owner", "manager"), async (req: Au
     .parse(req.body);
 
   const storeId = body.storeId ?? req.user!.storeId;
+  if (!(await sameCompany(req.user!.storeId, [storeId]))) {
+    return res.status(403).json({ error: "That store is not part of your business" });
+  }
   const level = await prisma.inventoryLevel.findUnique({
     where: { storeId_variantId: { storeId, variantId: body.variantId } },
   });
@@ -181,6 +189,9 @@ inventoryRouter.post("/transfers", requireRole("owner", "manager"), async (req: 
 
   if (body.fromStoreId === body.toStoreId) {
     return res.status(400).json({ error: "from and to stores must differ" });
+  }
+  if (!(await sameCompany(req.user!.storeId, [body.fromStoreId, body.toStoreId]))) {
+    return res.status(403).json({ error: "Transfers are only allowed between your own branches" });
   }
 
   const fromLevel = await prisma.inventoryLevel.findUnique({

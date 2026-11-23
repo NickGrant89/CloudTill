@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
+import { companyStoreIds, sameCompany } from "../company.js";
 
 export const catalogRouter = Router();
 catalogRouter.use(requireAuth);
@@ -175,7 +176,9 @@ catalogRouter.get("/items/store-presence", requireRole("owner", "manager"), asyn
     include: { variants: { where: { active: true }, select: { sku: true } } },
   });
   const skus = [...new Set(items.flatMap((i) => i.variants.map((v) => v.sku).filter(Boolean)))];
+  const companyIds = await companyStoreIds(storeId);
   const stores = await prisma.store.findMany({
+    where: { id: { in: companyIds } },
     select: { id: true, name: true, slug: true },
     orderBy: { name: "asc" },
   });
@@ -186,7 +189,7 @@ catalogRouter.get("/items/store-presence", requireRole("owner", "manager"), asyn
           where: {
             sku: { in: skus },
             active: true,
-            item: { storeId: { not: storeId }, active: true },
+            item: { storeId: { in: companyIds.filter((id) => id !== storeId) }, active: true },
           },
           select: {
             sku: true,
@@ -241,6 +244,9 @@ catalogRouter.post("/items/assign-stores", requireRole("owner", "manager"), asyn
   const targetIds = body.data.storeIds.filter((id) => id !== sourceStoreId);
   if (!targetIds.length) return res.status(400).json({ error: "Pick at least one other branch/store" });
 
+  if (!(await sameCompany(sourceStoreId, targetIds))) {
+    return res.status(403).json({ error: "You can only send items to your own branches" });
+  }
   const targets = await prisma.store.findMany({ where: { id: { in: targetIds } } });
   if (targets.length !== targetIds.length) {
     return res.status(400).json({ error: "One or more target stores were not found" });

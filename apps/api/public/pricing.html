@@ -428,7 +428,7 @@
           msg.textContent = `${data.message}\nPackage: ${data.account.planName} · trial to ${new Date(data.account.trialEndsAt).toLocaleDateString("en-GB")} · store /${data.account.storeSlug}`;
           if (data.credentials) {
             cred.hidden = false;
-            cred.textContent = `Email: ${data.credentials.email}\nOwner PIN: ${data.credentials.ownerPin}\nCashier PIN: ${data.credentials.cashierPin}\nLicense: ${data.credentials.licenseKey}`;
+            cred.textContent = `Email: ${data.credentials.email}\nOwner PIN: ${data.credentials.ownerPin}\nCashier PIN: ${data.credentials.cashierPin}\nLicense: ${data.credentials.licenseKey}\n\nBack office: /bo/ — sign in with the email + owner PIN.\nTill: /pos/ — tap “Use my business”, enter the email + owner PIN once; after that staff just use their PIN.`;
           }
         } catch (err) {
           msg.className = "msg err";

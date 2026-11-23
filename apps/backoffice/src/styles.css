@@ -718,3 +718,15 @@ tr:last-child td {
     grid-column: 1 / -1;
   }
 }
+
+.linkish {
+  background: transparent;
+  color: var(--accent, #0d9488);
+  border: none;
+  padding: 0 2px;
+  min-height: 0;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+}

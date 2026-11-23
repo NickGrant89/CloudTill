@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db.js";
 import { checkPin, requireAuth, signToken, type AuthedRequest } from "../auth.js";
 import type { Role } from "@cloudtill/shared";
+import { companyStoreIds, DEMO_COMPANY } from "../company.js";
 
 export const authRouter = Router();
 
@@ -15,11 +16,16 @@ authRouter.post("/login", async (req, res) => {
     })
     .parse(req.body);
 
+  // A bare PIN is only unique inside one business: without email or a paired store, only the demo company matches.
   const employees = await prisma.employee.findMany({
     where: {
       active: true,
-      ...(body.email ? { email: body.email } : {}),
-      ...(body.storeId ? { storeId: body.storeId } : {}),
+      ...(body.email ? { email: body.email.toLowerCase() } : {}),
+      ...(body.storeId
+        ? { storeId: body.storeId }
+        : body.email
+          ? {}
+          : { store: { companyKey: DEMO_COMPANY } }),
     },
   });
 
@@ -78,8 +84,10 @@ authRouter.get("/me", requireAuth, async (req: AuthedRequest, res) => {
   });
 });
 
-authRouter.get("/stores", async (_req, res) => {
+authRouter.get("/stores", requireAuth, async (req: AuthedRequest, res) => {
+  const ids = await companyStoreIds(req.user!.storeId);
   const stores = await prisma.store.findMany({
+    where: { id: { in: ids } },
     include: { registers: true },
     orderBy: { name: "asc" },
   });

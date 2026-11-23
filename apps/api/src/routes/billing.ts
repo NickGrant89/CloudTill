@@ -143,10 +143,11 @@ async function provisionStore(opts: {
   const trialEndsAt = new Date(Date.now() + plan.trialDays * 24 * 60 * 60 * 1000).toISOString();
   const slug = await uniqueSlug(opts.businessName);
   const ownerPin = String(1000 + Math.floor(Math.random() * 9000));
-  const cashierPin = "1111";
+  let cashierPin = String(1000 + Math.floor(Math.random() * 9000));
+  while (cashierPin === ownerPin) cashierPin = String(1000 + Math.floor(Math.random() * 9000));
   const licenseKey = mintLicenseKey(plan.id);
 
-  const store = await prisma.store.create({
+  const created = await prisma.store.create({
     data: {
       slug,
       name: opts.businessName,
@@ -155,6 +156,7 @@ async function provisionStore(opts: {
       address: "UK",
     },
   });
+  const store = await prisma.store.update({ where: { id: created.id }, data: { companyKey: created.id } });
 
   await prisma.register.create({ data: { storeId: store.id, name: "Front Counter" } });
   await prisma.tax.create({

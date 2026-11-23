@@ -17,8 +17,8 @@ export function App() {
   const [storeName, setStoreName] = useState("");
   const [page, setPage] = useState<PageId>("dashboard");
   const [navOpen, setNavOpen] = useState(false);
-  const [email, setEmail] = useState("owner@purepos.demo");
-  const [pin, setPin] = useState("1234");
+  const [email, setEmail] = useState("");
+  const [pin, setPin] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -74,21 +74,48 @@ export function App() {
           <h1>PurePOS</h1>
           <p>Back office · desktop management</p>
           <div className="field">
-            <label>Email</label>
-            <select value={email} onChange={(e) => setEmail(e.target.value)}>
-              <option value="owner@purepos.demo">owner@purepos.demo</option>
-              <option value="manager@purepos.demo">manager@purepos.demo</option>
-            </select>
+            <label htmlFor="bo-email">Email</label>
+            <input
+              id="bo-email"
+              type="email"
+              inputMode="email"
+              autoComplete="username"
+              required
+              placeholder="you@yourbusiness.co.uk"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
           </div>
           <div className="field">
-            <label>PIN</label>
-            <input value={pin} onChange={(e) => setPin(e.target.value)} />
+            <label htmlFor="bo-pin">PIN</label>
+            <input
+              id="bo-pin"
+              type="password"
+              inputMode="numeric"
+              autoComplete="current-password"
+              required
+              minLength={4}
+              value={pin}
+              onChange={(e) => setPin(e.target.value)}
+            />
           </div>
           {error && <p className="error">{error}</p>}
           <button type="submit" style={{ width: "100%", marginTop: 8 }}>
             Sign in
           </button>
-          <p style={{ marginTop: 14, fontSize: "0.82rem" }}>Demo: owner 1234 · manager 2222</p>
+          <p style={{ marginTop: 14, fontSize: "0.82rem" }}>
+            Trying the demo?{" "}
+            <button
+              type="button"
+              className="linkish"
+              onClick={() => {
+                setEmail("owner@purepos.demo");
+                setPin("1234");
+              }}
+            >
+              Fill demo owner login
+            </button>
+          </p>
         </form>
       </div>
     );

@@ -1282,7 +1282,7 @@ function StoresPage() {
       <div className="page-head">
         <div>
           <h2>Stores & registers</h2>
-          <p>Multi-store stub · registers for the active store</p>
+          <p>Your business’s stores · registers for the active store</p>
         </div>
       </div>
       <div className="table-wrap" style={{ marginBottom: 16 }}>
