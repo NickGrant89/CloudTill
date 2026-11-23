@@ -12,7 +12,7 @@ import {
   fingerprintLicense,
   mintLicenseKey,
   readBilling,
-  writeSetting,
+  writeCompanySetting,
 } from "./billing.js";
 
 export const adminRouter = Router();
@@ -157,9 +157,9 @@ adminRouter.post("/stores/:storeId/plan", async (req, res) => {
   const store = await prisma.store.findUnique({ where: { id: req.params.storeId } });
   if (!store) return res.status(404).json({ error: "Store not found" });
 
-  await writeSetting(store.id, BILLING_PLAN_KEY, body.data.planId);
+  await writeCompanySetting(store.id, BILLING_PLAN_KEY, body.data.planId);
   if (body.data.status) {
-    await writeSetting(store.id, BILLING_STATUS_KEY, body.data.status);
+    await writeCompanySetting(store.id, BILLING_STATUS_KEY, body.data.status);
   }
   await appendBillingAudit(store.id, {
     type: "admin_change_plan",
@@ -188,8 +188,8 @@ adminRouter.post("/stores/:storeId/trial", async (req, res) => {
   const ends =
     body.data.trialEndsAt ||
     new Date(Date.now() + (body.data.days || 14) * 24 * 60 * 60 * 1000).toISOString();
-  await writeSetting(store.id, BILLING_TRIAL_KEY, ends);
-  await writeSetting(store.id, BILLING_STATUS_KEY, body.data.status || "trialing");
+  await writeCompanySetting(store.id, BILLING_TRIAL_KEY, ends);
+  await writeCompanySetting(store.id, BILLING_STATUS_KEY, body.data.status || "trialing");
   await appendBillingAudit(store.id, {
     type: "admin_extend_trial",
     detail: { trialEndsAt: ends, days: body.data.days || null },
@@ -213,12 +213,12 @@ adminRouter.post("/stores/:storeId/license/issue", async (req, res) => {
   const billing = await readBilling(store.id);
   const planId = (body.data.planId || billing.planId) as PlanId;
   const licenseKey = mintLicenseKey(planId);
-  await writeSetting(store.id, BILLING_PLAN_KEY, planId);
-  await writeSetting(store.id, BILLING_LICENSE_KEY, fingerprintLicense(licenseKey));
-  await writeSetting(store.id, BILLING_LICENSE_LAST_KEY, licenseKey);
+  await writeCompanySetting(store.id, BILLING_PLAN_KEY, planId);
+  await writeCompanySetting(store.id, BILLING_LICENSE_KEY, fingerprintLicense(licenseKey));
+  await writeCompanySetting(store.id, BILLING_LICENSE_LAST_KEY, licenseKey);
   if (body.data.activate !== false) {
-    await writeSetting(store.id, BILLING_STATUS_KEY, "active");
-    await writeSetting(store.id, BILLING_TRIAL_KEY, "");
+    await writeCompanySetting(store.id, BILLING_STATUS_KEY, "active");
+    await writeCompanySetting(store.id, BILLING_TRIAL_KEY, "");
   }
   await appendBillingAudit(store.id, {
     type: "admin_issue_license",
@@ -238,8 +238,8 @@ adminRouter.post("/stores/:storeId/license/rotate", async (req, res) => {
   if (!store) return res.status(404).json({ error: "Store not found" });
   const billing = await readBilling(store.id);
   const licenseKey = mintLicenseKey(billing.planId as PlanId);
-  await writeSetting(store.id, BILLING_LICENSE_KEY, fingerprintLicense(licenseKey));
-  await writeSetting(store.id, BILLING_LICENSE_LAST_KEY, licenseKey);
+  await writeCompanySetting(store.id, BILLING_LICENSE_KEY, fingerprintLicense(licenseKey));
+  await writeCompanySetting(store.id, BILLING_LICENSE_LAST_KEY, licenseKey);
   await appendBillingAudit(store.id, {
     type: "admin_rotate_license",
     detail: { planId: billing.planId, licenseKey },
@@ -255,9 +255,9 @@ adminRouter.post("/stores/:storeId/license/rotate", async (req, res) => {
 adminRouter.post("/stores/:storeId/license/revoke", async (req, res) => {
   const store = await prisma.store.findUnique({ where: { id: req.params.storeId } });
   if (!store) return res.status(404).json({ error: "Store not found" });
-  await writeSetting(store.id, BILLING_LICENSE_KEY, "");
-  await writeSetting(store.id, BILLING_LICENSE_LAST_KEY, "");
-  await writeSetting(store.id, BILLING_STATUS_KEY, "canceled");
+  await writeCompanySetting(store.id, BILLING_LICENSE_KEY, "");
+  await writeCompanySetting(store.id, BILLING_LICENSE_LAST_KEY, "");
+  await writeCompanySetting(store.id, BILLING_STATUS_KEY, "canceled");
   await appendBillingAudit(store.id, { type: "admin_revoke_license", detail: {} });
   res.json({ ok: true, storeId: store.id, billing: await readBilling(store.id) });
 });

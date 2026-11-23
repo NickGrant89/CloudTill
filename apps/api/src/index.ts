@@ -69,7 +69,7 @@ app.get("/api/health", async (_req, res) => {
     product: process.env.PRODUCT_NAME || "PurePOS",
     legalName: process.env.PRODUCT_LEGAL || "PurePOS UK",
     domain: process.env.PRODUCT_DOMAIN || "purepos.co.uk",
-    version: "0.7.0",
+    version: "0.7.1",
     database,
     storeCount,
     time: new Date().toISOString(),

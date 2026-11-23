@@ -4,6 +4,7 @@ import { z } from "zod";
 import { PLANS, getPlan, planHasFeature, type PlanId } from "@cloudtill/shared";
 import { prisma } from "../db.js";
 import { hashPin, requireAuth, requireRole, type AuthedRequest } from "../auth.js";
+import { companyStoreIds } from "../company.js";
 
 export const billingRouter = Router();
 export const publicBillingRouter = Router();
@@ -51,6 +52,11 @@ export async function writeSetting(storeId: string, key: string, value: string) 
     create: { storeId, key, value },
     update: { value },
   });
+}
+
+/** Plan, trial and licence are per business: write them to every branch. */
+export async function writeCompanySetting(storeId: string, key: string, value: string) {
+  for (const id of await companyStoreIds(storeId)) await writeSetting(id, key, value);
 }
 
 export async function appendBillingAudit(
@@ -414,8 +420,10 @@ billingRouter.get("/", async (req: AuthedRequest, res) => {
 billingRouter.patch("/plan", requireRole("owner"), async (req: AuthedRequest, res) => {
   const body = z.object({ planId: z.enum(["starter", "pro", "multi"]) }).safeParse(req.body);
   if (!body.success) return res.status(400).json({ error: "planId required" });
-  await writeSetting(req.user!.storeId, BILLING_PLAN_KEY, body.data.planId);
-  await writeSetting(req.user!.storeId, BILLING_STATUS_KEY, "active");
+  for (const storeId of await companyStoreIds(req.user!.storeId)) {
+    await writeSetting(storeId, BILLING_PLAN_KEY, body.data.planId);
+    await writeSetting(storeId, BILLING_STATUS_KEY, "active");
+  }
   const billing = await readBilling(req.user!.storeId);
   res.json(billing);
 });
@@ -427,11 +435,13 @@ billingRouter.post("/activate-license", requireRole("owner"), async (req: Authed
   const match = /^PP-(STARTER|PRO|MULTI)-/.exec(key);
   if (!match) return res.status(400).json({ error: "Invalid PurePOS license key format" });
   const planId = match[1].toLowerCase() as PlanId;
-  await writeSetting(req.user!.storeId, BILLING_PLAN_KEY, planId);
-  await writeSetting(req.user!.storeId, BILLING_STATUS_KEY, "active");
-  await writeSetting(req.user!.storeId, BILLING_LICENSE_KEY, fingerprintLicense(key));
-  await writeSetting(req.user!.storeId, BILLING_LICENSE_LAST_KEY, key);
-  await writeSetting(req.user!.storeId, BILLING_TRIAL_KEY, "");
+  for (const storeId of await companyStoreIds(req.user!.storeId)) {
+    await writeSetting(storeId, BILLING_PLAN_KEY, planId);
+    await writeSetting(storeId, BILLING_STATUS_KEY, "active");
+    await writeSetting(storeId, BILLING_LICENSE_KEY, fingerprintLicense(key));
+    await writeSetting(storeId, BILLING_LICENSE_LAST_KEY, key);
+    await writeSetting(storeId, BILLING_TRIAL_KEY, "");
+  }
   await appendBillingAudit(req.user!.storeId, { type: "activate_license", detail: { planId, via: "bo" } });
   res.json(await readBilling(req.user!.storeId));
 });
