@@ -144,7 +144,7 @@ type Modal =
   | { type: "customers" }
   | { type: "discount" }
   | { type: "tip" }
-  | { type: "receipt"; text: string; changeCents: number; saleId: string }
+  | { type: "receipt"; text: string; changeCents: number; saleId: string; kitchenText?: string }
   | { type: "shift" }
   | { type: "board" }
   | { type: "kitchen" }
@@ -1014,6 +1014,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
           employeeName: string;
           customerName: string | null;
         };
+        kitchenTicket?: { preview: string; orderId: string | null; printJobId: string };
         changeCents: number;
         drawerOpened: boolean;
       }>(`/pos/tickets/${ticket.id}/pay`, {
@@ -1055,9 +1056,16 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
       ]
         .filter(Boolean)
         .join("\n");
+      const kitchenText = result.kitchenTicket?.preview;
       setCurrentTicket(null);
       setMobilePane("items");
-      setModal({ type: "receipt", text, changeCents: result.changeCents, saleId: s.id });
+      setModal({
+        type: "receipt",
+        text,
+        changeCents: result.changeCents,
+        saleId: s.id,
+        kitchenText,
+      });
       void api("/printers/print-receipt", {
         method: "POST",
         body: JSON.stringify({ saleId: s.id, openDrawer: result.drawerOpened }),
@@ -1130,6 +1138,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
           name,
           fulfillment: kitchenForm.fulfillment,
           note: kitchenForm.note.trim() || undefined,
+          ticketId: ticket.id,
           lines: unsentLines.map(({ line, quantity }) => ({
             variantId: line.variantId,
             name: line.name,
@@ -2003,10 +2012,46 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             <p className="step-kicker">Step 4 · Done</p>
             <h3>Sale complete</h3>
             {modal.changeCents > 0 && <p className="change-due">Change due: {money(modal.changeCents)}</p>}
+            <p style={{ color: "var(--muted)", marginTop: 0 }}>
+              Billing receipt and kitchen ticket both include the modifiers from this sale.
+            </p>
+            <p className="step-kicker">Billing receipt</p>
             <pre className="receipt">{modal.text}</pre>
+            {modal.kitchenText && (
+              <>
+                <p className="step-kicker">Kitchen ticket</p>
+                <pre className="receipt">{modal.kitchenText}</pre>
+              </>
+            )}
             <div className="modal-actions">
               <button type="button" className="btn primary" onClick={() => setModal(null)}>
                 New sale
+              </button>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() =>
+                  void api("/printers/print-receipt", {
+                    method: "POST",
+                    body: JSON.stringify({ saleId: modal.saleId }),
+                  }).catch((error) => fail("Billing receipt", error))
+                }
+              >
+                Reprint billing
+              </button>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() =>
+                  void api<{ preview: string }>("/printers/print-kitchen", {
+                    method: "POST",
+                    body: JSON.stringify({ saleId: modal.saleId }),
+                  })
+                    .then((r) => setModal({ ...modal, kitchenText: r.preview }))
+                    .catch((error) => fail("Kitchen ticket", error))
+                }
+              >
+                Reprint kitchen
               </button>
               <button
                 type="button"

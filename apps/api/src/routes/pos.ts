@@ -3,6 +3,7 @@ import { z } from "zod";
 import { nanoid } from "nanoid";
 import { prisma } from "../db.js";
 import { orderStoredModifiers } from "../modifierOrder.js";
+import { ensureKitchenTicketForSale } from "../kitchenTicket.js";
 import { owned, rejectForeign } from "../tenant.js";
 import { requireAuth, type AuthedRequest } from "../auth.js";
 import { calcTax, lineSubtotal } from "../money.js";
@@ -404,6 +405,37 @@ posRouter.post("/tickets/:id/pay", owned("ticket"), async (req: AuthedRequest, r
     });
   }
 
+  const kitchenLines = (
+    ticket as {
+      lines: {
+        variantId: string;
+        name: string;
+        quantity: number;
+        unitPriceCents: number;
+        modifiersJson: string;
+        note: string | null;
+      }[];
+    }
+  ).lines;
+  const kitchenTicket = await ensureKitchenTicketForSale({
+    storeId: ticket.storeId,
+    saleId: sale.id,
+    receiptNumber: sale.receiptNumber,
+    ticketId: ticket.id,
+    customerName: sale.customer?.name ?? ticket.name,
+    fulfillment: "dine_in",
+    note: ticket.note,
+    alreadySent: Boolean(ticket.kitchenStatus),
+    lines: kitchenLines.map((line) => ({
+      variantId: line.variantId,
+      name: line.name,
+      quantity: line.quantity,
+      unitPriceCents: line.unitPriceCents,
+      modifiersJson: line.modifiersJson,
+      note: line.note,
+    })),
+  });
+
   await prisma.ticket.update({ where: { id: ticket.id }, data: { status: "paid" } });
   await prisma.ticketLine.deleteMany({ where: { ticketId: ticket.id } });
 
@@ -422,6 +454,7 @@ posRouter.post("/tickets/:id/pay", owned("ticket"), async (req: AuthedRequest, r
       customerName: sale.customer?.name ?? null,
       createdAt: sale.createdAt.toISOString(),
     },
+    kitchenTicket,
     drawerOpened: opensDrawer,
     changeCents: sale.changeCents,
   });
