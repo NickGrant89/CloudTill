@@ -49,7 +49,7 @@ async function ticketTotals(ticketId: string) {
   };
 }
 
-async function serializeTicket(ticketId: string) {
+export async function serializeTicket(ticketId: string) {
   const ticket = await prisma.ticket.findUniqueOrThrow({
     where: { id: ticketId },
     include: { lines: true, customer: true, register: true },

@@ -136,6 +136,17 @@ interface Props {
   onLogout: () => void;
 }
 
+type RecentSale = {
+  id: string;
+  receiptNumber: string;
+  employeeName: string;
+  customerName: string | null;
+  totalCents: number;
+  status: string;
+  createdAt: string;
+  lines: { name: string; quantity: number; totalCents: number; modifiersJson?: string }[];
+};
+
 type Modal =
   | null
   | { type: "pay" }
@@ -145,6 +156,7 @@ type Modal =
   | { type: "discount" }
   | { type: "tip" }
   | { type: "receipt"; text: string; changeCents: number; saleId: string; kitchenText?: string }
+  | { type: "recentSales" }
   | { type: "shift" }
   | { type: "board" }
   | { type: "kitchen" }
@@ -200,6 +212,10 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   const [customerFormMsg, setCustomerFormMsg] = useState("");
   const [callerMatches, setCallerMatches] = useState<Customer[]>([]);
   const [held, setHeld] = useState<Ticket[]>([]);
+  const [recentSales, setRecentSales] = useState<RecentSale[]>([]);
+  const [recentSaleQuery, setRecentSaleQuery] = useState("");
+  const [selectedRecentSale, setSelectedRecentSale] = useState<RecentSale | null>(null);
+  const [recentSaleMsg, setRecentSaleMsg] = useState("");
   const [openTickets, setOpenTickets] = useState<Ticket[]>([]);
   const [liveSyncLabel, setLiveSyncLabel] = useState("");
   const [payAmounts, setPayAmounts] = useState<Record<string, number>>({});
@@ -770,6 +786,118 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     } catch (error) {
       setHeld([]);
       fail("Held tickets", error);
+    }
+  }
+
+  async function openRecentSales() {
+    setRecentSaleMsg("");
+    setSelectedRecentSale(null);
+    setRecentSaleQuery("");
+    try {
+      const list = await api<RecentSale[]>("/sales?limit=40");
+      setRecentSales(Array.isArray(list) ? list : []);
+      setModal({ type: "recentSales" });
+    } catch (error) {
+      fail("Receipts", error);
+    }
+  }
+
+  async function searchRecentSales(q: string) {
+    setRecentSaleQuery(q);
+    try {
+      const list = await api<RecentSale[]>(
+        `/sales?limit=40${q.trim() ? `&q=${encodeURIComponent(q.trim())}` : ""}`
+      );
+      setRecentSales(Array.isArray(list) ? list : []);
+    } catch (error) {
+      fail("Receipts", error);
+    }
+  }
+
+  async function reopenRecentSale(sale: RecentSale) {
+    if (!offline.online) {
+      setRecentSaleMsg("Go online to open a paid sale on the till");
+      return;
+    }
+    if (ticket?.lines.length) {
+      const ok = window.confirm(
+        "Replace the current sale with this receipt’s items? The paid receipt stays as-is — this opens a new editable ticket."
+      );
+      if (!ok) return;
+    }
+    setBusy(true);
+    setRecentSaleMsg("");
+    try {
+      const opened = await api<Ticket & { sourceReceiptNumber?: string; skippedLines?: number }>(
+        `/sales/${sale.id}/reopen`,
+        {
+          method: "POST",
+          body: JSON.stringify({ registerId }),
+        }
+      );
+      setCurrentTicket(opened);
+      setMobilePane("ticket");
+      setModal(null);
+      void refreshOpenTickets();
+      if (opened.skippedLines) {
+        setModal({
+          type: "message",
+          title: `Opened ${opened.sourceReceiptNumber || sale.receiptNumber}`,
+          body: `Some lines could not be copied (${opened.skippedLines}). Edit the ticket before charging again.`,
+        });
+      }
+    } catch (error) {
+      setRecentSaleMsg(error instanceof Error ? error.message : "Could not open sale");
+      fail("Could not open sale", error);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reprintRecentSale(sale: RecentSale, kind: "billing" | "kitchen") {
+    setRecentSaleMsg("");
+    try {
+      if (kind === "billing") {
+        await api("/printers/print-receipt", {
+          method: "POST",
+          body: JSON.stringify({ saleId: sale.id }),
+        });
+        setRecentSaleMsg(`Billing receipt ${sale.receiptNumber} sent`);
+      } else {
+        await api<{ preview?: string }>("/printers/print-kitchen", {
+          method: "POST",
+          body: JSON.stringify({ saleId: sale.id }),
+        });
+        setRecentSaleMsg(`Kitchen ticket ${sale.receiptNumber} sent`);
+      }
+    } catch (error) {
+      setRecentSaleMsg(error instanceof Error ? error.message : "Print failed");
+      fail(kind === "billing" ? "Billing receipt" : "Kitchen ticket", error);
+    }
+  }
+
+  async function voidOrRefundRecentSale(sale: RecentSale, action: "void" | "refund") {
+    if (user.role !== "owner" && user.role !== "manager") {
+      setRecentSaleMsg("Only an owner or manager can void or refund");
+      return;
+    }
+    const label = action === "void" ? "Void" : "Refund";
+    if (!window.confirm(`${label} ${sale.receiptNumber}? This cannot be undone from the till.`)) return;
+    setBusy(true);
+    setRecentSaleMsg("");
+    try {
+      await api(`/sales/${sale.id}/${action}`, {
+        method: "POST",
+        body: action === "refund" ? JSON.stringify({ full: true }) : undefined,
+      });
+      await searchRecentSales(recentSaleQuery);
+      setSelectedRecentSale(null);
+      setRecentSaleMsg(`${label}ed ${sale.receiptNumber}`);
+    } catch (error) {
+      setRecentSaleMsg(error instanceof Error ? error.message : `${label} failed`);
+      fail(label, error);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -1513,6 +1641,9 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
         <button type="button" onClick={() => void openTicketsBoard()}>
           Tickets{openTickets.length ? ` · ${openTickets.length}` : ""}
         </button>
+        <button type="button" onClick={() => void openRecentSales()}>
+          Receipts
+        </button>
         <button type="button" onClick={() => void openPhoneOrder()}>
           Phone order
         </button>
@@ -1799,6 +1930,9 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             </button>
             <button type="button" onClick={() => void openHeld()}>
               Recall
+            </button>
+            <button type="button" onClick={() => void openRecentSales()}>
+              Receipts
             </button>
             <button type="button" disabled={!hasLines} onClick={() => ticket && setModal({ type: "discount" })}>
               Discount
@@ -2094,6 +2228,136 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
         </div>
       )}
 
+      {modal?.type === "recentSales" && (
+        <div className="modal-backdrop till-overlay" onClick={() => setModal(null)}>
+          <div className="modal tender-modal" onClick={(e) => e.stopPropagation()}>
+            <p className="step-kicker">Paid sales</p>
+            <h3>Receipts</h3>
+            <p className="hint" style={{ marginTop: 0 }}>
+              Open again copies items onto a new till ticket. The original payment stays unless you void or refund.
+            </p>
+            <div className="field">
+              <label>Search</label>
+              <input
+                placeholder="Receipt or customer"
+                value={recentSaleQuery}
+                onChange={(e) => void searchRecentSales(e.target.value)}
+              />
+            </div>
+            {recentSaleMsg && <p className="hint">{recentSaleMsg}</p>}
+            {selectedRecentSale ? (
+              <div style={{ display: "grid", gap: 10 }}>
+                <button type="button" className="btn ghost" onClick={() => setSelectedRecentSale(null)}>
+                  ← All receipts
+                </button>
+                <div>
+                  <strong>{selectedRecentSale.receiptNumber}</strong>
+                  <div style={{ color: "var(--muted)" }}>
+                    {money(selectedRecentSale.totalCents)} · {selectedRecentSale.status} ·{" "}
+                    {new Date(selectedRecentSale.createdAt).toLocaleString("en-GB", {
+                      timeZone: "Europe/London",
+                    })}
+                  </div>
+                  {selectedRecentSale.customerName && (
+                    <div style={{ color: "var(--muted)" }}>{selectedRecentSale.customerName}</div>
+                  )}
+                </div>
+                <ul className="kitchen-send-list">
+                  {selectedRecentSale.lines.map((line, index) => (
+                    <li key={`${selectedRecentSale.id}-${index}`}>
+                      <strong>{line.quantity}×</strong> {line.name}
+                    </li>
+                  ))}
+                </ul>
+                <div className="tender-row">
+                  <button
+                    type="button"
+                    className="btn primary"
+                    disabled={busy || selectedRecentSale.status !== "completed"}
+                    onClick={() => void reopenRecentSale(selectedRecentSale)}
+                  >
+                    Open on till
+                  </button>
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    disabled={busy}
+                    onClick={() => void reprintRecentSale(selectedRecentSale, "billing")}
+                  >
+                    Reprint billing
+                  </button>
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    disabled={busy}
+                    onClick={() => void reprintRecentSale(selectedRecentSale, "kitchen")}
+                  >
+                    Reprint kitchen
+                  </button>
+                </div>
+                {(user.role === "owner" || user.role === "manager") &&
+                  selectedRecentSale.status === "completed" && (
+                    <div className="tender-row">
+                      <button
+                        type="button"
+                        className="btn secondary"
+                        disabled={busy}
+                        onClick={() => void voidOrRefundRecentSale(selectedRecentSale, "refund")}
+                      >
+                        Refund
+                      </button>
+                      <button
+                        type="button"
+                        className="btn ghost"
+                        disabled={busy}
+                        onClick={() => void voidOrRefundRecentSale(selectedRecentSale, "void")}
+                      >
+                        Void
+                      </button>
+                    </div>
+                  )}
+              </div>
+            ) : (
+              <>
+                {recentSales.length === 0 && (
+                  <p style={{ color: "var(--muted)" }}>No receipts found.</p>
+                )}
+                {recentSales.map((sale) => (
+                  <button
+                    key={sale.id}
+                    type="button"
+                    className="list-btn"
+                    onClick={() => {
+                      setRecentSaleMsg("");
+                      setSelectedRecentSale(sale);
+                    }}
+                  >
+                    <strong>
+                      {sale.receiptNumber}
+                      {sale.status !== "completed" ? ` · ${sale.status}` : ""}
+                    </strong>
+                    <div style={{ color: "var(--muted)" }}>
+                      {money(sale.totalCents)}
+                      {sale.customerName ? ` · ${sale.customerName}` : ""} ·{" "}
+                      {new Date(sale.createdAt).toLocaleTimeString("en-GB", {
+                        timeZone: "Europe/London",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </div>
+                  </button>
+                ))}
+              </>
+            )}
+            <div className="modal-actions">
+              <button type="button" className="btn ghost" onClick={() => setModal(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {modal?.type === "customers" && (
         <div className="modal-backdrop" onClick={() => setModal(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -2343,6 +2607,25 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             <div className="modal-actions">
               <button type="button" className="btn primary" onClick={() => setModal(null)}>
                 New sale
+              </button>
+              <button
+                type="button"
+                className="btn secondary"
+                disabled={busy}
+                onClick={() =>
+                  void reopenRecentSale({
+                    id: modal.saleId,
+                    receiptNumber: "this sale",
+                    employeeName: "",
+                    customerName: null,
+                    totalCents: 0,
+                    status: "completed",
+                    createdAt: new Date().toISOString(),
+                    lines: [],
+                  })
+                }
+              >
+                Open again on till
               </button>
               <button
                 type="button"
