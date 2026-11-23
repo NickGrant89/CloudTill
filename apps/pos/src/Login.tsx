@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { api } from "./api";
 import type { SessionRegister, SessionStore, SessionUser } from "./App";
+import { clearPinnedTill, readPinnedTill, registerTone, registerToneIndex, toneAt, writePinnedTill } from "./pinnedTill";
 
 interface Props {
   onSuccess: (data: {
@@ -40,6 +41,9 @@ export function Login({ onSuccess }: Props) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [branches, setBranches] = useState<{ id: string; name: string }[] | null>(null);
+  const [changing, setChanging] = useState(false);
+  const [tillChoices, setTillChoices] = useState<SessionRegister[] | null>(null);
+  const [pinned, setPinned] = useState(() => readPinnedTill(readDevice()?.storeId ?? null));
   const pinRef = useRef("");
   const busyRef = useRef(false);
 
@@ -52,6 +56,11 @@ export function Login({ onSuccess }: Props) {
     const next = { storeId: data.store.id, storeName: data.store.name };
     localStorage.setItem(DEVICE_KEY, JSON.stringify(next));
     setDevice(next);
+    const saved = readPinnedTill();
+    if (saved && saved.storeId !== data.store.id) {
+      clearPinnedTill();
+      setPinned(null);
+    }
   }
 
   async function submit(nextPin: string) {
@@ -70,6 +79,15 @@ export function Login({ onSuccess }: Props) {
               : { pin: nextPin }
         ),
       });
+      if (changing) {
+        if (data.user.role !== "owner" && data.user.role !== "manager") {
+          setError("Only an owner or manager can change which till this iPad is.");
+          setPinValue("");
+          return;
+        }
+        setTillChoices(data.registers);
+        return;
+      }
       if (pairing && (data.stores?.length ?? 0) > 1) {
         setBranches(data.stores!);
         return;
@@ -125,10 +143,68 @@ export function Login({ onSuccess }: Props) {
 
   function switchToDemo() {
     localStorage.removeItem(DEVICE_KEY);
+    clearPinnedTill();
     setDevice(null);
+    setPinned(null);
     setPairing(false);
+    setChanging(false);
     setPinValue("");
     setError("");
+  }
+
+  function chooseTill(register: SessionRegister) {
+    const storeId = device?.storeId ?? pinned?.storeId;
+    if (!storeId) return;
+    writePinnedTill({
+      storeId,
+      registerId: register.id,
+      registerName: register.name,
+      toneIndex: registerToneIndex(register.id, tillChoices ?? []),
+    });
+    setPinned(readPinnedTill(storeId));
+    setTillChoices(null);
+    setChanging(false);
+    setPinValue("");
+    setError("");
+  }
+
+  if (tillChoices) {
+    return (
+      <div className="login">
+        <div className="login-card">
+          <h1 className="brand">PurePOS</h1>
+          <p className="tag">Use this iPad as…</p>
+          <div className="branch-list">
+            {tillChoices.map((register) => {
+              const tone = registerTone(register.id, tillChoices);
+              return (
+                <button
+                  key={register.id}
+                  type="button"
+                  style={{ background: tone.bg, color: tone.ink }}
+                  onClick={() => chooseTill(register)}
+                >
+                  {register.name}
+                </button>
+              );
+            })}
+          </div>
+          <p style={{ marginTop: 12 }}>
+            <button
+              type="button"
+              className="linkish"
+              onClick={() => {
+                setTillChoices(null);
+                setChanging(false);
+                setPinValue("");
+              }}
+            >
+              Back
+            </button>
+          </p>
+        </div>
+      </div>
+    );
   }
 
   if (branches) {
@@ -166,18 +242,41 @@ export function Login({ onSuccess }: Props) {
     <div className="login">
       <div className="login-card">
         <h1 className="brand">PurePOS</h1>
-        <p className="tag">{pairing ? "Set up this till for your business" : "Enter your PIN"}</p>
+        <p className="tag">
+          {pairing ? "Set up this till for your business" : changing ? "Owner or manager PIN" : "Enter your PIN"}
+        </p>
 
         <p className="device-line">
           {pairing
             ? "Sign in once with your email — after that staff only need their PIN."
-            : `${/\/kitchen\/?$/.test(window.location.pathname) ? "Kitchen screen" : "Till"}: ${device?.storeName ?? "PurePOS Demo Café"}`}
-          {!pairing && (
+            : changing
+              ? "This confirms you can move this iPad to a different till."
+              : `${/\/kitchen\/?$/.test(window.location.pathname) ? "Kitchen screen" : "Till"}: ${device?.storeName ?? "PurePOS Demo Café"}`}
+          {!pairing && !changing && (
             <button type="button" className="linkish" onClick={() => { setPairing(true); setPinValue(""); setError(""); }}>
               {device ? "Change business" : "Use my business"}
             </button>
           )}
         </p>
+
+        {pinned && !pairing && !changing && (
+          <p className="device-line">
+            <span className="register-badge" style={{ background: toneAt(pinned.toneIndex).bg, color: toneAt(pinned.toneIndex).ink }}>
+              This iPad is {pinned.registerName}
+            </span>
+            <button
+              type="button"
+              className="linkish"
+              onClick={() => {
+                setChanging(true);
+                setPinValue("");
+                setError("");
+              }}
+            >
+              Change till
+            </button>
+          </p>
+        )}
 
         {pairing && (
           <input
@@ -217,13 +316,29 @@ export function Login({ onSuccess }: Props) {
           </div>
         )}
 
+        {changing && (
+          <p style={{ marginTop: 12 }}>
+            <button
+              type="button"
+              className="linkish"
+              onClick={() => {
+                setChanging(false);
+                setPinValue("");
+                setError("");
+              }}
+            >
+              Cancel
+            </button>
+          </p>
+        )}
+
         {error && <p className="error">{error}</p>}
-        {!device && !pairing && (
+        {!device && !pairing && !changing && (
           <p style={{ color: "var(--muted)", fontSize: "0.8rem", marginTop: 16 }}>
             Demo PINs: cashier 1111 · manager 2222 · owner 1234
           </p>
         )}
-        {device && !pairing && (
+        {device && !pairing && !changing && (
           <p style={{ marginTop: 12 }}>
             <button type="button" className="linkish" onClick={switchToDemo}>
               Switch this till to the demo café

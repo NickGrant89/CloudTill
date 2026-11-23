@@ -956,6 +956,52 @@ select:focus-visible {
   flex: 0 0 auto;
 }
 
+.register-badge {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 240px;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pin-till-btn {
+  flex: 0 0 auto;
+  background: #f4f0e8 !important;
+  color: #0b1c24 !important;
+  font-weight: 800;
+}
+
+.guided-note {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 14px 0;
+  padding: 6px 8px 6px 6px;
+  border-radius: 12px;
+  background: rgba(244, 240, 232, 0.1);
+  color: #f4f0e8;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.guided-note .fullscreen-btn {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 12px;
+  background: #f4f0e8;
+  color: #0b1c24;
+  font-weight: 800;
+}
+
 .toolbar-dark button {
   background: rgba(244, 240, 232, 0.1);
   color: #f4f0e8;
@@ -1091,6 +1137,18 @@ select:focus-visible {
 
   .toolbar-identity select {
     max-width: 128px;
+  }
+
+  .register-badge {
+    max-width: 180px;
+    min-height: 36px;
+    padding: 0 12px;
+    font-size: 0.92rem;
+  }
+
+  .guided-note {
+    margin: 6px 8px 0;
+    font-size: 0.72rem;
   }
 
   .offline-badge,
@@ -1229,6 +1287,18 @@ select:focus-visible {
   .toolbar-actions button,
   .lock-btn,
   .offline-badge {
+    min-height: 32px;
+  }
+
+  .guided-note {
+    margin: 4px 6px 0;
+    padding: 4px 6px;
+    font-size: 0.68rem;
+  }
+
+  .guided-note .fullscreen-btn,
+  .pin-till-btn,
+  .register-badge {
     min-height: 32px;
   }
 
@@ -1374,6 +1444,27 @@ select:focus-visible {
     min-height: 36px;
     padding: 0 8px;
     font-size: 0.85rem;
+  }
+
+  .toolbar-identity {
+    flex-wrap: wrap;
+  }
+
+  .register-badge {
+    max-width: 46vw;
+    min-height: 36px;
+    padding: 0 12px;
+    font-size: 0.85rem;
+  }
+
+  .pin-till-btn {
+    flex: 1 1 100%;
+    min-height: 36px;
+  }
+
+  .guided-note {
+    margin: 6px 6px 0;
+    align-items: flex-start;
   }
 
   .lock-btn {

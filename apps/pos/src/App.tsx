@@ -3,6 +3,7 @@ import { api, getToken, setToken } from "./api";
 import { Login } from "./Login";
 import { Register } from "./Register";
 import { KitchenScreen } from "./KitchenScreen";
+import { resolveRegisterId } from "./pinnedTill";
 
 const KITCHEN_MODE = /\/kitchen\/?$/.test(window.location.pathname);
 
@@ -44,7 +45,7 @@ export function App() {
         setUser(data.user);
         setStore(data.store);
         setRegisters(data.registers);
-        setRegisterId(data.registers[0]?.id ?? "");
+        setRegisterId(resolveRegisterId(data.store.id, data.registers));
       })
       .catch(() => setToken(null))
       .finally(() => setLoading(false));
@@ -69,7 +70,7 @@ export function App() {
           setUser(data.user);
           setStore(data.store);
           setRegisters(data.registers);
-          setRegisterId(data.registers[0]?.id ?? "");
+          setRegisterId(resolveRegisterId(data.store.id, data.registers));
         }}
       />
     );

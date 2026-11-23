@@ -16,6 +16,7 @@ import {
   withTotals,
 } from "./offline/ticket";
 import { readLocalTicket, type LocalTicket } from "./offline/db";
+import { readPinnedTill, registerTone, registerToneIndex, writePinnedTill } from "./pinnedTill";
 
 interface Category {
   id: string;
@@ -156,6 +157,13 @@ interface KitchenOrder {
 }
 
 export function Register({ user, store, registers, registerId, onRegisterChange, onLogout }: Props) {
+  const [pinnedId, setPinnedId] = useState(() => readPinnedTill(store.id)?.registerId ?? "");
+  const [fullScreen, setFullScreen] = useState(false);
+  useEffect(() => {
+    const sync = () => setFullScreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
+  }, []);
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [categoryId, setCategoryId] = useState<string | "all">("all");
@@ -1131,6 +1139,30 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     { id: "done", label: "Done" },
   ] as const;
   const tillIndex = tillSteps.findIndex((step) => step.id === tillPhase);
+  const currentRegister = registers.find((register) => register.id === registerId);
+
+  function pinThisIpad() {
+    if (!currentRegister) return;
+    writePinnedTill({
+      storeId: store.id,
+      registerId: currentRegister.id,
+      registerName: currentRegister.name,
+      toneIndex: registerToneIndex(currentRegister.id, registers),
+    });
+    setPinnedId(currentRegister.id);
+  }
+
+  async function toggleFullScreen() {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        return;
+      }
+      await document.documentElement.requestFullscreen();
+    } catch {
+      // iPad Safari often refuses this. Guided Access is the way to pin the device.
+    }
+  }
 
   return (
     <div className={`app-shell till-${tillPhase}`}>
@@ -1138,17 +1170,33 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
         <div className="toolbar-identity">
           <strong className="store-name">{store.name}</strong>
           <span className="who">{user.name}</span>
-          <select
-            aria-label="Register"
-            value={registerId}
-            onChange={(e) => onRegisterChange(e.target.value)}
-          >
-            {registers.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </select>
+          {currentRegister && (
+            <span
+              className="register-badge"
+              data-register-name={currentRegister.name}
+              style={{ background: registerTone(currentRegister.id, registers).bg, color: registerTone(currentRegister.id, registers).ink }}
+            >
+              {currentRegister.name}
+            </span>
+          )}
+          {pinnedId !== registerId && (
+            <select
+              aria-label="Register"
+              value={registerId}
+              onChange={(e) => onRegisterChange(e.target.value)}
+            >
+              {registers.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+          )}
+          {pinnedId !== registerId && currentRegister && (
+            <button type="button" className="pin-till-btn" onClick={pinThisIpad}>
+              Use this iPad as…
+            </button>
+          )}
           <button type="button" className="lock-btn" onClick={onLogout}>
             Lock
           </button>
@@ -1205,6 +1253,15 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
         </button>
         </div>
       </div>
+      <p className="guided-note">
+        <button type="button" className="fullscreen-btn" onClick={() => void toggleFullScreen()}>
+          {fullScreen ? "Exit full screen" : "Full screen"}
+        </button>
+        <span>
+          Full screen only fills this window. To keep an iPad on this till, use Guided Access: Settings, Accessibility,
+          Guided Access, then triple-click the side button. This page cannot lock the iPad.
+        </span>
+      </p>
 
       <ol className="till-steps" aria-label="Till steps">
         {tillSteps.map((step, index) => (
