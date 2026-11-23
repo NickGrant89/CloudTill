@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
-import { owned } from "../tenant.js";
+import { owned, rejectForeign } from "../tenant.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 import { companyStoreIds, sameCompany } from "../company.js";
 
@@ -109,6 +109,7 @@ catalogRouter.post("/items", requireRole("owner", "manager"), async (req: Authed
         .optional(),
     })
     .parse(req.body);
+  if (await rejectForeign(res, "category", [body.categoryId], req.user!.storeId)) return;
 
   const item = await prisma.item.create({
     data: {
@@ -248,6 +249,7 @@ catalogRouter.post("/items/assign-stores", requireRole("owner", "manager"), asyn
   if (!(await sameCompany(sourceStoreId, targetIds))) {
     return res.status(403).json({ error: "You can only send items to your own branches" });
   }
+  if (await rejectForeign(res, "item", body.data.itemIds, sourceStoreId)) return;
   const targets = await prisma.store.findMany({ where: { id: { in: targetIds } } });
   if (targets.length !== targetIds.length) {
     return res.status(400).json({ error: "One or more target stores were not found" });
@@ -385,6 +387,7 @@ catalogRouter.patch("/items/:id", owned("item"), requireRole("owner", "manager")
       trackStock: z.boolean().optional(),
     })
     .parse(req.body);
+  if (await rejectForeign(res, "category", [body.categoryId], req.user!.storeId)) return;
 
   const { priceCents, sku, barcode, trackStock, ...itemData } = body;
   await prisma.item.update({ where: { id: req.params.id }, data: itemData });
@@ -466,6 +469,7 @@ catalogRouter.post("/modifier-sets", requireRole("owner", "manager"), async (req
       itemIds: z.array(z.string()).min(1),
     })
     .parse(req.body);
+  if (await rejectForeign(res, "item", body.itemIds, req.user!.storeId)) return;
 
   const items = await prisma.item.findMany({
     where: { id: { in: body.itemIds }, storeId: req.user!.storeId, active: true },

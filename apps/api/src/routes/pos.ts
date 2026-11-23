@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import { prisma } from "../db.js";
-import { owned } from "../tenant.js";
+import { owned, rejectForeign } from "../tenant.js";
 import { requireAuth, type AuthedRequest } from "../auth.js";
 import { calcTax, lineSubtotal } from "../money.js";
 
@@ -103,6 +103,7 @@ posRouter.post("/tickets", async (req: AuthedRequest, res) => {
       name: z.string().optional(),
     })
     .parse(req.body);
+  if (await rejectForeign(res, "register", [body.registerId], req.user!.storeId)) return;
 
   const ticket = await prisma.ticket.create({
     data: {
@@ -131,6 +132,8 @@ posRouter.post("/tickets/:id/lines", owned("ticket"), async (req: AuthedRequest,
       note: z.string().optional(),
     })
     .parse(req.body);
+  if (await rejectForeign(res, "variant", [body.variantId], req.user!.storeId)) return;
+  if (await rejectForeign(res, "modifier", (body.modifiers ?? []).map((mod) => mod.modifierId), req.user!.storeId)) return;
 
   const variant = await prisma.variant.findUniqueOrThrow({
     where: { id: body.variantId },
@@ -181,6 +184,7 @@ posRouter.patch("/tickets/:id", owned("ticket"), async (req, res) => {
       note: z.string().nullable().optional(),
     })
     .parse(req.body);
+  if (await rejectForeign(res, "customer", [body.customerId], (req as AuthedRequest).user!.storeId)) return;
   await prisma.ticket.update({ where: { id: req.params.id }, data: body });
   res.json(await serializeTicket(req.params.id));
 });
@@ -244,6 +248,7 @@ posRouter.post("/tickets/:id/pay", owned("ticket"), async (req: AuthedRequest, r
     include: { lines: true },
   });
   if (ticket.status === "paid") return res.status(400).json({ error: "Already paid" });
+  if (await rejectForeign(res, "paymentType", body.payments.map((p) => p.paymentTypeId), ticket.storeId)) return;
 
   if (body.tipCents !== undefined) {
     await prisma.ticket.update({ where: { id: req.params.id }, data: { tipCents: body.tipCents } });
@@ -265,7 +270,7 @@ posRouter.post("/tickets/:id/pay", owned("ticket"), async (req: AuthedRequest, r
   });
 
   const paymentTypes = await prisma.paymentType.findMany({
-    where: { id: { in: body.payments.map((p) => p.paymentTypeId) } },
+    where: { id: { in: body.payments.map((p) => p.paymentTypeId) }, storeId: ticket.storeId },
   });
   const ptMap = new Map(paymentTypes.map((p) => [p.id, p]));
 
@@ -450,8 +455,9 @@ posRouter.get("/taxes", async (req: AuthedRequest, res) => {
 
 posRouter.post("/drawer/open", async (req: AuthedRequest, res) => {
   const body = z.object({ registerId: z.string(), note: z.string().optional() }).parse(req.body);
+  if (await rejectForeign(res, "register", [body.registerId], req.user!.storeId)) return;
   const shift = await prisma.shift.findFirst({
-    where: { registerId: body.registerId, status: "open" },
+    where: { registerId: body.registerId, storeId: req.user!.storeId, status: "open" },
   });
   if (!shift) return res.status(400).json({ error: "No open shift" });
   const event = await prisma.cashEvent.create({
@@ -496,6 +502,21 @@ posRouter.post("/offline-sales", async (req: AuthedRequest, res) => {
         .min(1),
     })
     .parse(req.body);
+  const storeId = req.user!.storeId;
+  if (await rejectForeign(res, "register", [body.registerId], storeId)) return;
+  if (await rejectForeign(res, "customer", [body.customerId], storeId)) return;
+  if (await rejectForeign(res, "variant", body.lines.map((line) => line.variantId), storeId)) return;
+  if (await rejectForeign(res, "paymentType", body.payments.map((p) => p.paymentTypeId), storeId)) return;
+  if (
+    await rejectForeign(
+      res,
+      "modifier",
+      body.lines.flatMap((line) => line.modifiers.map((mod) => mod.modifierId)),
+      storeId
+    )
+  ) {
+    return;
+  }
 
   const offlineNote = `offline:${body.clientSaleId}`;
   const existing = await prisma.sale.findFirst({
@@ -516,7 +537,7 @@ posRouter.post("/offline-sales", async (req: AuthedRequest, res) => {
   }
 
   const paymentTypes = await prisma.paymentType.findMany({
-    where: { id: { in: body.payments.map((p) => p.paymentTypeId) } },
+    where: { id: { in: body.payments.map((p) => p.paymentTypeId) }, storeId },
   });
   const ptMap = new Map(paymentTypes.map((p) => [p.id, p]));
   const tax = await getActiveTax(req.user!.storeId);

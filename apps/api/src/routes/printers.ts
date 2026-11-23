@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
-import { owned } from "../tenant.js";
+import { owned, rejectForeign } from "../tenant.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 import { createDriver, getMockDriver } from "../printers/drivers.js";
 import { loadReceiptData, renderReceipt } from "../receipts.js";
@@ -81,6 +81,7 @@ printersRouter.post("/print-receipt", async (req: AuthedRequest, res) => {
       openDrawer: z.boolean().optional(),
     })
     .parse(req.body);
+  if (await rejectForeign(res, "sale", [body.saleId], req.user!.storeId)) return;
 
   const data = await loadReceiptData(body.saleId);
   const rendered = renderReceipt(data, "escpos");

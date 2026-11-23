@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import { owned } from "../tenant.js";
+import { soldOutItemIds } from "../services/soldOut.js";
 import { requireAuth, type AuthedRequest } from "../auth.js";
 import { calcTax, lineSubtotal } from "../money.js";
 import { storeAllowsFeature } from "./billing.js";
@@ -35,29 +36,6 @@ publicOrderingRouter.get("/stores", async (_req, res) => {
   });
   res.json(stores);
 });
-
-/** Items sold out by the kitchen, or tracked items with no stock left. */
-async function soldOutItemIds(storeId: string) {
-  const [flagged, levels] = await Promise.all([
-    prisma.item.findMany({ where: { storeId, soldOut: true }, select: { id: true } }),
-    prisma.inventoryLevel.findMany({
-      where: { storeId, quantity: { lte: 0 }, variant: { trackStock: true, active: true, item: { isComposite: false } } },
-      select: { variant: { select: { itemId: true } } },
-    }),
-  ]);
-  const ids = new Set(flagged.map((i) => i.id));
-  const emptyByItem = new Map<string, number>();
-  for (const l of levels) emptyByItem.set(l.variant.itemId, (emptyByItem.get(l.variant.itemId) ?? 0) + 1);
-  if (emptyByItem.size) {
-    const variantCounts = await prisma.variant.groupBy({
-      by: ["itemId"],
-      where: { itemId: { in: [...emptyByItem.keys()] }, active: true },
-      _count: { _all: true },
-    });
-    for (const v of variantCounts) if ((emptyByItem.get(v.itemId) ?? 0) >= v._count._all) ids.add(v.itemId);
-  }
-  return ids;
-}
 
 /** Best sellers by quantity over the last 30 days. */
 async function popularItemIds(storeId: string, limit = 6) {

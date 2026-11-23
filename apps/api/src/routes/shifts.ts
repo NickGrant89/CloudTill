@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
-import { owned } from "../tenant.js";
+import { owned, rejectForeign } from "../tenant.js";
 import { requireAuth, type AuthedRequest } from "../auth.js";
 
 export const shiftsRouter = Router();
@@ -73,9 +73,10 @@ shiftsRouter.post("/open", async (req: AuthedRequest, res) => {
       note: z.string().optional(),
     })
     .parse(req.body);
+  if (await rejectForeign(res, "register", [body.registerId], req.user!.storeId)) return;
 
   const existing = await prisma.shift.findFirst({
-    where: { registerId: body.registerId, status: "open" },
+    where: { registerId: body.registerId, storeId: req.user!.storeId, status: "open" },
   });
   if (existing) return res.status(400).json({ error: "Shift already open on this register" });
 

@@ -4,6 +4,7 @@ import { prisma } from "../db.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 import { storeAllowsFeature } from "./billing.js";
 import { companyStoreIds, sameCompany } from "../company.js";
+import { allOwned, rejectForeign } from "../tenant.js";
 
 export const inventoryRouter = Router();
 inventoryRouter.use(requireAuth);
@@ -60,6 +61,7 @@ inventoryRouter.post("/receive", requireRole("owner", "manager"), async (req: Au
   if (!(await sameCompany(req.user!.storeId, [storeId]))) {
     return res.status(403).json({ error: "That store is not part of your business" });
   }
+  if (await rejectForeign(res, "variant", [body.variantId], storeId)) return;
   const level = await prisma.inventoryLevel.findUnique({
     where: { storeId_variantId: { storeId, variantId: body.variantId } },
   });
@@ -100,6 +102,7 @@ inventoryRouter.post("/adjust", requireRole("owner", "manager"), async (req: Aut
     .parse(req.body);
 
   const storeId = req.user!.storeId;
+  if (await rejectForeign(res, "variant", [body.variantId], storeId)) return;
   const level = await prisma.inventoryLevel.findUniqueOrThrow({
     where: { storeId_variantId: { storeId, variantId: body.variantId } },
   });
@@ -193,6 +196,9 @@ inventoryRouter.post("/transfers", requireRole("owner", "manager"), async (req: 
   if (!(await sameCompany(req.user!.storeId, [body.fromStoreId, body.toStoreId]))) {
     return res.status(403).json({ error: "Transfers are only allowed between your own branches" });
   }
+  const onFrom = await allOwned("variant", [body.variantId], body.fromStoreId);
+  const onTo = await allOwned("variant", [body.variantId], body.toStoreId);
+  if (!onFrom && !onTo) return res.status(404).json({ error: "Not found" });
 
   const fromLevel = await prisma.inventoryLevel.findUnique({
     where: { storeId_variantId: { storeId: body.fromStoreId, variantId: body.variantId } },

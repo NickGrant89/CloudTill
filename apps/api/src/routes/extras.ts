@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
+import { rejectForeign } from "../tenant.js";
 
 export const extrasRouter = Router();
 extrasRouter.use(requireAuth);
@@ -115,9 +116,10 @@ extrasRouter.post("/labels", async (req: AuthedRequest, res) => {
     .safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Validation error", details: parsed.error.flatten() });
   const body = parsed.data;
+  if (await rejectForeign(res, "variant", body.variantIds, req.user!.storeId)) return;
 
   const variants = await prisma.variant.findMany({
-    where: { id: { in: body.variantIds } },
+    where: { id: { in: body.variantIds }, item: { storeId: req.user!.storeId } },
     include: { item: true },
   });
 
@@ -273,6 +275,7 @@ extrasRouter.post("/stocktake", requireRole("owner", "manager"), async (req: Aut
       note: z.string().optional(),
     })
     .parse(req.body);
+  if (await rejectForeign(res, "variant", body.counts.map((c) => c.variantId), req.user!.storeId)) return;
 
   const results = [];
   for (const c of body.counts) {

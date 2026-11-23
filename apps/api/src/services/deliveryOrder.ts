@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { prisma } from "../db.js";
 import { calcTax, lineSubtotal } from "../money.js";
 import { attributionEmployee } from "../company.js";
+import { soldOutItemIds } from "./soldOut.js";
 
 export const DELIVERY_CHANNELS = [
   "justeat",
@@ -230,6 +231,18 @@ export async function injectDeliveryOrder(input: IngestOrderInput) {
     resolvedLines.push(resolved);
   }
   if (!resolvedLines.length) return { error: "Order has no lines", status: 400 as const };
+
+  const soldOut = await soldOutItemIds(input.storeId);
+  if (soldOut.size) {
+    const variants = await prisma.variant.findMany({
+      where: { id: { in: resolvedLines.map((line) => line.variantId) } },
+      select: { id: true, itemId: true, item: { select: { name: true } } },
+    });
+    const blocked = variants.find((variant) => soldOut.has(variant.itemId));
+    if (blocked) {
+      return { error: `Sorry, ${blocked.item.name} has just sold out.`, status: 409 as const };
+    }
+  }
 
   const tax = await prisma.tax.findFirst({ where: { storeId: input.storeId, enabled: true } });
   let subtotal = 0;

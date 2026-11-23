@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import { prisma } from "../db.js";
-import { owned } from "../tenant.js";
+import { owned, rejectForeign } from "../tenant.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 
 export const giftCardsRouter = Router();
@@ -42,6 +42,7 @@ giftCardsRouter.post("/", requireRole("owner", "manager", "cashier"), async (req
       note: z.string().optional(),
     })
     .parse(req.body);
+  if (await rejectForeign(res, "customer", [body.customerId], req.user!.storeId)) return;
 
   const code = (body.code ?? `GC-${nanoid(8)}`).toUpperCase();
   const card = await prisma.giftCard.create({
@@ -116,6 +117,7 @@ giftCardsRouter.post("/:id/adjust", owned("giftCard"), requireRole("owner", "man
 
 giftCardsRouter.patch("/:id", owned("giftCard"), requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
   const body = z.object({ status: z.enum(["active", "disabled"]).optional(), customerId: z.string().nullable().optional() }).parse(req.body);
+  if (await rejectForeign(res, "customer", [body.customerId], req.user!.storeId)) return;
   const updated = await prisma.giftCard.update({ where: { id: req.params.id }, data: body });
   res.json(updated);
 });
