@@ -26,6 +26,7 @@ import { textPayRouter, publicTextPayRouter } from "./routes/textpay.js";
 import { prisma } from "./db.js";
 import { backfillCompanyKeys } from "./company.js";
 import { migrateBillingEntitlements } from "./routes/billing.js";
+import { orderingHostMiddleware } from "./orderingHost.js";
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -53,6 +54,8 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use(orderingHostMiddleware());
+
 app.use(express.json({ limit: "2mb" }));
 app.use(express.static(path.join(__dirname, "../public")));
 
@@ -70,7 +73,7 @@ app.get("/api/health", async (_req, res) => {
     product: process.env.PRODUCT_NAME || "PurePOS",
     legalName: process.env.PRODUCT_LEGAL || "PurePOS UK",
     domain: process.env.PRODUCT_DOMAIN || "purepos.co.uk",
-    version: "0.10.5",
+    version: "0.10.6",
     database,
     storeCount,
     time: new Date().toISOString(),

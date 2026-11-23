@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db.js";
 import { owned } from "../tenant.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
+import { normalizeOrderingDomain, orderingCnameTarget } from "../orderingHost.js";
 
 export const settingsRouter = Router();
 settingsRouter.use(requireAuth);
@@ -25,7 +26,9 @@ settingsRouter.get("/", async (req: AuthedRequest, res) => {
       timezone: store.timezone,
       slug: store.slug,
       listedPublicly: store.listedPublicly,
+      customDomain: store.customDomain,
     },
+    orderingHost: orderingCnameTarget(),
     currency: store.currency,
     currencySymbol: store.currency === "GBP" ? "£" : store.currency === "USD" ? "$" : store.currency === "EUR" ? "€" : store.currency,
     receipt: {
@@ -50,10 +53,30 @@ settingsRouter.patch("/store", requireRole("owner", "manager"), async (req: Auth
       currency: z.string().optional(),
       timezone: z.string().optional(),
       listedPublicly: z.boolean().optional(),
+      customDomain: z.string().nullable().optional(),
     })
     .parse(req.body);
-  const store = await prisma.store.update({ where: { id: req.user!.storeId }, data: body });
-  res.json(store);
+
+  let customDomain: string | null | undefined;
+  if (body.customDomain !== undefined) {
+    const normalized = normalizeOrderingDomain(body.customDomain);
+    if ("error" in normalized) return res.status(400).json({ error: normalized.error });
+    if (normalized.domain) {
+      const taken = await prisma.store.findFirst({
+        where: { customDomain: normalized.domain, NOT: { id: req.user!.storeId } },
+        select: { id: true },
+      });
+      if (taken) return res.status(400).json({ error: "That domain is already used by another store" });
+    }
+    customDomain = normalized.domain;
+  }
+
+  const { customDomain: _ignored, ...details } = body;
+  const store = await prisma.store.update({
+    where: { id: req.user!.storeId },
+    data: { ...details, ...(customDomain !== undefined ? { customDomain } : {}) },
+  });
+  res.json({ ...store, orderingHost: orderingCnameTarget() });
 });
 
 settingsRouter.patch("/receipt", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {

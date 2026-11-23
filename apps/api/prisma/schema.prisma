@@ -19,6 +19,8 @@ model Store {
   companyKey String  @default("")
   /// Shown in the public store directory (/api/public/stores). Ordering links by slug work regardless.
   listedPublicly Boolean @default(false)
+  /// Owner's hostname for the ordering site, for example order.theircafe.co.uk. One per store.
+  customDomain String? @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

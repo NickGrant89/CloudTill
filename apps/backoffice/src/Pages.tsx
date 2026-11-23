@@ -1748,17 +1748,28 @@ type StoreDetails = {
   timezone: string;
   slug: string;
   listedPublicly: boolean;
+  customDomain: string | null;
 };
 
-function StoreDetailsForm({ store, onSaved }: { store: StoreDetails; onSaved: () => void }) {
+function StoreDetailsForm({
+  store,
+  orderingHost,
+  onSaved,
+}: {
+  store: StoreDetails;
+  orderingHost: string;
+  onSaved: () => void;
+}) {
   const [form, setForm] = useState({
     name: store.name,
     address: store.address ?? "",
     phone: store.phone ?? "",
     listedPublicly: store.listedPublicly,
+    customDomain: store.customDomain ?? "",
   });
   const [msg, setMsg] = useState("");
   const orderUrl = `${window.location.origin}/order/${store.slug}`;
+  const domainPreview = form.customDomain.trim().toLowerCase().replace(/^https?:\/\//, "").split("/")[0].replace(/\.$/, "");
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -1771,6 +1782,7 @@ function StoreDetailsForm({ store, onSaved }: { store: StoreDetails; onSaved: ()
           address: form.address.trim() || null,
           phone: form.phone.trim() || null,
           listedPublicly: form.listedPublicly,
+          customDomain: form.customDomain.trim(),
         }),
       });
       setMsg("Saved");
@@ -1820,6 +1832,31 @@ function StoreDetailsForm({ store, onSaved }: { store: StoreDetails; onSaved: ()
           {orderUrl}
         </a>
       </p>
+      <div className="field">
+        <label htmlFor="store-domain">Your domain</label>
+        <input
+          id="store-domain"
+          value={form.customDomain}
+          placeholder="order.theircafe.co.uk"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          onChange={(e) => setForm({ ...form, customDomain: e.target.value })}
+        />
+      </div>
+      {domainPreview.includes(".") ? (
+        <p style={{ fontSize: "0.88rem" }}>
+          At your domain registrar, add this DNS record for this store:
+          <br />
+          <code>
+            {domainPreview} CNAME {orderingHost}
+          </code>
+        </p>
+      ) : (
+        <p style={{ fontSize: "0.88rem", color: "var(--muted)" }}>
+          One domain for this store, such as order.theircafe.co.uk. Leave it blank to use only the PurePOS ordering link.
+        </p>
+      )}
       <div className="toolbar">
         <button type="submit">Save store details</button>
         {msg && <span style={{ color: "var(--muted)" }}>{msg}</span>}
@@ -1839,6 +1876,7 @@ const BILLING_STATUS_LABEL: Record<string, string> = {
 function SettingsPage() {
   const [settings, setSettings] = useState<{
     store: StoreDetails;
+    orderingHost: string;
     receipt: { header: string; footer: string; showTaxBreakdown: boolean };
     taxes: { id: string; name: string; rateBps: number; enabled: boolean }[];
     paymentTypes: { id: string; name: string; type: string; enabled: boolean; opensDrawer: boolean }[];
@@ -1899,7 +1937,7 @@ function SettingsPage() {
         </div>
       </div>
 
-      <StoreDetailsForm store={settings.store} onSaved={() => void load()} />
+      <StoreDetailsForm store={settings.store} orderingHost={settings.orderingHost} onSaved={() => void load()} />
 
       {billing && (
         <div className="panel-box">
