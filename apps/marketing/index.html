@@ -273,6 +273,56 @@
       .tier .price span { font-size: 0.9rem; font-weight: 500; color: var(--muted); }
       .tier ul { margin: 0; padding-left: 1.1rem; color: var(--muted); flex: 1; }
       .tier li { margin: 0.35rem 0; }
+      .tier .price-note { margin: -0.2rem 0 0; color: var(--muted); font-size: 0.8rem; }
+      .tier > p { margin: 0; color: var(--muted); line-height: 1.4; }
+      .tier .btn { width: 100%; }
+      .trial-form, .trial-done { display: grid; gap: 0.6rem; }
+      .start-trial[hidden],
+      .trial-form[hidden],
+      .trial-done[hidden],
+      .form-msg[hidden] { display: none !important; }
+      .trial-form label { display: grid; gap: 0.3rem; font-size: 0.82rem; font-weight: 800; }
+      .trial-form input {
+        width: 100%;
+        min-height: 48px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        padding: 0 0.8rem;
+        font: inherit;
+        font-size: 16px;
+        background: #fff;
+      }
+      .form-msg { margin: 0; font-weight: 700; color: var(--accent-deep); line-height: 1.4; }
+      .form-msg.err { color: #9b3b2e; }
+      .done-lead { margin: 0; font-weight: 800; line-height: 1.4; }
+      .pin-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 0.15rem 0.5rem;
+        align-items: center;
+        background: var(--accent-soft);
+        border-radius: 10px;
+        padding: 0.55rem 0.7rem;
+      }
+      .pin-row span {
+        grid-column: 1 / -1;
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .pin-row code { font-size: 1.05rem; word-break: break-all; }
+      .pin-row button {
+        min-height: 40px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: #fff;
+        font: inherit;
+        font-weight: 800;
+        padding: 0 0.75rem;
+        cursor: pointer;
+      }
 
       .links {
         display: grid;
@@ -342,7 +392,7 @@
           <a href="#product">Product</a>
           <a href="#pricing">Pricing</a>
           <a href="#try">Open apps</a>
-          <a class="btn btn-primary" href="/pricing">Start trial</a>
+          <a class="btn btn-primary" href="#pricing">Start trial</a>
         </nav>
       </header>
     </div>
@@ -407,44 +457,71 @@
     <div class="wrap">
       <section id="pricing">
         <p class="eyebrow">Pricing</p>
-        <h2 class="section-title">UK packages that win on the high street</h2>
-        <p class="section-lede">Solo, Shop, Group — clear £ pricing, offline tills, delivery apps from Shop. Start a 14-day trial.</p>
+        <h2 class="section-title">Pick a plan and start</h2>
+        <p class="section-lede">Solo £29, Shop £59, Group £99 a month, ex VAT. One 14-day trial on the plan you choose. No card to begin.</p>
         <div class="tiers">
-          <article class="tier">
+          <article class="tier" data-plan="starter" data-name="Solo">
             <h3>Solo</h3>
-            <p>One till that keeps selling when the Wi‑Fi doesn’t</p>
+            <p>One till that keeps selling when the Wi‑Fi doesn’t. Independent counters, pop-ups, market traders.</p>
             <div class="price">£29<span>/mo</span></div>
+            <p class="price-note">ex VAT · 14-day trial</p>
             <ul>
-              <li>Cloud BO + offline till · Items &amp; groups</li>
-              <li>Live open-ticket sync · backup &amp; restore</li>
-              <li>Offline sale queue · sync later</li>
-              <li>No hardware lock-in</li>
+              <li>Cloud back office and one offline till</li>
+              <li>Items, groups, VAT, and £ receipts</li>
+              <li>Live open tickets, backup and restore</li>
+              <li>Offline sales queue, sync when you’re back</li>
             </ul>
-            <a class="btn btn-primary" href="/pricing">Choose Solo</a>
+            <button type="button" class="btn btn-ghost-dark start-trial">Start Solo trial</button>
+            <form class="trial-form" hidden>
+              <label>Business name<input name="businessName" required autocomplete="organization" placeholder="Harbour Coffee" /></label>
+              <label>Owner email<input name="email" type="email" required autocomplete="email" placeholder="you@cafe.co.uk" /></label>
+              <button type="submit" class="btn btn-primary">Create Solo trial</button>
+              <button type="button" class="btn btn-ghost-dark cancel-trial">Cancel</button>
+              <p class="form-msg" hidden></p>
+            </form>
+            <div class="trial-done" hidden></div>
           </article>
-          <article class="tier featured">
+          <article class="tier featured" data-plan="pro" data-name="Shop">
             <h3>Shop</h3>
-            <p>Most UK shops — till, kitchen, ordering &amp; delivery apps</p>
+            <p>Most UK shops. Till, kitchen, online ordering, and delivery apps.</p>
             <div class="price">£59<span>/mo</span></div>
+            <p class="price-note">ex VAT · 14-day trial</p>
             <ul>
               <li>Everything in Solo</li>
-              <li>Web ordering + kitchen board</li>
-              <li>Just Eat, Deliveroo, Uber Eats &amp; more</li>
-              <li>CSV import · reports / EOD</li>
+              <li>Online ordering for pickup, dine-in, and delivery</li>
+              <li>Kitchen board, plus Just Eat, Deliveroo, Uber Eats and more</li>
+              <li>CSV import, end of day, and reports</li>
             </ul>
-            <a class="btn btn-primary" href="/pricing">Choose Shop</a>
+            <button type="button" class="btn btn-primary start-trial">Start 14-day trial</button>
+            <form class="trial-form" hidden>
+              <label>Business name<input name="businessName" required autocomplete="organization" placeholder="Harbour Coffee" /></label>
+              <label>Owner email<input name="email" type="email" required autocomplete="email" placeholder="you@cafe.co.uk" /></label>
+              <button type="submit" class="btn btn-primary">Create Shop trial</button>
+              <button type="button" class="btn btn-ghost-dark cancel-trial">Cancel</button>
+              <p class="form-msg" hidden></p>
+            </form>
+            <div class="trial-done" hidden></div>
           </article>
-          <article class="tier">
+          <article class="tier" data-plan="multi" data-name="Group">
             <h3>Group</h3>
-            <p>One cloud for every site</p>
+            <p>One cloud for every site. Multi-site groups and growing brands.</p>
             <div class="price">£99<span>/mo</span></div>
+            <p class="price-note">ex VAT · 14-day trial</p>
             <ul>
               <li>Everything in Shop</li>
-              <li>Multi-store stock transfers</li>
+              <li>Stock transfers between stores</li>
               <li>Assign items to branches</li>
-              <li>Priority pilot support</li>
+              <li>Shared catalogue across sites</li>
             </ul>
-            <a class="btn btn-primary" href="/pricing">Choose Group</a>
+            <button type="button" class="btn btn-ghost-dark start-trial">Start Group trial</button>
+            <form class="trial-form" hidden>
+              <label>Business name<input name="businessName" required autocomplete="organization" placeholder="Harbour Coffee" /></label>
+              <label>Owner email<input name="email" type="email" required autocomplete="email" placeholder="you@cafe.co.uk" /></label>
+              <button type="submit" class="btn btn-primary">Create Group trial</button>
+              <button type="button" class="btn btn-ghost-dark cancel-trial">Cancel</button>
+              <p class="form-msg" hidden></p>
+            </form>
+            <div class="trial-done" hidden></div>
           </article>
         </div>
       </section>
@@ -454,11 +531,11 @@
         <h2 class="section-title">Try PurePOS live</h2>
         <p class="section-lede">
           Demo café is ready now. Owner PIN <strong>1234</strong> · cashier PIN <strong>1111</strong> · email <strong>owner@purepos.demo</strong>.
-          Or start a new company trial on pricing (creates your own store + PIN).
+          To open your own shop, start a trial on a plan above.
         </p>
         <div class="cta-row" style="margin-bottom:1.5rem;">
           <a class="btn btn-primary" href="/pos/">Try demo till</a>
-          <a class="btn btn-ghost-dark" href="/pricing">Start company trial</a>
+          <a class="btn btn-ghost-dark" href="#pricing">Start a trial</a>
         </div>
         <div class="links">
           <div class="link-panel">
@@ -466,7 +543,7 @@
             <a href="/pos/">Till → /pos/</a>
             <a href="/bo/">Back office → /bo/</a>
             <a href="/order/">Online ordering → /order/</a>
-            <a href="/pricing">Pricing / trial / license → /pricing</a>
+            <a href="#pricing">Plans and trial</a>
           </div>
           <div class="link-panel">
             <h3>Pilot tip</h3>
@@ -486,5 +563,135 @@
         </p>
       </footer>
     </div>
+    <script>
+      const tiers = document.querySelector("#pricing .tiers");
+
+      function closeForms() {
+        tiers.querySelectorAll(".trial-form").forEach((form) => {
+          form.hidden = true;
+        });
+        tiers.querySelectorAll(".start-trial").forEach((btn) => {
+          btn.hidden = false;
+        });
+      }
+
+      function copyButton(value) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = "Copy";
+        button.addEventListener("click", async () => {
+          let ok = false;
+          try {
+            await navigator.clipboard.writeText(value);
+            ok = true;
+          } catch {
+            const area = document.createElement("textarea");
+            area.value = value;
+            area.setAttribute("readonly", "");
+            area.style.position = "fixed";
+            area.style.opacity = "0";
+            document.body.append(area);
+            area.focus();
+            area.select();
+            try {
+              ok = document.execCommand("copy");
+            } catch {
+              ok = false;
+            }
+            area.remove();
+          }
+          button.textContent = ok ? "Copied" : "Select and copy";
+          setTimeout(() => {
+            button.textContent = "Copy";
+          }, 1600);
+        });
+        return button;
+      }
+
+      function pinRow(label, value) {
+        const row = document.createElement("div");
+        row.className = "pin-row";
+        const name = document.createElement("span");
+        name.textContent = label;
+        const code = document.createElement("code");
+        code.textContent = value;
+        row.append(name, code, copyButton(value));
+        return row;
+      }
+
+      tiers.addEventListener("click", (event) => {
+        const start = event.target.closest(".start-trial");
+        const cancel = event.target.closest(".cancel-trial");
+        if (!start && !cancel) return;
+        const card = event.target.closest(".tier");
+        if (cancel) {
+          card.querySelector(".trial-form").hidden = true;
+          card.querySelector(".start-trial").hidden = false;
+          return;
+        }
+        closeForms();
+        card.querySelector(".start-trial").hidden = true;
+        const form = card.querySelector(".trial-form");
+        form.hidden = false;
+        form.querySelector("input[name=businessName]").focus();
+      });
+
+      tiers.addEventListener("submit", async (event) => {
+        const form = event.target.closest(".trial-form");
+        if (!form) return;
+        event.preventDefault();
+        const card = form.closest(".tier");
+        const msg = form.querySelector(".form-msg");
+        const submit = form.querySelector("button[type=submit]");
+        msg.hidden = false;
+        msg.className = "form-msg";
+        msg.textContent = "Creating your trial…";
+        submit.disabled = true;
+        try {
+          const res = await fetch("/api/public/signup", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              businessName: new FormData(form).get("businessName"),
+              email: new FormData(form).get("email"),
+              planId: card.dataset.plan,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Signup failed");
+          form.hidden = true;
+          const done = card.querySelector(".trial-done");
+          done.replaceChildren();
+          const lead = document.createElement("p");
+          lead.className = "done-lead";
+          lead.textContent = "Copy these now. This is the only time we show the PINs.";
+          const until = document.createElement("p");
+          until.className = "price-note";
+          until.textContent = `${data.account.planName} trial until ${new Date(data.account.trialEndsAt).toLocaleDateString("en-GB")}.`;
+          const backOffice = document.createElement("a");
+          backOffice.className = "btn btn-primary";
+          backOffice.href = "/bo/";
+          backOffice.textContent = "Open back office";
+          const till = document.createElement("a");
+          till.className = "btn btn-ghost-dark";
+          till.href = "/pos/";
+          till.textContent = "Open till";
+          done.append(
+            lead,
+            pinRow("Owner email", data.credentials.email),
+            pinRow("Owner PIN", data.credentials.ownerPin),
+            pinRow("Cashier PIN", data.credentials.cashierPin),
+            until,
+            backOffice,
+            till
+          );
+          done.hidden = false;
+        } catch (err) {
+          msg.className = "form-msg err";
+          msg.textContent = err instanceof Error ? err.message : "Signup failed";
+          submit.disabled = false;
+        }
+      });
+    </script>
   </body>
 </html>

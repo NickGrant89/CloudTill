@@ -1989,11 +1989,11 @@ function SettingsPage() {
             </>
           )}
           <p style={{ fontSize: "0.88rem", color: "var(--muted)" }}>
-            To upgrade beyond {billing.status === "trialing" ? "your trial" : "your licence"}, buy a plan on the{" "}
-            <a className="ghost-link" href="/pricing" target="_blank" rel="noreferrer">
-              pricing page
-            </a>{" "}
-            — you'll get a licence key to enter here.
+            To upgrade beyond {billing.status === "trialing" ? "your trial" : "your licence"}, see the plans on the{" "}
+            <a className="ghost-link" href="/#pricing" target="_blank" rel="noreferrer">
+              PurePOS home page
+            </a>
+            . A licence key is entered here.
           </p>
           <form
             style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}

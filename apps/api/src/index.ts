@@ -73,7 +73,7 @@ app.get("/api/health", async (_req, res) => {
     product: process.env.PRODUCT_NAME || "PurePOS",
     legalName: process.env.PRODUCT_LEGAL || "PurePOS UK",
     domain: process.env.PRODUCT_DOMAIN || "purepos.co.uk",
-    version: "0.10.6",
+    version: "0.10.7",
     database,
     storeCount,
     time: new Date().toISOString(),
@@ -98,8 +98,8 @@ app.get("/api/health", async (_req, res) => {
   });
 });
 
-app.get("/pricing", (_req, res) => {
-  res.sendFile(path.join(__dirname, "../public/pricing.html"));
+app.get(["/pricing", "/pricing/"], (_req, res) => {
+  res.redirect(302, "/#pricing");
 });
 
 app.get("/admin", (_req, res) => {
@@ -172,5 +172,5 @@ backfillCompanyKeys()
 
 app.listen(PORT, HOST, () => {
   console.log(`PurePOS API listening on http://${HOST}:${PORT}`);
-  console.log(`Pricing page http://${HOST}:${PORT}/pricing`);
+  console.log(`Home http://${HOST}:${PORT}/  (plans at /#pricing)`);
 });
