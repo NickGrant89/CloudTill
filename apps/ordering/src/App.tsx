@@ -726,36 +726,37 @@ export function App() {
       <div className="menu-col">
         {view === "menu" && (
           <section className="hero" aria-label={store?.name ?? "Store"}>
-            <p className="eyebrow">Order online · PurePOS</p>
-            <h1 className="hero-brand">{store?.name ?? "Café"}</h1>
-            <p className="hero-lede">
-              Order ahead and pay by card. We’ll show you live when it’s being made and when it’s ready.
-            </p>
-            <div className="hero-meta">
-              <span className={`pill${ordering.open ? "" : " is-closed"}`}>
-                <span className="dot" aria-hidden="true" />
-                {ordering.open ? "Taking orders now" : pausedMessage(ordering)}
-              </span>
-              <span className="pill">{fulfillmentLabel(fulfillment)} · ~{estimateLabel(fulfillment)}</span>
-              {store?.address && <span className="pill">{store.address}</span>}
+            <div className="hero-row">
+              <div>
+                <p className="eyebrow">Order online</p>
+                <h1 className="hero-brand">{store?.name ?? "Menu"}</h1>
+              </div>
+              <button type="button" className="cart-jump hero-cart" onClick={() => setView("cart")}>
+                Cart
+                {cartCount > 0 && <span>{cartCount}</span>}
+              </button>
             </div>
+            <p className="hero-address">
+              {ordering.open ? "Taking orders now" : pausedMessage(ordering)}
+              {store?.address ? ` · ${store.address}` : ""}
+            </p>
           </section>
         )}
 
+        {view !== "menu" && (
         <header className="topbar">
           <div>
-            <p className="store-mini">{view === "menu" ? "Menu" : store?.name ?? "Order"}</p>
-            {view !== "menu" && (
-              <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
-                {fulfillmentLabel(fulfillment)} · ~{estimateLabel(fulfillment)}
-              </p>
-            )}
+            <p className="store-mini">{store?.name ?? "Order"}</p>
+            <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
+              {fulfillmentLabel(fulfillment)} · ~{estimateLabel(fulfillment)}
+            </p>
           </div>
           <button type="button" className="cart-jump" onClick={() => setView("cart")}>
             Cart
             {cartCount > 0 && <span>{cartCount}</span>}
           </button>
         </header>
+        )}
 
         {!ordering.open && view === "menu" && (
           <p className="closed-banner" role="status">
@@ -840,17 +841,13 @@ export function App() {
           </section>
         ) : (
           <section className="menu" aria-label="Menu">
-            <div className="trust">
-              <span>Live order tracking</span>
-              <span>{taxInclusive ? "Prices include VAT" : "VAT added at checkout"}</span>
-              <span>Card details not stored</span>
-            </div>
+            <p className="trust">{taxInclusive ? "Prices include VAT" : "VAT is added at checkout"}</p>
             <label className="search">
               <span className="sr">Search the menu</span>
               <input
                 type="search"
                 value={query}
-                placeholder="Search drinks, food, treats…"
+                placeholder="Search the menu"
                 onChange={(e) => setQuery(e.target.value)}
               />
             </label>
