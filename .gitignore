@@ -15,3 +15,4 @@ apps/api/prisma/*.db-journal
 
 apps/pos/tsconfig.tsbuildinfo
 apps/backoffice/tsconfig.tsbuildinfo
+apps/ordering/tsconfig.tsbuildinfo
