@@ -17,6 +17,15 @@ export const BILLING_LICENSE_LAST_KEY = "billing.licenseKeyLast";
 export const BILLING_STRIPE_CUSTOMER = "billing.stripeCustomerId";
 export const BILLING_AUDIT_KEY = "billing.auditLog";
 export const BILLING_LAST_SIGNUP_KEY = "billing.lastSignup";
+/** Highest plan the business has paid for (set only by an issued licence or the platform admin). */
+export const BILLING_LICENSED_PLAN_KEY = "billing.licensedPlan";
+export const ENTITLEMENTS_MIGRATED_KEY = "billing.migrated.entitlements";
+
+const PLAN_RANK: Record<PlanId, number> = { starter: 0, pro: 1, multi: 2 };
+
+export function planAtMost(planId: PlanId, ceiling: PlanId) {
+  return PLAN_RANK[planId] <= PLAN_RANK[ceiling];
+}
 
 function slugify(name: string) {
   const base = name
@@ -95,6 +104,7 @@ export async function readBilling(storeId: string) {
           BILLING_STRIPE_CUSTOMER,
           BILLING_AUDIT_KEY,
           BILLING_LAST_SIGNUP_KEY,
+          BILLING_LICENSED_PLAN_KEY,
         ],
       },
     },
@@ -103,7 +113,24 @@ export async function readBilling(storeId: string) {
   const planId = (map[BILLING_PLAN_KEY] as PlanId | undefined) ?? "pro";
   const plan = getPlan(planId);
   const trialEndsAt = map[BILLING_TRIAL_KEY] || null;
-  const status = map[BILLING_STATUS_KEY] ?? (trialEndsAt ? "trialing" : "active");
+  const storedStatus = map[BILLING_STATUS_KEY] ?? (trialEndsAt ? "trialing" : "active");
+  const trialExpired =
+    storedStatus === "trialing" && Boolean(trialEndsAt) && new Date(trialEndsAt!).getTime() < Date.now();
+  const status = trialExpired ? "expired" : storedStatus;
+  const licensedPlanId = (map[BILLING_LICENSED_PLAN_KEY] as PlanId | undefined) || null;
+  // Paid features need a live trial or a paid plan; a lapsed business keeps the till and back office only.
+  const entitled = status === "trialing" || status === "active" || status === "past_due";
+  const features = entitled ? plan.features : getPlan("starter").features;
+  const isDemo =
+    (await prisma.store.findUnique({ where: { id: storeId }, select: { companyKey: true } }))?.companyKey === "demo";
+  // The demo is shared with every visitor (its PINs are public), so nobody may change its plan.
+  const canSwitchTo: PlanId[] = isDemo
+    ? []
+    : status === "trialing"
+      ? PLANS.map((p) => p.id)
+      : entitled && licensedPlanId
+        ? PLANS.map((p) => p.id).filter((id) => planAtMost(id, licensedPlanId))
+        : [];
   const stripeConfigured = Boolean(process.env.STRIPE_SECRET_KEY);
   let audit: unknown[] = [];
   try {
@@ -122,7 +149,10 @@ export async function readBilling(storeId: string) {
     plan,
     status,
     trialEndsAt,
-    features: plan.features,
+    entitled,
+    licensedPlanId,
+    canSwitchTo,
+    features,
     licenseFingerprint: map[BILLING_LICENSE_KEY] ?? null,
     licenseKeyLast: map[BILLING_LICENSE_LAST_KEY] ?? null,
     lastSignup,
@@ -151,7 +181,6 @@ async function provisionStore(opts: {
   const ownerPin = String(1000 + Math.floor(Math.random() * 9000));
   let cashierPin = String(1000 + Math.floor(Math.random() * 9000));
   while (cashierPin === ownerPin) cashierPin = String(1000 + Math.floor(Math.random() * 9000));
-  const licenseKey = mintLicenseKey(plan.id);
 
   const created = await prisma.store.create({
     data: {
@@ -217,8 +246,7 @@ async function provisionStore(opts: {
   await writeSetting(store.id, BILLING_PLAN_KEY, plan.id);
   await writeSetting(store.id, BILLING_TRIAL_KEY, trialEndsAt);
   await writeSetting(store.id, BILLING_STATUS_KEY, "trialing");
-  await writeSetting(store.id, BILLING_LICENSE_KEY, fingerprintLicense(licenseKey));
-  await writeSetting(store.id, BILLING_LICENSE_LAST_KEY, licenseKey);
+  await writeSetting(store.id, ENTITLEMENTS_MIGRATED_KEY, "1");
   await writeSetting(
     store.id,
     BILLING_LAST_SIGNUP_KEY,
@@ -226,7 +254,7 @@ async function provisionStore(opts: {
   );
   await appendBillingAudit(store.id, {
     type: "signup",
-    detail: { email: opts.email, planId: plan.id, licenseKey },
+    detail: { email: opts.email, planId: plan.id },
   });
   await writeSetting(store.id, "receipt.header", opts.businessName);
   await writeSetting(store.id, "receipt.footer", "Thank you · PurePOS");
@@ -238,7 +266,6 @@ async function provisionStore(opts: {
     trialEndsAt,
     ownerPin,
     cashierPin,
-    licenseKey,
   };
 }
 
@@ -297,7 +324,6 @@ publicBillingRouter.post("/signup", async (req, res) => {
         email: body.data.email.toLowerCase(),
         ownerPin: provisioned.ownerPin,
         cashierPin: provisioned.cashierPin,
-        licenseKey: provisioned.licenseKey,
       },
       links: {
         pricing: `${publicBase}/pricing`,
@@ -312,7 +338,7 @@ publicBillingRouter.post("/signup", async (req, res) => {
       nextSteps: [
         `Open back office → ${publicBase}/bo/ and sign in with your email + owner PIN`,
         `Open the till → ${publicBase}/pos/ with the owner or cashier PIN`,
-        "Save your license key — Settings → Billing can re-activate with it",
+        `Your ${provisioned.plan.name} trial runs until ${new Date(provisioned.trialEndsAt).toLocaleDateString("en-GB")} — buy a plan from ${publicBase}/pricing to keep paid features`,
       ],
     });
   } catch (err) {
@@ -331,45 +357,22 @@ publicBillingRouter.post("/activate-license", async (req, res) => {
     .safeParse(req.body);
   if (!body.success) return res.status(400).json({ error: "licenseKey required" });
 
-  const key = body.data.licenseKey.trim().toUpperCase();
-  const match = /^PP-(STARTER|PRO|MULTI)-/.exec(key);
-  if (!match) return res.status(400).json({ error: "Invalid PurePOS license key format" });
-
-  const planId = match[1].toLowerCase() as PlanId;
-  const fp = fingerprintLicense(key);
-
-  let store =
-    (body.data.storeSlug
-      ? await prisma.store.findFirst({ where: { slug: body.data.storeSlug } })
-      : null) ||
-    (body.data.email
-      ? (
-          await prisma.employee.findFirst({
-            where: { email: body.data.email.toLowerCase() },
-            include: { store: true },
-          })
-        )?.store ?? null
-      : null);
-
-  if (!store) {
-    const byLicense = await prisma.setting.findFirst({
-      where: { key: BILLING_LICENSE_KEY, value: fp },
-    });
-    if (byLicense) {
-      store = await prisma.store.findUnique({ where: { id: byLicense.storeId } });
-    }
-  }
-  if (!store) return res.status(404).json({ error: "No store found for that license / email" });
-
-  await writeSetting(store.id, BILLING_PLAN_KEY, planId);
-  await writeSetting(store.id, BILLING_STATUS_KEY, "active");
-  await writeSetting(store.id, BILLING_LICENSE_KEY, fp);
-  await writeSetting(store.id, BILLING_LICENSE_LAST_KEY, key);
-  await writeSetting(store.id, BILLING_TRIAL_KEY, "");
-  await appendBillingAudit(store.id, {
-    type: "activate_license",
-    detail: { planId, email: body.data.email || null },
+  const issuedTo = await prisma.setting.findFirst({
+    where: { key: BILLING_LICENSE_KEY, value: fingerprintLicense(body.data.licenseKey) },
   });
+  const store = issuedTo ? await prisma.store.findUnique({ where: { id: issuedTo.storeId } }) : null;
+  // Slug / email are only a cross-check: a key can never be pointed at a business it wasn't issued to.
+  const claimed =
+    (body.data.storeSlug ? await prisma.store.findFirst({ where: { slug: body.data.storeSlug } }) : null) ??
+    (body.data.email
+      ? (await prisma.employee.findFirst({ where: { email: body.data.email.toLowerCase() } }))?.storeId ?? null
+      : null);
+  const claimedId = typeof claimed === "string" ? claimed : claimed?.id ?? null;
+  if (!store || (claimedId && !(await companyStoreIds(store.id)).includes(claimedId))) {
+    return res.status(404).json({ error: "That licence key isn't recognised for this business" });
+  }
+  const result = await activateIssuedLicense(body.data.licenseKey, store.id, "public");
+  if ("error" in result) return res.status(result.status).json({ error: result.error });
 
   const billing = await readBilling(store.id);
   res.json({
@@ -420,29 +423,32 @@ billingRouter.get("/", async (req: AuthedRequest, res) => {
 billingRouter.patch("/plan", requireRole("owner"), async (req: AuthedRequest, res) => {
   const body = z.object({ planId: z.enum(["starter", "pro", "multi"]) }).safeParse(req.body);
   if (!body.success) return res.status(400).json({ error: "planId required" });
-  for (const storeId of await companyStoreIds(req.user!.storeId)) {
-    await writeSetting(storeId, BILLING_PLAN_KEY, body.data.planId);
-    await writeSetting(storeId, BILLING_STATUS_KEY, "active");
+  const current = await readBilling(req.user!.storeId);
+  if (!current.canSwitchTo.includes(body.data.planId)) {
+    return res.status(402).json({
+      error: !current.canSwitchTo.length && current.entitled
+        ? "The demo café's plan can't be changed"
+        : current.status === "trialing"
+          ? "That plan isn't available"
+          : current.licensedPlanId
+            ? `Your licence covers up to ${getPlan(current.licensedPlanId).name}. Buy ${getPlan(body.data.planId).name} on the pricing page or enter a new licence key.`
+            : "Your trial has ended — buy a plan on the pricing page or enter a licence key to unlock it.",
+      canSwitchTo: current.canSwitchTo,
+    });
   }
-  const billing = await readBilling(req.user!.storeId);
-  res.json(billing);
+  await writeCompanySetting(req.user!.storeId, BILLING_PLAN_KEY, body.data.planId);
+  await appendBillingAudit(req.user!.storeId, {
+    type: "change_plan",
+    detail: { from: current.planId, to: body.data.planId, status: current.status },
+  });
+  res.json(await readBilling(req.user!.storeId));
 });
 
 billingRouter.post("/activate-license", requireRole("owner"), async (req: AuthedRequest, res) => {
   const body = z.object({ licenseKey: z.string().min(10) }).safeParse(req.body);
   if (!body.success) return res.status(400).json({ error: "licenseKey required" });
-  const key = body.data.licenseKey.trim().toUpperCase();
-  const match = /^PP-(STARTER|PRO|MULTI)-/.exec(key);
-  if (!match) return res.status(400).json({ error: "Invalid PurePOS license key format" });
-  const planId = match[1].toLowerCase() as PlanId;
-  for (const storeId of await companyStoreIds(req.user!.storeId)) {
-    await writeSetting(storeId, BILLING_PLAN_KEY, planId);
-    await writeSetting(storeId, BILLING_STATUS_KEY, "active");
-    await writeSetting(storeId, BILLING_LICENSE_KEY, fingerprintLicense(key));
-    await writeSetting(storeId, BILLING_LICENSE_LAST_KEY, key);
-    await writeSetting(storeId, BILLING_TRIAL_KEY, "");
-  }
-  await appendBillingAudit(req.user!.storeId, { type: "activate_license", detail: { planId, via: "bo" } });
+  const result = await activateIssuedLicense(body.data.licenseKey, req.user!.storeId, "bo");
+  if ("error" in result) return res.status(result.status).json({ error: result.error });
   res.json(await readBilling(req.user!.storeId));
 });
 
@@ -451,12 +457,98 @@ billingRouter.get("/features/:feature", async (req: AuthedRequest, res) => {
   const feature = String(req.params.feature);
   res.json({
     feature,
-    allowed: planHasFeature(billing.planId, feature as never),
+    allowed: (billing.features as string[]).includes(feature),
     planId: billing.planId,
   });
 });
 
+/**
+ * One-off per store: before entitlements, signup minted a self-activating key and any owner could pick any plan.
+ * Paid (active) stores keep their current plan as the licensed ceiling; trial-signup keys are dropped; the demo is
+ * an active Shop plan so it never expires.
+ */
+function paidByAdmin(audit: unknown[]) {
+  return audit.some((raw) => {
+    const e = raw as { type?: string; detail?: { status?: string } };
+    return (
+      e.type === "admin_issue_license" || (e.type === "admin_change_plan" && e.detail?.status === "active")
+    );
+  });
+}
+
+export async function migrateBillingEntitlements() {
+  const done = new Set(
+    (await prisma.setting.findMany({ where: { key: ENTITLEMENTS_MIGRATED_KEY }, select: { storeId: true } })).map(
+      (r) => r.storeId
+    )
+  );
+  const stores = await prisma.store.findMany({
+    select: { id: true, companyKey: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const companies = new Map<string, string[]>();
+  for (const store of stores) {
+    const key = store.companyKey || store.id;
+    companies.set(key, [...(companies.get(key) ?? []), store.id]);
+  }
+
+  for (const [companyKey, ids] of companies) {
+    if (ids.every((id) => done.has(id))) continue;
+    // The first store holds the signup and admin history for the business.
+    const billing = await readBilling(ids[0]);
+    const write = async (key: string, value: string) => {
+      for (const id of ids) await writeSetting(id, key, value);
+    };
+    if (companyKey === "demo") {
+      await write(BILLING_STATUS_KEY, "active");
+      await write(BILLING_TRIAL_KEY, "");
+      await write(BILLING_LICENSED_PLAN_KEY, billing.planId);
+    } else if (paidByAdmin(billing.audit)) {
+      await write(BILLING_LICENSED_PLAN_KEY, billing.planId);
+    } else {
+      // "active" here only came from the old free plan switch or a self-activated signup key.
+      await write(BILLING_LICENSE_KEY, "");
+      await write(BILLING_LICENSE_LAST_KEY, "");
+      if (billing.status === "active") {
+        const signedUpAt = (billing.lastSignup as { at?: string } | null)?.at;
+        const trialDays = getPlan(billing.planId).trialDays;
+        const ends = signedUpAt
+          ? new Date(new Date(signedUpAt).getTime() + trialDays * 24 * 60 * 60 * 1000).toISOString()
+          : new Date().toISOString();
+        await write(BILLING_STATUS_KEY, "trialing");
+        await write(BILLING_TRIAL_KEY, ends);
+      }
+    }
+    await write(ENTITLEMENTS_MIGRATED_KEY, "1");
+  }
+}
+
+/** Accept only a key PurePOS issued to this business (fingerprint recorded by the admin), then mark it paid. */
+async function activateIssuedLicense(
+  rawKey: string,
+  storeId: string,
+  via: "bo" | "public"
+): Promise<{ planId: PlanId } | { status: number; error: string }> {
+  const key = rawKey.trim().toUpperCase();
+  const match = /^PP-(STARTER|PRO|MULTI)-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}$/.exec(key);
+  if (!match) return { status: 400, error: "That doesn't look like a PurePOS licence key (PP-PLAN-XXXX-XXXX-XXXX)" };
+  const issued = await prisma.setting.findUnique({
+    where: { storeId_key: { storeId, key: BILLING_LICENSE_KEY } },
+  });
+  if (!issued?.value || issued.value !== fingerprintLicense(key)) {
+    return { status: 403, error: "That licence key isn't recognised for this business" };
+  }
+  const planId = match[1].toLowerCase() as PlanId;
+  await writeCompanySetting(storeId, BILLING_PLAN_KEY, planId);
+  await writeCompanySetting(storeId, BILLING_LICENSED_PLAN_KEY, planId);
+  await writeCompanySetting(storeId, BILLING_STATUS_KEY, "active");
+  await writeCompanySetting(storeId, BILLING_LICENSE_LAST_KEY, key);
+  await writeCompanySetting(storeId, BILLING_TRIAL_KEY, "");
+  await appendBillingAudit(storeId, { type: "activate_license", detail: { planId, via } });
+  return { planId };
+}
+
 export async function storeAllowsFeature(storeId: string, feature: Parameters<typeof planHasFeature>[1]) {
   const billing = await readBilling(storeId);
-  return planHasFeature(billing.planId, feature);
+  return (billing.features as string[]).includes(feature);
 }

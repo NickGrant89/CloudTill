@@ -25,6 +25,7 @@ import { deliveryRouter, publicDeliveryRouter } from "./routes/delivery.js";
 import { textPayRouter, publicTextPayRouter } from "./routes/textpay.js";
 import { prisma } from "./db.js";
 import { backfillCompanyKeys } from "./company.js";
+import { migrateBillingEntitlements } from "./routes/billing.js";
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -69,7 +70,7 @@ app.get("/api/health", async (_req, res) => {
     product: process.env.PRODUCT_NAME || "PurePOS",
     legalName: process.env.PRODUCT_LEGAL || "PurePOS UK",
     domain: process.env.PRODUCT_DOMAIN || "purepos.co.uk",
-    version: "0.7.1",
+    version: "0.8.0",
     database,
     storeCount,
     time: new Date().toISOString(),
@@ -162,7 +163,9 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
   res.status(500).json({ error: message });
 });
 
-backfillCompanyKeys().catch((err) => console.error("companyKey backfill failed", err));
+backfillCompanyKeys()
+  .then(() => migrateBillingEntitlements())
+  .catch((err) => console.error("startup backfill failed", err));
 
 app.listen(PORT, HOST, () => {
   console.log(`PurePOS API listening on http://${HOST}:${PORT}`);

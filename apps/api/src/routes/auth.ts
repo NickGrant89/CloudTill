@@ -7,9 +7,11 @@ import { companyStoreIds, DEMO_COMPANY, sameCompany } from "../company.js";
 import {
   BILLING_LICENSE_KEY,
   BILLING_LICENSE_LAST_KEY,
+  BILLING_LICENSED_PLAN_KEY,
   BILLING_PLAN_KEY,
   BILLING_STATUS_KEY,
   BILLING_TRIAL_KEY,
+  ENTITLEMENTS_MIGRATED_KEY,
   storeAllowsFeature,
   uniqueSlug,
 } from "./billing.js";
@@ -123,6 +125,8 @@ const COPIED_BILLING_KEYS = [
   BILLING_STATUS_KEY,
   BILLING_LICENSE_KEY,
   BILLING_LICENSE_LAST_KEY,
+  BILLING_LICENSED_PLAN_KEY,
+  ENTITLEMENTS_MIGRATED_KEY,
 ];
 
 authRouter.post("/stores", requireAuth, requireRole("owner"), async (req: AuthedRequest, res) => {

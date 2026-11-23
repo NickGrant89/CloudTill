@@ -65,7 +65,7 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
   const store = await resolveStore(req.params.slug);
   if (!store) return res.status(404).json({ error: "Store not found" });
   if (!(await storeAllowsFeature(store.id, "online_ordering"))) {
-    return res.status(402).json({ error: "Online ordering needs Pro or Multi-store. Upgrade in Billing." });
+    return res.status(402).json({ error: "Online ordering needs an active Shop or Group plan. Upgrade in Settings → Billing." });
   }
 
   const body = z

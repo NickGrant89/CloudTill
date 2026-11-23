@@ -771,12 +771,12 @@ async function seedDemo() {
     },
   });
 
-  const trialEnds = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
   await prisma.setting.createMany({
     data: [
       { storeId: store.id, key: "billing.plan", value: "pro" },
-      { storeId: store.id, key: "billing.status", value: "trialing" },
-      { storeId: store.id, key: "billing.trialEndsAt", value: trialEnds },
+      { storeId: store.id, key: "billing.licensedPlan", value: "pro" },
+      { storeId: store.id, key: "billing.status", value: "active" },
+      { storeId: store.id, key: "billing.migrated.entitlements", value: "1" },
     ],
   });
 

@@ -763,3 +763,11 @@ tr:last-child td {
 .store-switch option {
   color: #121815;
 }
+
+.billing-alert {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff4e5;
+  border: 1px solid #f5c27a;
+  color: #7a4a00;
+}

@@ -5,6 +5,7 @@ import { getPlan, type PlanId } from "@cloudtill/shared";
 import {
   BILLING_LICENSE_KEY,
   BILLING_LICENSE_LAST_KEY,
+  BILLING_LICENSED_PLAN_KEY,
   BILLING_PLAN_KEY,
   BILLING_STATUS_KEY,
   BILLING_TRIAL_KEY,
@@ -158,6 +159,7 @@ adminRouter.post("/stores/:storeId/plan", async (req, res) => {
   if (!store) return res.status(404).json({ error: "Store not found" });
 
   await writeCompanySetting(store.id, BILLING_PLAN_KEY, body.data.planId);
+  await writeCompanySetting(store.id, BILLING_LICENSED_PLAN_KEY, body.data.planId);
   if (body.data.status) {
     await writeCompanySetting(store.id, BILLING_STATUS_KEY, body.data.status);
   }
@@ -217,6 +219,7 @@ adminRouter.post("/stores/:storeId/license/issue", async (req, res) => {
   await writeCompanySetting(store.id, BILLING_LICENSE_KEY, fingerprintLicense(licenseKey));
   await writeCompanySetting(store.id, BILLING_LICENSE_LAST_KEY, licenseKey);
   if (body.data.activate !== false) {
+    await writeCompanySetting(store.id, BILLING_LICENSED_PLAN_KEY, planId);
     await writeCompanySetting(store.id, BILLING_STATUS_KEY, "active");
     await writeCompanySetting(store.id, BILLING_TRIAL_KEY, "");
   }
@@ -257,6 +260,7 @@ adminRouter.post("/stores/:storeId/license/revoke", async (req, res) => {
   if (!store) return res.status(404).json({ error: "Store not found" });
   await writeCompanySetting(store.id, BILLING_LICENSE_KEY, "");
   await writeCompanySetting(store.id, BILLING_LICENSE_LAST_KEY, "");
+  await writeCompanySetting(store.id, BILLING_LICENSED_PLAN_KEY, "");
   await writeCompanySetting(store.id, BILLING_STATUS_KEY, "canceled");
   await appendBillingAudit(store.id, { type: "admin_revoke_license", detail: {} });
   res.json({ ok: true, storeId: store.id, billing: await readBilling(store.id) });

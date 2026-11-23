@@ -12,7 +12,7 @@ importRouter.use(async (req: AuthedRequest, res, next) => {
   const allowed = await storeAllowsFeature(req.user!.storeId, "csv_import");
   if (!allowed) {
     return res.status(402).json({
-      error: "CSV import requires Pro or Multi-store. Upgrade under Settings → Billing.",
+      error: "CSV import needs an active Shop or Group plan. Upgrade in Settings → Billing.",
       feature: "csv_import",
     });
   }

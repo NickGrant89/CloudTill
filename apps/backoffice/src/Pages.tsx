@@ -1828,6 +1828,14 @@ function StoreDetailsForm({ store, onSaved }: { store: StoreDetails; onSaved: ()
   );
 }
 
+const BILLING_STATUS_LABEL: Record<string, string> = {
+  trialing: "free trial",
+  active: "paid",
+  past_due: "payment overdue",
+  expired: "trial ended",
+  canceled: "cancelled",
+};
+
 function SettingsPage() {
   const [settings, setSettings] = useState<{
     store: StoreDetails;
@@ -1839,8 +1847,11 @@ function SettingsPage() {
     planId: string;
     status: string;
     trialEndsAt: string | null;
+    licensedPlanId: string | null;
+    canSwitchTo: string[];
     plan: { name: string; monthlyGbp: number; highlights: string[]; features: string[] };
   } | null>(null);
+  const [billingMsg, setBillingMsg] = useState("");
   const [receipt, setReceipt] = useState({ header: "", footer: "" });
   const [taxForm, setTaxForm] = useState({ name: "Local tax", rate: "8.25" });
   const [ptForm, setPtForm] = useState({ name: "", type: "other" });
@@ -1894,48 +1905,83 @@ function SettingsPage() {
         <div className="panel-box">
           <h3>Billing</h3>
           <p>
-            <strong>{billing.plan.name}</strong> · £{billing.plan.monthlyGbp}/mo · {billing.status}
-            {billing.trialEndsAt ? ` · trial until ${new Date(billing.trialEndsAt).toLocaleDateString("en-GB")}` : ""}
+            <strong>{billing.plan.name}</strong> · £{billing.plan.monthlyGbp}/mo · {BILLING_STATUS_LABEL[billing.status] ?? billing.status}
+            {billing.status === "trialing" && billing.trialEndsAt
+              ? ` until ${new Date(billing.trialEndsAt).toLocaleDateString("en-GB")}`
+              : ""}
           </p>
+          {(billing.status === "expired" || billing.status === "canceled") && (
+            <p className="billing-alert">
+              {billing.status === "expired" ? "Your free trial has ended." : "Your plan has been cancelled."} The till
+              and back office keep working, but {billing.plan.name} features (online ordering, kitchen, delivery apps,
+              import, reports, branches) are off until you buy a plan or enter a licence key below.
+            </p>
+          )}
           <ul style={{ color: "var(--muted)", marginTop: 8 }}>
             {billing.plan.highlights.map((h) => (
               <li key={h}>{h}</li>
             ))}
           </ul>
-          <div className="toolbar" style={{ marginTop: 12 }}>
-            {(["starter", "pro", "multi"] as const).map((planId) => (
-              <button
-                key={planId}
-                type="button"
-                className={billing.planId === planId ? undefined : "secondary"}
-                onClick={() =>
-                  void api("/billing/plan", { method: "PATCH", body: JSON.stringify({ planId }) }).then(() => load())
-                }
-              >
-                {planId === "starter" ? "Solo" : planId === "pro" ? "Shop" : "Group"}
-              </button>
-            ))}
+          {billing.canSwitchTo.length > 1 && (
+            <>
+              <p style={{ fontSize: "0.88rem", color: "var(--muted)", marginBottom: 6 }}>
+                {billing.status === "trialing"
+                  ? "Try any plan during your trial:"
+                  : "Switch within your licence:"}
+              </p>
+              <div className="toolbar">
+                {(["starter", "pro", "multi"] as const)
+                  .filter((planId) => billing.canSwitchTo.includes(planId))
+                  .map((planId) => (
+                    <button
+                      key={planId}
+                      type="button"
+                      className={billing.planId === planId ? undefined : "secondary"}
+                      onClick={() => {
+                        setBillingMsg("");
+                        void api("/billing/plan", { method: "PATCH", body: JSON.stringify({ planId }) })
+                          .then(() => load())
+                          .catch((err) => setBillingMsg(err instanceof Error ? err.message : "Could not change plan"));
+                      }}
+                    >
+                      {planId === "starter" ? "Solo" : planId === "pro" ? "Shop" : "Group"}
+                    </button>
+                  ))}
+              </div>
+            </>
+          )}
+          <p style={{ fontSize: "0.88rem", color: "var(--muted)" }}>
+            To upgrade beyond {billing.status === "trialing" ? "your trial" : "your licence"}, buy a plan on the{" "}
             <a className="ghost-link" href="/pricing" target="_blank" rel="noreferrer">
-              Pricing / trial signup
-            </a>
-          </div>
+              pricing page
+            </a>{" "}
+            — you'll get a licence key to enter here.
+          </p>
           <form
             style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}
             onSubmit={(e) => {
               e.preventDefault();
-              const fd = new FormData(e.currentTarget);
-              const licenseKey = String(fd.get("licenseKey") || "");
+              const form = e.currentTarget;
+              const licenseKey = String(new FormData(form).get("licenseKey") || "");
+              setBillingMsg("");
               void api("/billing/activate-license", {
                 method: "POST",
                 body: JSON.stringify({ licenseKey }),
-              }).then(() => load());
+              })
+                .then(() => {
+                  form.reset();
+                  setBillingMsg("Licence activated");
+                  return load();
+                })
+                .catch((err) => setBillingMsg(err instanceof Error ? err.message : "Could not activate"));
             }}
           >
-            <input name="licenseKey" placeholder="PP-PRO-XXXX-XXXX-XXXX" style={{ minWidth: 240 }} />
+            <input name="licenseKey" required placeholder="PP-PRO-XXXX-XXXX-XXXX" style={{ minWidth: 240 }} />
             <button type="submit" className="secondary">
-              Activate license key
+              Activate licence key
             </button>
           </form>
+          {billingMsg && <p style={{ marginBottom: 0 }}>{billingMsg}</p>}
           <p style={{ marginTop: 10, fontSize: "0.88rem", color: "var(--muted)" }}>
             Solo: till, Items/groups, live sync, backup. Shop+: online ordering, kitchen + delivery apps
             (Just Eat / Deliveroo / Uber Eats…), CSV import, richer reports. Group: multi-store transfers +
