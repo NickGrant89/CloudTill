@@ -16,6 +16,7 @@ type LoginResult = {
   user: SessionUser;
   store: SessionStore;
   registers: SessionRegister[];
+  stores?: { id: string; name: string }[];
 };
 
 const DEVICE_KEY = "purepos.pos.device";
@@ -38,6 +39,7 @@ export function Login({ onSuccess }: Props) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [branches, setBranches] = useState<{ id: string; name: string }[] | null>(null);
   const pinRef = useRef("");
   const busyRef = useRef(false);
 
@@ -68,6 +70,10 @@ export function Login({ onSuccess }: Props) {
               : { pin: nextPin }
         ),
       });
+      if (pairing && (data.stores?.length ?? 0) > 1) {
+        setBranches(data.stores!);
+        return;
+      }
       if (pairing) remember(data);
       onSuccess(data);
     } catch (e) {
@@ -95,12 +101,65 @@ export function Login({ onSuccess }: Props) {
     if (!pairing && next.length >= 4) void submit(next);
   }
 
+  async function pickBranch(storeId: string) {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const data = await api<LoginResult>("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email: email.trim(), pin: pinRef.current, storeId }),
+      });
+      remember(data);
+      setBranches(null);
+      setPairing(false);
+      onSuccess(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Login failed");
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }
+
   function switchToDemo() {
     localStorage.removeItem(DEVICE_KEY);
     setDevice(null);
     setPairing(false);
     setPinValue("");
     setError("");
+  }
+
+  if (branches) {
+    return (
+      <div className="login">
+        <div className="login-card">
+          <h1 className="brand">PurePOS</h1>
+          <p className="tag">Which branch is this till in?</p>
+          <div className="branch-list">
+            {branches.map((b) => (
+              <button key={b.id} type="button" disabled={busy} onClick={() => void pickBranch(b.id)}>
+                {b.name}
+              </button>
+            ))}
+          </div>
+          {error && <p className="error">{error}</p>}
+          <p style={{ marginTop: 12 }}>
+            <button
+              type="button"
+              className="linkish"
+              onClick={() => {
+                setBranches(null);
+                setPinValue("");
+              }}
+            >
+              Back
+            </button>
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (

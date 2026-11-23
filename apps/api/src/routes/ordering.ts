@@ -4,6 +4,7 @@ import { prisma } from "../db.js";
 import { requireAuth, type AuthedRequest } from "../auth.js";
 import { calcTax, lineSubtotal } from "../money.js";
 import { storeAllowsFeature } from "./billing.js";
+import { attributionEmployee } from "../company.js";
 
 export const publicOrderingRouter = Router();
 export const kitchenRouter = Router();
@@ -16,6 +17,7 @@ async function resolveStore(slugOrId: string) {
 
 publicOrderingRouter.get("/stores", async (_req, res) => {
   const stores = await prisma.store.findMany({
+    where: { listedPublicly: true },
     select: { id: true, slug: true, name: true, address: true, phone: true, currency: true },
     orderBy: { name: "asc" },
   });
@@ -110,9 +112,7 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
   const card = authorizeCard(body.card);
   if ("error" in card) return res.status(400).json({ error: card.error });
 
-  const employee =
-    (await prisma.employee.findFirst({ where: { storeId: store.id, role: "owner", active: true } })) ??
-    (await prisma.employee.findFirst({ where: { storeId: store.id, active: true } }));
+  const employee = await attributionEmployee(store.id);
   const cardType = await prisma.paymentType.findFirst({
     where: { storeId: store.id, type: "card", enabled: true },
   });

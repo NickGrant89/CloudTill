@@ -730,3 +730,36 @@ tr:last-child td {
   cursor: pointer;
   text-decoration: underline;
 }
+
+.check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 6px 0 10px;
+  font-size: 0.92rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.check-row input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.store-switch {
+  width: 100%;
+  margin: 4px 0 14px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: #e8f0ec;
+  font: inherit;
+  font-size: 0.9rem;
+}
+
+.store-switch option {
+  color: #121815;
+}

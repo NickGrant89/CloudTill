@@ -32,6 +32,26 @@ const HOST = process.env.HOST || "0.0.0.0";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 app.use(cors());
+
+/** admin.<domain> serves only the platform admin panel; ADMIN_HOST moves /admin there once its DNS is live. */
+const ADMIN_HOST = process.env.ADMIN_HOST?.trim().toLowerCase() || "";
+const MAIN_SITE = process.env.PUBLIC_BASE_URL?.trim().replace(/\/$/, "") || "https://purepos.co.uk";
+app.use((req, res, next) => {
+  const host = (req.hostname || "").toLowerCase();
+  const onAdminHost = host.startsWith("admin.") || (ADMIN_HOST !== "" && host === ADMIN_HOST);
+  if (onAdminHost) {
+    if (req.path === "/" || req.path === "/admin" || req.path === "/admin/") {
+      return res.sendFile(path.join(__dirname, "../public/admin.html"));
+    }
+    if (req.path.startsWith("/api/admin") || req.path === "/api/health") return next();
+    return res.redirect(302, MAIN_SITE + req.originalUrl);
+  }
+  if (ADMIN_HOST && (req.path === "/admin" || req.path === "/admin/")) {
+    return res.redirect(302, `https://${ADMIN_HOST}/`);
+  }
+  next();
+});
+
 app.use(express.json({ limit: "2mb" }));
 app.use(express.static(path.join(__dirname, "../public")));
 
@@ -49,7 +69,7 @@ app.get("/api/health", async (_req, res) => {
     product: process.env.PRODUCT_NAME || "PurePOS",
     legalName: process.env.PRODUCT_LEGAL || "PurePOS UK",
     domain: process.env.PRODUCT_DOMAIN || "purepos.co.uk",
-    version: "0.6.1",
+    version: "0.7.0",
     database,
     storeCount,
     time: new Date().toISOString(),
@@ -70,7 +90,7 @@ app.get("/api/health", async (_req, res) => {
       host: HOST,
       port: PORT,
     },
-    adminUrl: "/admin",
+    adminUrl: ADMIN_HOST ? `https://${ADMIN_HOST}/` : "/admin",
   });
 });
 

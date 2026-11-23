@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
 import { prisma } from "../db.js";
 import { lineSubtotal } from "../money.js";
+import { attributionEmployee } from "../company.js";
 
 export function publicBaseUrl() {
   return (
@@ -142,8 +143,7 @@ export async function completeTextPay(linkId: string, opts?: { employeeId?: stri
     (opts?.employeeId
       ? await prisma.employee.findFirst({ where: { id: opts.employeeId, storeId: link.storeId } })
       : null) ??
-    (await prisma.employee.findFirst({ where: { storeId: link.storeId, role: "owner", active: true } })) ??
-    (await prisma.employee.findFirst({ where: { storeId: link.storeId, active: true } }));
+    (await attributionEmployee(link.storeId));
   if (!employee) throw new Error("No employee to attribute sale");
 
   const register =

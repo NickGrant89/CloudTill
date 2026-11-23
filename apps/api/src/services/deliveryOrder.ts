@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { prisma } from "../db.js";
 import { calcTax, lineSubtotal } from "../money.js";
+import { attributionEmployee } from "../company.js";
 
 export const DELIVERY_CHANNELS = [
   "justeat",
@@ -214,9 +215,7 @@ export async function injectDeliveryOrder(input: IngestOrderInput) {
     }
   }
 
-  const employee =
-    (await prisma.employee.findFirst({ where: { storeId: input.storeId, role: "owner", active: true } })) ??
-    (await prisma.employee.findFirst({ where: { storeId: input.storeId, active: true } }));
+  const employee = await attributionEmployee(input.storeId);
   const register =
     (await prisma.register.findFirst({ where: { storeId: input.storeId, name: { contains: "Front" } } })) ??
     (await prisma.register.findFirst({ where: { storeId: input.storeId } }));

@@ -17,6 +17,8 @@ model Store {
   timezone  String   @default("Europe/London")
   /// Stores sharing a companyKey are branches of one business (branches, transfers, store lists).
   companyKey String  @default("")
+  /// Shown in the public store directory (/api/public/stores). Ordering links by slug work regardless.
+  listedPublicly Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

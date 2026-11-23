@@ -22,6 +22,8 @@ settingsRouter.get("/", async (req: AuthedRequest, res) => {
       phone: store.phone,
       currency: store.currency,
       timezone: store.timezone,
+      slug: store.slug,
+      listedPublicly: store.listedPublicly,
     },
     currency: store.currency,
     currencySymbol: store.currency === "GBP" ? "£" : store.currency === "USD" ? "$" : store.currency === "EUR" ? "€" : store.currency,
@@ -46,6 +48,7 @@ settingsRouter.patch("/store", requireRole("owner", "manager"), async (req: Auth
       phone: z.string().nullable().optional(),
       currency: z.string().optional(),
       timezone: z.string().optional(),
+      listedPublicly: z.boolean().optional(),
     })
     .parse(req.body);
   const store = await prisma.store.update({ where: { id: req.user!.storeId }, data: body });

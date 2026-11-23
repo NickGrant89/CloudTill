@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, getToken, money } from "./api";
+import { api, getToken, money, setToken } from "./api";
 import { GiftCardsPage, ModifierEditor, ModifierLibrary, TimeClockPage } from "./MorePages";
 import { KitchenPage, PrintersPage } from "./KitchenPrinters";
 import { EodPage, ImportPage, LabelsPage, StocktakePage } from "./ExtrasPages";
@@ -1249,6 +1249,15 @@ function EmployeesPage() {
   );
 }
 
+export async function switchStore(storeId: string) {
+  const data = await api<{ token: string }>("/auth/switch-store", {
+    method: "POST",
+    body: JSON.stringify({ storeId }),
+  });
+  setToken(data.token);
+  window.location.reload();
+}
+
 function StoresPage() {
   const [settings, setSettings] = useState<{
     store: { id: string; name: string; address: string | null; currency: string };
@@ -1256,14 +1265,42 @@ function StoresPage() {
   } | null>(null);
   const [stores, setStores] = useState<{ id: string; name: string; address: string | null; registers: { name: string }[] }[]>([]);
   const [regName, setRegName] = useState("");
+  const [branch, setBranch] = useState({ name: "", address: "", phone: "" });
+  const [branchMsg, setBranchMsg] = useState("");
+  const [role, setRole] = useState("");
+  const [hasBranches, setHasBranches] = useState(false);
 
   async function load() {
-    const [sett, all] = await Promise.all([
+    const [sett, all, me, billing] = await Promise.all([
       api<NonNullable<typeof settings>>("/settings"),
       api<typeof stores>("/auth/stores"),
+      api<{ user: { role: string } }>("/auth/me"),
+      api<{ features: string[] }>("/billing").catch(() => ({ features: [] as string[] })),
     ]);
     setSettings(sett);
     setStores(all);
+    setRole(me.user.role);
+    setHasBranches(billing.features.includes("multi_store"));
+  }
+
+  async function addBranch(e: React.FormEvent) {
+    e.preventDefault();
+    setBranchMsg("");
+    try {
+      const created = await api<{ name: string }>("/auth/stores", {
+        method: "POST",
+        body: JSON.stringify({
+          name: branch.name.trim(),
+          address: branch.address.trim() || undefined,
+          phone: branch.phone.trim() || undefined,
+        }),
+      });
+      setBranch({ name: "", address: "", phone: "" });
+      setBranchMsg(`${created.name} added. Switch to it to add staff, or send items from Items → Assign to branches.`);
+      await load();
+    } catch (err) {
+      setBranchMsg(err instanceof Error ? err.message : "Could not add branch");
+    }
   }
 
   useEffect(() => {
@@ -1292,6 +1329,7 @@ function StoresPage() {
               <th>Store</th>
               <th>Address</th>
               <th>Registers</th>
+              <th />
             </tr>
           </thead>
           <tbody>
@@ -1303,11 +1341,65 @@ function StoresPage() {
                 </td>
                 <td>{s.address}</td>
                 <td>{s.registers.map((r) => r.name).join(", ")}</td>
+                <td>
+                  {settings?.store.id !== s.id && (role === "owner" || role === "manager") && (
+                    <button type="button" className="secondary" onClick={() => void switchStore(s.id)}>
+                      Switch to
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      {role === "owner" && (
+        <form className="panel-box" onSubmit={(e) => void addBranch(e)}>
+          <h3>Add a branch</h3>
+          {hasBranches ? (
+            <>
+              <p style={{ color: "var(--muted)", marginTop: 0 }}>
+                A new site for your business. It gets its own till register, VAT and payment types copied from this
+                store, and you can move stock and items between branches.
+              </p>
+              <div className="field">
+                <label htmlFor="branch-name">Branch name</label>
+                <input
+                  id="branch-name"
+                  required
+                  minLength={2}
+                  placeholder="e.g. Salford"
+                  value={branch.name}
+                  onChange={(e) => setBranch({ ...branch, name: e.target.value })}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="branch-address">Address</label>
+                <input
+                  id="branch-address"
+                  value={branch.address}
+                  onChange={(e) => setBranch({ ...branch, address: e.target.value })}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="branch-phone">Phone</label>
+                <input
+                  id="branch-phone"
+                  type="tel"
+                  value={branch.phone}
+                  onChange={(e) => setBranch({ ...branch, phone: e.target.value })}
+                />
+              </div>
+              <button type="submit">Add branch</button>
+            </>
+          ) : (
+            <p style={{ color: "var(--muted)", marginTop: 0 }}>
+              Branches are part of the <strong>Group</strong> plan. Upgrade in Settings → Billing to add more sites.
+            </p>
+          )}
+          {branchMsg && <p style={{ marginBottom: 0 }}>{branchMsg}</p>}
+        </form>
+      )}
       <form className="panel-box" onSubmit={(e) => void addRegister(e)}>
         <h3>Add register to current store</h3>
         <div className="field">
@@ -1648,9 +1740,97 @@ function ShiftsPage() {
   );
 }
 
+type StoreDetails = {
+  name: string;
+  address: string | null;
+  phone: string | null;
+  currency: string;
+  timezone: string;
+  slug: string;
+  listedPublicly: boolean;
+};
+
+function StoreDetailsForm({ store, onSaved }: { store: StoreDetails; onSaved: () => void }) {
+  const [form, setForm] = useState({
+    name: store.name,
+    address: store.address ?? "",
+    phone: store.phone ?? "",
+    listedPublicly: store.listedPublicly,
+  });
+  const [msg, setMsg] = useState("");
+  const orderUrl = `${window.location.origin}/order/${store.slug}`;
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg("");
+    try {
+      await api("/settings/store", {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: form.name.trim(),
+          address: form.address.trim() || null,
+          phone: form.phone.trim() || null,
+          listedPublicly: form.listedPublicly,
+        }),
+      });
+      setMsg("Saved");
+      onSaved();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Save failed");
+    }
+  }
+
+  return (
+    <form className="panel-box" onSubmit={(e) => void save(e)}>
+      <h3>Store details</h3>
+      <p style={{ color: "var(--muted)", marginTop: 0 }}>
+        {store.currency} · {store.timezone}
+      </p>
+      <div className="field">
+        <label htmlFor="store-name">Store name</label>
+        <input id="store-name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+      </div>
+      <div className="field">
+        <label htmlFor="store-address">Address</label>
+        <input id="store-address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+      </div>
+      <div className="field">
+        <label htmlFor="store-phone">Phone</label>
+        <input
+          id="store-phone"
+          type="tel"
+          value={form.phone}
+          onChange={(e) => setForm({ ...form, phone: e.target.value })}
+        />
+      </div>
+      <label className="check-row">
+        <input
+          type="checkbox"
+          checked={form.listedPublicly}
+          onChange={(e) => setForm({ ...form, listedPublicly: e.target.checked })}
+        />
+        <span>
+          List this store in the public PurePOS store directory (shows name, address and phone). Off by default — your
+          ordering link works either way.
+        </span>
+      </label>
+      <p style={{ fontSize: "0.88rem", color: "var(--muted)" }}>
+        Ordering link:{" "}
+        <a href={orderUrl} target="_blank" rel="noreferrer">
+          {orderUrl}
+        </a>
+      </p>
+      <div className="toolbar">
+        <button type="submit">Save store details</button>
+        {msg && <span style={{ color: "var(--muted)" }}>{msg}</span>}
+      </div>
+    </form>
+  );
+}
+
 function SettingsPage() {
   const [settings, setSettings] = useState<{
-    store: { name: string; address: string | null; currency: string; timezone: string };
+    store: StoreDetails;
     receipt: { header: string; footer: string; showTaxBreakdown: boolean };
     taxes: { id: string; name: string; rateBps: number; enabled: boolean }[];
     paymentTypes: { id: string; name: string; type: string; enabled: boolean; opensDrawer: boolean }[];
@@ -1708,13 +1888,7 @@ function SettingsPage() {
         </div>
       </div>
 
-      <div className="panel-box">
-        <h3>Store / currency</h3>
-        <p>
-          <strong>{settings.store.name}</strong> · {settings.store.currency} · {settings.store.timezone}
-        </p>
-        <p style={{ color: "var(--muted)" }}>{settings.store.address}</p>
-      </div>
+      <StoreDetailsForm store={settings.store} onSaved={() => void load()} />
 
       {billing && (
         <div className="panel-box">

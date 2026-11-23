@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, getToken, setToken } from "./api";
-import { Pages, type PageId } from "./Pages";
+import { Pages, switchStore, type PageId } from "./Pages";
 import { LowStockToast } from "./ExtrasPages";
 
 interface User {
@@ -15,6 +15,7 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [storeName, setStoreName] = useState("");
+  const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
   const [page, setPage] = useState<PageId>("dashboard");
   const [navOpen, setNavOpen] = useState(false);
   const [email, setEmail] = useState("");
@@ -31,10 +32,11 @@ export function App() {
       setLoading(false);
       return;
     }
-    api<{ user: User; store: { name: string } }>("/auth/me")
+    api<{ user: User; store: { name: string }; stores?: { id: string; name: string }[] }>("/auth/me")
       .then((d) => {
         setUser(d.user);
         setStoreName(d.store.name);
+        setBranches(d.stores ?? []);
       })
       .catch(() => setToken(null))
       .finally(() => setLoading(false));
@@ -44,13 +46,19 @@ export function App() {
     e.preventDefault();
     setError("");
     try {
-      const data = await api<{ token: string; user: User; store: { name: string } }>("/auth/login", {
+      const data = await api<{
+        token: string;
+        user: User;
+        store: { name: string };
+        stores?: { id: string; name: string }[];
+      }>("/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, pin }),
       });
       setToken(data.token);
       setUser(data.user);
       setStoreName(data.store.name);
+      setBranches(data.stores ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     }
@@ -184,7 +192,22 @@ export function App() {
       <div className="shell-body">
         <aside id="bo-sidebar" className="sidebar" aria-label="Back office navigation">
           <div className="brand">PurePOS</div>
-          <p className="sub">{storeName}</p>
+          {branches.length > 1 ? (
+            <select
+              className="store-switch"
+              aria-label="Switch branch"
+              value={user.storeId}
+              onChange={(e) => void switchStore(e.target.value)}
+            >
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p className="sub">{storeName}</p>
+          )}
           <nav className="sidebar-nav">
             {nav.map((n) => (
               <button

@@ -26,7 +26,7 @@ function slugify(name: string) {
   return base || "store";
 }
 
-async function uniqueSlug(name: string) {
+export async function uniqueSlug(name: string) {
   const base = slugify(name);
   for (let i = 0; i < 8; i += 1) {
     const candidate = i === 0 ? base : `${base}-${randomBytes(2).toString("hex")}`;
