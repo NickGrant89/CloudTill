@@ -672,6 +672,23 @@
           backOffice.className = "btn btn-primary";
           backOffice.href = "/bo/";
           backOffice.textContent = "Open back office";
+          backOffice.addEventListener("click", (click) => {
+            click.preventDefault();
+            fetch("/api/auth/login", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                email: data.credentials.email,
+                pin: data.credentials.ownerPin,
+              }),
+            })
+              .then((loginRes) => loginRes.json().then((body) => ({ ok: loginRes.ok, body })))
+              .then(({ ok, body }) => {
+                if (ok && body.token) localStorage.setItem("purepos_bo_token", body.token);
+                location.assign("/bo/");
+              })
+              .catch(() => location.assign("/bo/"));
+          });
           const till = document.createElement("a");
           till.className = "btn btn-ghost-dark";
           till.href = "/pos/";
