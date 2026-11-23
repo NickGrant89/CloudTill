@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PurePOS UK | Cloud till, back office &amp; online ordering</title>
+    <meta
+      name="description"
+      content="PurePOS is the UK cloud POS: offline-capable till, central back office, and customer online ordering. Solo £29, Shop £59, Group £99."
+    />
+    <meta name="author" content="PurePOS UK" />
+    <link rel="canonical" href="https://purepos.co.uk/" />
+    <meta property="og:title" content="PurePOS UK | Till · back office · online ordering" />
+    <meta
+      property="og:description"
+      content="Cloud till, back office, and online ordering. Offline tills. From £29/mo."
+    />
+    <meta property="og:url" content="https://purepos.co.uk/" />
+    <meta property="og:locale" content="en_GB" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --ink: #0b1c24;
+        --muted: #5a6f7a;
+        --paper: #f3faf8;
+        --line: rgba(11, 28, 36, 0.12);
+        --accent: #0d9488;
+        --accent-deep: #0f766e;
+        --accent-soft: rgba(13, 148, 136, 0.14);
+        --navy: #0b2740;
+        --warm: #c2410c;
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        font-family: Manrope, "Avenir Next", system-ui, sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(ellipse 80% 50% at 0% 0%, #c5ebe4 0%, transparent 55%),
+          radial-gradient(ellipse 60% 40% at 100% 8%, #ffd8bf 0%, transparent 48%),
+          linear-gradient(180deg, #f7fcfb 0%, var(--paper) 45%, #e7f3ef 100%);
+        min-height: 100vh;
+      }
+      a { color: inherit; }
+      .wrap { width: min(1120px, calc(100% - 2rem)); margin: 0 auto; }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1.05rem 0;
+        position: relative;
+        z-index: 5;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        text-decoration: none;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+      }
+      .brand img {
+        width: 40px;
+        height: 40px;
+        object-fit: cover;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+      }
+      .brand strong { font-size: 1.12rem; }
+      .brand em {
+        font-style: normal;
+        color: var(--accent);
+        font-weight: 700;
+        font-size: 0.9rem;
+      }
+      nav { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+      nav a {
+        text-decoration: none;
+        color: var(--muted);
+        font-weight: 600;
+        font-size: 0.92rem;
+      }
+      nav a:hover { color: var(--accent-deep); }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 48px;
+        padding: 0 1.2rem;
+        border-radius: 12px;
+        border: none;
+        font-weight: 700;
+        text-decoration: none;
+        cursor: pointer;
+        transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+      }
+      .btn:hover { transform: translateY(-1px); }
+      .btn-primary { background: var(--accent); color: #fff; }
+      .btn-primary:hover { background: var(--accent-deep); }
+      .btn-ghost {
+        background: rgba(255, 255, 255, 0.14);
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        color: #fff;
+      }
+      .btn-ghost-dark {
+        background: transparent;
+        border: 1px solid var(--line);
+        color: var(--ink);
+      }
+
+      /* Full-bleed hero: brand + one line + CTAs on product plane */
+      .hero {
+        position: relative;
+        min-height: min(92vh, 780px);
+        margin: 0 calc(50% - 50vw);
+        width: 100vw;
+        display: grid;
+        align-items: end;
+        overflow: hidden;
+        color: #fff;
+      }
+      .hero-media {
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(105deg, rgba(8, 24, 32, 0.88) 18%, rgba(8, 24, 32, 0.55) 55%, rgba(13, 148, 136, 0.28) 100%),
+          url("./assets/hero-till.png") center / cover no-repeat;
+        transform: scale(1.04);
+        animation: drift 18s ease-in-out infinite alternate;
+      }
+      .hero-inner {
+        position: relative;
+        z-index: 1;
+        width: min(1120px, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: 3.5rem 0 4.25rem;
+        max-width: 38rem;
+        animation: rise 0.85s ease both;
+      }
+      .hero .product {
+        font-family: Fraunces, "Iowan Old Style", Georgia, serif;
+        font-size: clamp(3.4rem, 10vw, 5.6rem);
+        line-height: 0.92;
+        letter-spacing: -0.035em;
+        margin: 0 0 0.85rem;
+        font-weight: 700;
+      }
+      .hero h1 {
+        font-family: Fraunces, Georgia, serif;
+        font-size: clamp(1.35rem, 2.8vw, 1.85rem);
+        font-weight: 600;
+        margin: 0 0 0.85rem;
+        line-height: 1.25;
+        max-width: 22ch;
+      }
+      .hero p {
+        margin: 0 0 1.55rem;
+        color: rgba(255, 255, 255, 0.86);
+        font-size: 1.05rem;
+        max-width: 34rem;
+        line-height: 1.55;
+      }
+      .cta-row { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+
+      section { padding: 4.25rem 0; }
+      .eyebrow {
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: var(--accent-deep);
+        margin: 0 0 0.55rem;
+      }
+      .section-title {
+        font-family: Fraunces, Georgia, serif;
+        font-size: clamp(1.75rem, 3vw, 2.35rem);
+        margin: 0 0 0.55rem;
+        letter-spacing: -0.02em;
+      }
+      .section-lede {
+        color: var(--muted);
+        margin: 0 0 2rem;
+        max-width: 36rem;
+        line-height: 1.55;
+      }
+
+      .feature-list {
+        display: grid;
+        gap: 1.35rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .feature-list li {
+        display: grid;
+        grid-template-columns: 3rem 1fr;
+        gap: 1rem;
+        align-items: start;
+        animation: rise 0.7s ease both;
+      }
+      .feature-list li:nth-child(2) { animation-delay: 0.08s; }
+      .feature-list li:nth-child(3) { animation-delay: 0.16s; }
+      .feature-num {
+        width: 3rem;
+        height: 3rem;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        background: var(--accent-soft);
+        color: var(--accent-deep);
+        font-weight: 800;
+      }
+      .feature-list h3 { margin: 0 0 0.25rem; font-size: 1.08rem; }
+      .feature-list p { margin: 0; color: var(--muted); line-height: 1.5; }
+
+      .atmosphere {
+        margin: 0 calc(50% - 50vw);
+        width: 100vw;
+        min-height: 280px;
+        background:
+          linear-gradient(90deg, rgba(11, 39, 64, 0.82), rgba(13, 148, 136, 0.55)),
+          url("./assets/surface-ordering.png") center / cover no-repeat;
+        color: #fff;
+        display: grid;
+        align-items: center;
+      }
+      .atmosphere .wrap { padding: 3rem 0; animation: fade 0.9s ease both; }
+      .atmosphere h2 {
+        font-family: Fraunces, Georgia, serif;
+        margin: 0 0 0.55rem;
+        font-size: clamp(1.6rem, 3vw, 2.1rem);
+        max-width: 18ch;
+      }
+      .atmosphere p {
+        margin: 0;
+        max-width: 36rem;
+        opacity: 0.92;
+        line-height: 1.55;
+      }
+
+      .tiers {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1rem;
+      }
+      .tier {
+        background: rgba(255, 255, 255, 0.78);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 1.35rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+        min-height: 100%;
+        transition: border-color 0.2s ease, transform 0.2s ease;
+      }
+      .tier:hover { border-color: var(--accent); transform: translateY(-2px); }
+      .tier.featured {
+        border-color: var(--accent);
+        box-shadow: 0 18px 40px rgba(11, 28, 36, 0.08);
+      }
+      .tier h3 { font-family: Fraunces, Georgia, serif; margin: 0; font-size: 1.45rem; }
+      .tier .price { font-size: 2rem; font-weight: 800; letter-spacing: -0.02em; }
+      .tier .price span { font-size: 0.9rem; font-weight: 500; color: var(--muted); }
+      .tier ul { margin: 0; padding-left: 1.1rem; color: var(--muted); flex: 1; }
+      .tier li { margin: 0.35rem 0; }
+      .tier .price-note { margin: -0.2rem 0 0; color: var(--muted); font-size: 0.8rem; }
+      .tier > p { margin: 0; color: var(--muted); line-height: 1.4; }
+      .tier .btn { width: 100%; }
+      .trial-form, .trial-done { display: grid; gap: 0.6rem; }
+      .start-trial[hidden],
+      .trial-form[hidden],
+      .trial-done[hidden],
+      .form-msg[hidden] { display: none !important; }
+      .trial-form label { display: grid; gap: 0.3rem; font-size: 0.82rem; font-weight: 800; }
+      .trial-form input {
+        width: 100%;
+        min-height: 48px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        padding: 0 0.8rem;
+        font: inherit;
+        font-size: 16px;
+        background: #fff;
+      }
+      .form-msg { margin: 0; font-weight: 700; color: var(--accent-deep); line-height: 1.4; }
+      .form-msg.err { color: #9b3b2e; }
+      .done-lead { margin: 0; font-weight: 800; line-height: 1.4; }
+      .pin-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 0.15rem 0.5rem;
+        align-items: center;
+        background: var(--accent-soft);
+        border-radius: 10px;
+        padding: 0.55rem 0.7rem;
+      }
+      .pin-row span {
+        grid-column: 1 / -1;
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .pin-row code { font-size: 1.05rem; word-break: break-all; }
+      .pin-row button {
+        min-height: 40px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: #fff;
+        font: inherit;
+        font-weight: 800;
+        padding: 0 0.75rem;
+        cursor: pointer;
+      }
+
+      .links {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 1.25rem;
+      }
+      .link-panel h3 { margin: 0 0 0.75rem; font-size: 1.05rem; }
+      .link-panel a {
+        display: block;
+        text-decoration: none;
+        color: var(--accent-deep);
+        font-weight: 700;
+        padding: 0.35rem 0;
+      }
+      .link-panel p { margin: 0; color: var(--muted); line-height: 1.55; }
+      .note {
+        margin-top: 1.25rem;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      footer {
+        padding: 2.5rem 0 3rem;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      footer strong { color: var(--ink); }
+
+      @keyframes fade {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes rise {
+        from { opacity: 0; transform: translateY(14px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes drift {
+        from { transform: scale(1.04) translate3d(0, 0, 0); }
+        to { transform: scale(1.08) translate3d(-1.2%, -0.8%, 0); }
+      }
+
+      @media (max-width: 900px) {
+        .hero { min-height: auto; }
+        .hero-inner { padding: 2.5rem 0 3rem; }
+        .tiers { grid-template-columns: 1fr; }
+        header { flex-direction: column; align-items: flex-start; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .hero-media { animation: none; }
+        .hero-inner, .feature-list li, .atmosphere .wrap { animation: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <a class="brand" href="/">
+          <img src="./assets/purepos-logo-2.jpg" alt="" width="40" height="40" />
+          <div>
+            <strong>PurePOS</strong>
+            <em> UK</em>
+          </div>
+        </a>
+        <nav aria-label="Primary">
+          <a href="#product">Product</a>
+          <a href="#pricing">Pricing</a>
+          <a href="#try">Open apps</a>
+          <a class="btn btn-primary" href="#pricing">Start trial</a>
+        </nav>
+      </header>
+    </div>
+
+    <section class="hero" aria-label="Hero">
+      <div class="hero-media" aria-hidden="true"></div>
+      <div class="hero-inner">
+        <p class="product">PurePOS</p>
+        <h1>Cloud till, back office, and online ordering.</h1>
+        <p>
+          One hosted UK product for shops: sell on the till (even offline), run the shop from back office, take orders online — same items, same cloud.
+        </p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="/pos/">Open the till</a>
+          <a class="btn btn-ghost" href="#pricing">See Solo · Shop · Group</a>
+        </div>
+      </div>
+    </section>
+
+    <div class="wrap">
+      <section id="product">
+        <p class="eyebrow">The product</p>
+        <h2 class="section-title">Three surfaces. One PurePOS.</h2>
+        <p class="section-lede">
+          PurePOS is the till, the back office, and the ordering system — not a WordPress bolt-on, not a Loyverse wrapper. Items and reports live in the cloud; browser apps stay in sync.
+        </p>
+        <ul class="feature-list">
+          <li>
+            <div class="feature-num">1</div>
+            <div>
+              <h3>Cloud till</h3>
+              <p>Browser / tablet register with offline queue — keep selling when wifi drops, sync when you’re back.</p>
+            </div>
+          </li>
+          <li>
+            <div class="feature-num">2</div>
+            <div>
+              <h3>Back office</h3>
+              <p>Menu, customers, stock, staff, billing, and reports — managed once for every till.</p>
+            </div>
+          </li>
+          <li>
+            <div class="feature-num">3</div>
+            <div>
+              <h3>Online ordering</h3>
+              <p>Customers order into the same store; kitchen sees the tickets on Pro.</p>
+            </div>
+          </li>
+        </ul>
+      </section>
+    </div>
+
+    <section class="atmosphere" aria-label="Offline till">
+      <div class="wrap">
+        <h2>Offline is built into the till</h2>
+        <p>
+          Open the register once online so the menu caches. If the network drops, the till shows Offline / Sync and queued sales push to the cloud when you reconnect.
+        </p>
+      </div>
+    </section>
+
+    <div class="wrap">
+      <section id="pricing">
+        <p class="eyebrow">Pricing</p>
+        <h2 class="section-title">Pick a plan and start</h2>
+        <p class="section-lede">Solo £29, Shop £59, Group £99 a month, ex VAT. One 14-day trial on the plan you choose. No card to begin.</p>
+        <div class="tiers">
+          <article class="tier" data-plan="starter" data-name="Solo">
+            <h3>Solo</h3>
+            <p>One till that keeps selling when the Wi‑Fi doesn’t. Independent counters, pop-ups, market traders.</p>
+            <div class="price">£29<span>/mo</span></div>
+            <p class="price-note">ex VAT · 14-day trial</p>
+            <ul>
+              <li>Cloud back office and one offline till</li>
+              <li>Items, groups, VAT, and £ receipts</li>
+              <li>Live open tickets, backup and restore</li>
+              <li>Offline sales queue, sync when you’re back</li>
+            </ul>
+            <button type="button" class="btn btn-ghost-dark start-trial">Start Solo trial</button>
+            <form class="trial-form" hidden>
+              <label>Business name<input name="businessName" required autocomplete="organization" placeholder="Harbour Coffee" /></label>
+              <label>Owner email<input name="email" type="email" required autocomplete="email" placeholder="you@cafe.co.uk" /></label>
+              <button type="submit" class="btn btn-primary">Create Solo trial</button>
+              <button type="button" class="btn btn-ghost-dark cancel-trial">Cancel</button>
+              <p class="form-msg" hidden></p>
+            </form>
+            <div class="trial-done" hidden></div>
+          </article>
+          <article class="tier featured" data-plan="pro" data-name="Shop">
+            <h3>Shop</h3>
+            <p>Most UK shops. Till, kitchen, online ordering, and delivery apps.</p>
+            <div class="price">£59<span>/mo</span></div>
+            <p class="price-note">ex VAT · 14-day trial</p>
+            <ul>
+              <li>Everything in Solo</li>
+              <li>Online ordering for pickup, dine-in, and delivery</li>
+              <li>Kitchen board, plus Just Eat, Deliveroo, Uber Eats and more</li>
+              <li>CSV import, end of day, and reports</li>
+            </ul>
+            <button type="button" class="btn btn-primary start-trial">Start 14-day trial</button>
+            <form class="trial-form" hidden>
+              <label>Business name<input name="businessName" required autocomplete="organization" placeholder="Harbour Coffee" /></label>
+              <label>Owner email<input name="email" type="email" required autocomplete="email" placeholder="you@cafe.co.uk" /></label>
+              <button type="submit" class="btn btn-primary">Create Shop trial</button>
+              <button type="button" class="btn btn-ghost-dark cancel-trial">Cancel</button>
+              <p class="form-msg" hidden></p>
+            </form>
+            <div class="trial-done" hidden></div>
+          </article>
+          <article class="tier" data-plan="multi" data-name="Group">
+            <h3>Group</h3>
+            <p>One cloud for every site. Multi-site groups and growing brands.</p>
+            <div class="price">£99<span>/mo</span></div>
+            <p class="price-note">ex VAT · 14-day trial</p>
+            <ul>
+              <li>Everything in Shop</li>
+              <li>Stock transfers between stores</li>
+              <li>Assign items to branches</li>
+              <li>Shared catalogue across sites</li>
+            </ul>
+            <button type="button" class="btn btn-ghost-dark start-trial">Start Group trial</button>
+            <form class="trial-form" hidden>
+              <label>Business name<input name="businessName" required autocomplete="organization" placeholder="Harbour Coffee" /></label>
+              <label>Owner email<input name="email" type="email" required autocomplete="email" placeholder="you@cafe.co.uk" /></label>
+              <button type="submit" class="btn btn-primary">Create Group trial</button>
+              <button type="button" class="btn btn-ghost-dark cancel-trial">Cancel</button>
+              <p class="form-msg" hidden></p>
+            </form>
+            <div class="trial-done" hidden></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="try">
+        <p class="eyebrow">Try demo</p>
+        <h2 class="section-title">Try PurePOS live</h2>
+        <p class="section-lede">
+          Demo café is ready now. Owner PIN <strong>1234</strong> · cashier PIN <strong>1111</strong> · email <strong>owner@purepos.demo</strong>.
+          To open your own shop, start a trial on a plan above.
+        </p>
+        <div class="cta-row" style="margin-bottom:1.5rem;">
+          <a class="btn btn-primary" href="/pos/">Try demo till</a>
+          <a class="btn btn-ghost-dark" href="#pricing">Start a trial</a>
+        </div>
+        <div class="links">
+          <div class="link-panel">
+            <h3>Apps</h3>
+            <a href="/pos/">Till → /pos/</a>
+            <a href="/bo/">Back office → /bo/</a>
+            <a href="/order/">Online ordering → /order/</a>
+            <a href="#pricing">Plans and trial</a>
+          </div>
+          <div class="link-panel">
+            <h3>Pilot tip</h3>
+            <p>
+              Open the till once online so the menu caches, then keep selling offline. Use Export if Sync shows pending sales before you clear browser data.
+            </p>
+          </div>
+        </div>
+        <p class="note">PurePOS UK · hello@purepos.co.uk</p>
+      </section>
+
+      <footer>
+        <p>
+          <strong>PurePOS UK</strong> ·
+          <a href="https://purepos.co.uk/">purepos.co.uk</a>
+          · cloud till · back office · online ordering
+        </p>
+      </footer>
+    </div>
+    <script>
+      const tiers = document.querySelector("#pricing .tiers");
+
+      function closeForms() {
+        tiers.querySelectorAll(".trial-form").forEach((form) => {
+          form.hidden = true;
+        });
+        tiers.querySelectorAll(".start-trial").forEach((btn) => {
+          btn.hidden = false;
+        });
+      }
+
+      function copyButton(value) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = "Copy";
+        button.addEventListener("click", async () => {
+          let ok = false;
+          try {
+            await navigator.clipboard.writeText(value);
+            ok = true;
+          } catch {
+            const area = document.createElement("textarea");
+            area.value = value;
+            area.setAttribute("readonly", "");
+            area.style.position = "fixed";
+            area.style.opacity = "0";
+            document.body.append(area);
+            area.focus();
+            area.select();
+            try {
+              ok = document.execCommand("copy");
+            } catch {
+              ok = false;
+            }
+            area.remove();
+          }
+          button.textContent = ok ? "Copied" : "Select and copy";
+          setTimeout(() => {
+            button.textContent = "Copy";
+          }, 1600);
+        });
+        return button;
+      }
+
+      function pinRow(label, value) {
+        const row = document.createElement("div");
+        row.className = "pin-row";
+        const name = document.createElement("span");
+        name.textContent = label;
+        const code = document.createElement("code");
+        code.textContent = value;
+        row.append(name, code, copyButton(value));
+        return row;
+      }
+
+      tiers.addEventListener("click", (event) => {
+        const start = event.target.closest(".start-trial");
+        const cancel = event.target.closest(".cancel-trial");
+        if (!start && !cancel) return;
+        const card = event.target.closest(".tier");
+        if (cancel) {
+          card.querySelector(".trial-form").hidden = true;
+          card.querySelector(".start-trial").hidden = false;
+          return;
+        }
+        closeForms();
+        card.querySelector(".start-trial").hidden = true;
+        const form = card.querySelector(".trial-form");
+        form.hidden = false;
+        form.querySelector("input[name=businessName]").focus();
+      });
+
+      tiers.addEventListener("submit", async (event) => {
+        const form = event.target.closest(".trial-form");
+        if (!form) return;
+        event.preventDefault();
+        const card = form.closest(".tier");
+        const msg = form.querySelector(".form-msg");
+        const submit = form.querySelector("button[type=submit]");
+        msg.hidden = false;
+        msg.className = "form-msg";
+        msg.textContent = "Creating your trial…";
+        submit.disabled = true;
+        try {
+          const res = await fetch("/api/public/signup", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              businessName: new FormData(form).get("businessName"),
+              email: new FormData(form).get("email"),
+              planId: card.dataset.plan,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Signup failed");
+          localStorage.removeItem("purepos_bo_token");
+          localStorage.removeItem("purepos_pos_token");
+          localStorage.removeItem("purepos.pos.device");
+          localStorage.removeItem("purepos.pos.till");
+          form.hidden = true;
+          const done = card.querySelector(".trial-done");
+          done.replaceChildren();
+          const lead = document.createElement("p");
+          lead.className = "done-lead";
+          lead.textContent = "Copy these now. This is the only time we show the PINs.";
+          const until = document.createElement("p");
+          until.className = "price-note";
+          until.textContent = `${data.account.planName} trial until ${new Date(data.account.trialEndsAt).toLocaleDateString("en-GB")}.`;
+          const backOffice = document.createElement("a");
+          backOffice.className = "btn btn-primary";
+          backOffice.href = "/bo/";
+          backOffice.textContent = "Open back office";
+          function signIn(kind) {
+            return fetch("/api/auth/login", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                email: data.credentials.email,
+                pin: data.credentials.ownerPin,
+              }),
+            })
+              .then((loginRes) => loginRes.json().then((body) => ({ ok: loginRes.ok, body })))
+              .then(({ ok, body }) => {
+                if (!ok || !body.token) {
+                  location.assign("/bo/?email=" + encodeURIComponent(data.credentials.email));
+                  return;
+                }
+                if (kind === "till") {
+                  localStorage.setItem("purepos_pos_token", body.token);
+                  localStorage.setItem(
+                    "purepos.pos.device",
+                    JSON.stringify({ storeId: body.store.id, storeName: body.store.name })
+                  );
+                  localStorage.removeItem("purepos.pos.till");
+                  location.assign("/pos/");
+                  return;
+                }
+                localStorage.setItem("purepos_bo_token", body.token);
+                location.assign("/bo/");
+              })
+              .catch(() => location.assign("/bo/?email=" + encodeURIComponent(data.credentials.email)));
+          }
+          backOffice.addEventListener("click", (click) => {
+            click.preventDefault();
+            signIn("backoffice");
+          });
+          const till = document.createElement("a");
+          till.className = "btn btn-ghost-dark";
+          till.href = "/pos/";
+          till.textContent = "Open till";
+          till.addEventListener("click", (click) => {
+            click.preventDefault();
+            signIn("till");
+          });
+          done.append(
+            lead,
+            pinRow("Owner email", data.credentials.email),
+            pinRow("Owner PIN", data.credentials.ownerPin),
+            pinRow("Cashier PIN", data.credentials.cashierPin),
+            until,
+            backOffice,
+            till
+          );
+          done.hidden = false;
+        } catch (err) {
+          msg.className = "form-msg err";
+          msg.textContent = err instanceof Error ? err.message : "Signup failed";
+          submit.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>

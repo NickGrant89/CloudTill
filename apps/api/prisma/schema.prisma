@@ -1,0 +1,536 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Store {
+  id        String   @id @default(cuid())
+  slug      String   @unique @default("demo-cafe")
+  name      String
+  address   String?
+  phone     String?
+  currency  String   @default("GBP")
+  timezone  String   @default("Europe/London")
+  /// Stores sharing a companyKey are branches of one business (branches, transfers, store lists).
+  companyKey String  @default("")
+  /// Shown in the public store directory (/api/public/stores). Ordering links by slug work regardless.
+  listedPublicly Boolean @default(false)
+  /// Owner's hostname for the ordering site, for example order.theircafe.co.uk. One per store.
+  customDomain String? @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  registers          Register[]
+  employees          Employee[]
+  categories         Category[]
+  items              Item[]
+  customers          Customer[]
+  inventoryLevels    InventoryLevel[]
+  inventoryMovements InventoryMovement[]
+  transfersOut       InventoryTransfer[] @relation("TransferFrom")
+  transfersIn        InventoryTransfer[] @relation("TransferTo")
+  shifts             Shift[]
+  tickets            Ticket[]
+  sales              Sale[]
+  taxes              Tax[]
+  paymentTypes       PaymentType[]
+  settings           Setting[]
+  giftCards          GiftCard[]
+  timeEntries        TimeClockEntry[]
+  onlineOrders       OnlineOrder[]
+  printers           PrinterDevice[]
+  printJobs          PrintJob[]
+  textPayLinks       TextPayLink[]
+}
+
+model Register {
+  id        String   @id @default(cuid())
+  storeId   String
+  name      String
+  createdAt DateTime @default(now())
+
+  store   Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  shifts  Shift[]
+  tickets Ticket[]
+  sales   Sale[]
+}
+
+model Employee {
+  id           String   @id @default(cuid())
+  storeId      String
+  name         String
+  email        String   @unique
+  pinHash      String
+  pinDisplay   String // demo only: last known PIN for seed docs
+  role         String   @default("cashier") // owner | manager | cashier
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  store       Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  shifts      Shift[]
+  sales       Sale[]
+  timeEntries TimeClockEntry[]
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  storeId   String
+  name      String
+  color     String   @default("#2F6F4E")
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  items Item[]
+}
+
+model Item {
+  id          String   @id @default(cuid())
+  storeId     String
+  categoryId  String?
+  name        String
+  description String?
+  color       String   @default("#3D5A4C")
+  imageUrl    String?
+  soldBy      String   @default("each") // each | weight
+  isComposite Boolean  @default(false) // kit/bundle
+  active      Boolean  @default(true)
+  /// Hidden from online ordering until the kitchen marks it back in
+  soldOut     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  store          Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  category       Category?       @relation(fields: [categoryId], references: [id])
+  variants       Variant[]
+  modifierGroups ModifierGroup[]
+  kitComponents  KitComponent[]  @relation("KitParent")
+}
+
+model Variant {
+  id         String  @id @default(cuid())
+  itemId     String
+  name       String  @default("Regular")
+  sku        String
+  barcode    String?
+  priceCents Int
+  costCents  Int     @default(0)
+  trackStock Boolean @default(true)
+  active     Boolean @default(true)
+
+  item             Item              @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  inventoryLevels  InventoryLevel[]
+  kitAsComponent   KitComponent[]    @relation("KitChild")
+  ticketLines      TicketLine[]
+  saleLines        SaleLine[]
+}
+
+model KitComponent {
+  id              String @id @default(cuid())
+  parentItemId    String
+  componentVarId  String
+  quantity        Float  @default(1)
+
+  parent    Item    @relation("KitParent", fields: [parentItemId], references: [id], onDelete: Cascade)
+  component Variant @relation("KitChild", fields: [componentVarId], references: [id], onDelete: Cascade)
+}
+
+model ModifierGroup {
+  id        String @id @default(cuid())
+  itemId    String
+  name      String
+  minSelect Int    @default(0)
+  maxSelect Int    @default(1)
+  sortOrder Int    @default(0)
+
+  item      Item       @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  modifiers Modifier[]
+}
+
+model Modifier {
+  id         String  @id @default(cuid())
+  groupId    String
+  name       String
+  priceCents Int     @default(0)
+  active     Boolean @default(true)
+  sortOrder  Int     @default(0)
+
+  group ModifierGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+}
+
+model InventoryLevel {
+  id        String @id @default(cuid())
+  storeId   String
+  variantId String
+  quantity  Float  @default(0)
+  lowStock  Float  @default(5)
+
+  store   Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  variant Variant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, variantId])
+}
+
+model InventoryMovement {
+  id          String   @id @default(cuid())
+  storeId     String
+  variantId   String
+  type        String // receive | sale | adjust | refund | transfer
+  quantity    Float
+  note        String?
+  employeeId  String?
+  createdAt   DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+}
+
+model Customer {
+  id               String   @id @default(cuid())
+  storeId          String
+  name             String
+  email            String?
+  phone            String?
+  note             String?
+  loyaltyPoints    Int      @default(0)
+  storeCreditCents Int      @default(0)
+  totalSpentCents  Int      @default(0)
+  visitCount       Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  store     Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  tickets   Ticket[]
+  sales     Sale[]
+  giftCards GiftCard[]
+}
+
+model Tax {
+  id        String  @id @default(cuid())
+  storeId   String
+  name      String
+  rateBps   Int // 825 = 8.25%
+  inclusive Boolean @default(false)
+  enabled   Boolean @default(true)
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+}
+
+model PaymentType {
+  id          String  @id @default(cuid())
+  storeId     String
+  name        String
+  type        String // cash | card | other | store_credit
+  enabled     Boolean @default(true)
+  opensDrawer Boolean @default(false)
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+}
+
+model Setting {
+  id      String @id @default(cuid())
+  storeId String
+  key     String
+  value   String
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, key])
+}
+
+model Shift {
+  id                 String    @id @default(cuid())
+  storeId            String
+  registerId         String
+  employeeId         String
+  openedAt           DateTime  @default(now())
+  closedAt           DateTime?
+  openingFloatCents  Int
+  closingCashCents   Int?
+  expectedCashCents  Int?
+  differenceCents    Int?
+  note               String?
+  status             String    @default("open") // open | closed
+
+  store      Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  register   Register        @relation(fields: [registerId], references: [id], onDelete: Cascade)
+  employee   Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  cashEvents CashEvent[]
+  sales      Sale[]
+}
+
+model CashEvent {
+  id         String   @id @default(cuid())
+  shiftId    String
+  type       String // pay_in | pay_out | drawer_open
+  amountCents Int     @default(0)
+  note       String?
+  createdAt  DateTime @default(now())
+
+  shift Shift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+}
+
+model Ticket {
+  id              String   @id @default(cuid())
+  storeId         String
+  registerId      String
+  employeeId      String?
+  customerId      String?
+  name            String   @default("Ticket")
+  status          String   @default("open") // open | held | paid | voided
+  source          String   @default("pos") // pos | online | mobile | justeat | deliveroo | ubereats | hungrypanda | foodhub | delivery
+  kitchenStatus   String? // queued | preparing | ready | done
+  discountCents   Int      @default(0)
+  discountPercent Float    @default(0)
+  tipCents        Int      @default(0)
+  note            String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  store        Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  register     Register      @relation(fields: [registerId], references: [id], onDelete: Cascade)
+  customer     Customer?     @relation(fields: [customerId], references: [id])
+  lines        TicketLine[]
+  onlineOrders OnlineOrder[]
+}
+
+model TicketLine {
+  id             String  @id @default(cuid())
+  ticketId       String
+  variantId      String
+  name           String
+  quantity       Float   @default(1)
+  unitPriceCents Int
+  discountCents  Int     @default(0)
+  modifiersJson  String  @default("[]")
+  note           String?
+
+  ticket  Ticket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  variant Variant @relation(fields: [variantId], references: [id])
+}
+
+model Sale {
+  id             String   @id @default(cuid())
+  receiptNumber  String
+  storeId        String
+  registerId     String
+  employeeId     String
+  customerId     String?
+  shiftId        String?
+  status         String   @default("completed") // completed | voided | refunded | partial_refund
+  subtotalCents  Int
+  discountCents  Int      @default(0)
+  taxCents       Int      @default(0)
+  tipCents       Int      @default(0)
+  totalCents     Int
+  paidCents      Int
+  changeCents    Int      @default(0)
+  note           String?
+  createdAt      DateTime @default(now())
+
+  store    Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  register Register      @relation(fields: [registerId], references: [id], onDelete: Cascade)
+  employee Employee      @relation(fields: [employeeId], references: [id])
+  customer Customer?     @relation(fields: [customerId], references: [id])
+  shift    Shift?        @relation(fields: [shiftId], references: [id])
+  lines    SaleLine[]
+  payments SalePayment[]
+}
+
+model SaleLine {
+  id             String @id @default(cuid())
+  saleId         String
+  variantId      String?
+  name           String
+  quantity       Float
+  unitPriceCents Int
+  discountCents  Int    @default(0)
+  taxCents       Int    @default(0)
+  totalCents     Int
+  modifiersJson  String @default("[]")
+
+  sale    Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  variant Variant? @relation(fields: [variantId], references: [id])
+}
+
+model SalePayment {
+  id              String  @id @default(cuid())
+  saleId          String
+  paymentTypeId   String
+  paymentTypeName String
+  amountCents     Int
+  tenderedCents   Int?
+  giftCardCode    String?
+
+  sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+}
+
+model InventoryTransfer {
+  id           String   @id @default(cuid())
+  fromStoreId  String
+  toStoreId    String
+  variantId    String
+  quantity     Float
+  status       String   @default("completed") // pending | completed | cancelled
+  note         String?
+  employeeId   String?
+  createdAt    DateTime @default(now())
+
+  fromStore Store @relation("TransferFrom", fields: [fromStoreId], references: [id], onDelete: Cascade)
+  toStore   Store @relation("TransferTo", fields: [toStoreId], references: [id], onDelete: Cascade)
+}
+
+model GiftCard {
+  id             String   @id @default(cuid())
+  storeId        String
+  code           String   @unique
+  initialCents   Int
+  balanceCents   Int
+  customerId     String?
+  status         String   @default("active") // active | disabled
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  store    Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer Customer?        @relation(fields: [customerId], references: [id])
+  ledger   GiftCardLedger[]
+}
+
+model GiftCardLedger {
+  id           String   @id @default(cuid())
+  giftCardId   String
+  type         String // issue | redeem | reload | adjust
+  amountCents  Int // signed: + credit, - debit
+  balanceAfter Int
+  saleId       String?
+  note         String?
+  employeeId   String?
+  createdAt    DateTime @default(now())
+
+  giftCard GiftCard @relation(fields: [giftCardId], references: [id], onDelete: Cascade)
+}
+
+model TimeClockEntry {
+  id         String    @id @default(cuid())
+  storeId    String
+  employeeId String
+  clockIn    DateTime  @default(now())
+  clockOut   DateTime?
+  note       String?
+
+  store    Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model OnlineOrder {
+  id              String   @id @default(cuid())
+  storeId         String
+  ticketId        String?
+  orderNumber     String
+  customerName    String
+  customerPhone   String?
+  customerEmail   String?
+  fulfillment     String   @default("pickup") // pickup | dine_in | delivery
+  status          String   @default("pending") // pending | accepted | preparing | ready | completed | cancelled
+  /// web | till | justeat | deliveroo | ubereats | hungrypanda | foodhub | generic
+  channel         String   @default("web")
+  externalOrderId String?
+  partnerMetaJson String? // truncated raw/partner ids for support
+  note            String?
+  deliveryAddress String?
+  deliveryFeeCents Int     @default(0)
+  subtotalCents   Int      @default(0)
+  taxCents        Int      @default(0)
+  totalCents      Int      @default(0)
+  cardBrand       String?
+  cardLast4       String?
+  receiptNumber   String?
+  /// Unguessable id for the customer's public tracking link
+  trackingToken   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  store  Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  ticket Ticket?           @relation(fields: [ticketId], references: [id])
+  lines  OnlineOrderLine[]
+
+  @@index([storeId, channel, externalOrderId])
+  @@index([trackingToken])
+}
+
+model OnlineOrderLine {
+  id             String @id @default(cuid())
+  orderId        String
+  variantId      String
+  name           String
+  quantity       Float  @default(1)
+  unitPriceCents Int
+  modifiersJson  String @default("[]")
+  note           String?
+
+  order OnlineOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model PrinterDevice {
+  id        String   @id @default(cuid())
+  storeId   String
+  name      String
+  driver    String   @default("mock") // mock | network | usb_bridge
+  host      String? // for network ESC/POS
+  port      Int?     @default(9100)
+  enabled   Boolean  @default(true)
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  store Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  jobs  PrintJob[]
+}
+
+model PrintJob {
+  id         String   @id @default(cuid())
+  storeId    String
+  printerId  String?
+  type       String // receipt | kitchen | drawer
+  status     String   @default("queued") // queued | printing | printed | failed
+  payloadB64 String
+  preview    String?
+  error      String?
+  saleId     String?
+  ticketId   String?
+  createdAt  DateTime @default(now())
+  printedAt  DateTime?
+
+  store   Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  printer PrinterDevice? @relation(fields: [printerId], references: [id])
+}
+
+/// SMS / shareable payment link (text-to-pay) for a ticket or custom amount.
+model TextPayLink {
+  id              String    @id @default(cuid())
+  storeId         String
+  ticketId        String?
+  saleId          String?
+  token           String    @unique
+  amountCents     Int
+  currency        String    @default("gbp")
+  phone           String?
+  customerName    String?
+  status          String    @default("pending") // pending | sent | paid | cancelled | expired
+  payUrl          String
+  stripeSessionId String?
+  smsSid          String?
+  note            String?
+  createdById     String?
+  paidAt          DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, status])
+  @@index([ticketId])
+}
