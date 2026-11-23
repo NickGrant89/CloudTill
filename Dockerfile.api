@@ -35,4 +35,4 @@ WORKDIR /app/apps/api
 # Compose uses Postgres — flip Prisma provider at runtime (Mac schema stays sqlite)
 RUN sed -i 's/provider = "sqlite"/provider = "postgresql"/' prisma/schema.prisma
 EXPOSE 4000
-CMD ["sh", "-c", "pnpm exec prisma generate && pnpm exec prisma db push && pnpm exec tsx prisma/seed.ts && pnpm exec tsx src/index.ts"]
+CMD ["sh", "-c", "pnpm exec prisma generate && pnpm exec prisma db push && (pnpm exec tsx prisma/seed.ts || echo 'seed failed — continuing') && pnpm exec tsx src/index.ts"]

@@ -49,4 +49,4 @@ WORKDIR /app/apps/api
 ENV PORT=8080
 ENV HOST=0.0.0.0
 EXPOSE 8080
-CMD ["sh", "-c", "pnpm exec prisma db push && pnpm exec tsx prisma/seed.ts && pnpm exec tsx src/index.ts"]
+CMD ["sh", "-c", "pnpm exec prisma db push && (pnpm exec tsx prisma/seed.ts || echo 'seed failed — continuing') && pnpm exec tsx src/index.ts"]

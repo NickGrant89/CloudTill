@@ -11,7 +11,7 @@
     "db:migrate": "prisma migrate deploy && prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
-    "db:reset": "rm -f prisma/dev.db prisma/dev.db-journal && prisma db push && tsx prisma/seed.ts"
+    "db:reset": "rm -f prisma/dev.db prisma/dev.db-journal && prisma db push && SEED_FORCE=1 tsx prisma/seed.ts"
   },
   "dependencies": {
     "@cloudtill/shared": "workspace:*",

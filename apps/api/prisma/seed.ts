@@ -3,7 +3,45 @@ import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
+const DEMO_SLUGS = ["demo-cafe", "downtown"];
+
+/** Keep the hosted demo UK-shaped without touching any customer store. */
+async function ukifyDemo() {
+  await prisma.store.updateMany({
+    where: { slug: "demo-cafe" },
+    data: { address: "100 Market Street, Manchester M1 1AA", phone: "0161 555 0100", timezone: "Europe/London" },
+  });
+  await prisma.store.updateMany({
+    where: { slug: "downtown" },
+    data: { address: "22 Harbour Road, Salford M50 2AB", timezone: "Europe/London" },
+  });
+  const demoStores = await prisma.store.findMany({ where: { slug: { in: DEMO_SLUGS } }, select: { id: true } });
+  await prisma.tax.updateMany({
+    where: { storeId: { in: demoStores.map((s) => s.id) }, name: "Sales Tax" },
+    data: { name: "VAT", rateBps: 2000, inclusive: true },
+  });
+}
+
 async function main() {
+  // Runs on every container start. Never wipe real companies: only reseed from scratch when forced.
+  if (process.env.SEED_FORCE !== "1") {
+    const existing = await prisma.store.findMany({ where: { slug: { in: DEMO_SLUGS } }, select: { slug: true } });
+    if (existing.length > 0) {
+      await ukifyDemo();
+      console.log("Demo store present — seed skipped (set SEED_FORCE=1 to wipe and reseed).");
+      return;
+    }
+    const otherStores = await prisma.store.count();
+    if (otherStores > 0) {
+      console.log(`Creating demo store alongside ${otherStores} existing store(s) — nothing deleted.`);
+    }
+  } else {
+    await wipeAll();
+  }
+  await seedDemo();
+}
+
+async function wipeAll() {
   await prisma.printJob.deleteMany();
   await prisma.printerDevice.deleteMany();
   await prisma.onlineOrderLine.deleteMany();
@@ -34,15 +72,18 @@ async function main() {
   await prisma.employee.deleteMany();
   await prisma.register.deleteMany();
   await prisma.store.deleteMany();
+}
 
+async function seedDemo() {
   const store = await prisma.store.create({
     data: {
       slug: "demo-cafe",
       name: "PurePOS Demo Café",
-      address: "100 Market Street, Demo City",
-      phone: "+1 555-0100",
+      address: "100 Market Street, Manchester M1 1AA",
+      phone: "0161 555 0100",
       currency: "GBP",
-      timezone: "America/New_York",
+      timezone: "Europe/London",
+      companyKey: "demo",
     },
   });
 
@@ -50,9 +91,10 @@ async function main() {
     data: {
       slug: "downtown",
       name: "PurePOS Downtown (stub)",
-      address: "22 Harbor Ave",
+      address: "22 Harbour Road, Salford M50 2AB",
       currency: "GBP",
-      timezone: "America/New_York",
+      timezone: "Europe/London",
+      companyKey: "demo",
     },
   });
 
@@ -365,8 +407,8 @@ async function main() {
 
   await prisma.tax.createMany({
     data: [
-      { storeId: store.id, name: "Sales Tax", rateBps: 825, inclusive: false, enabled: true },
-      { storeId: store2.id, name: "Sales Tax", rateBps: 825, inclusive: false, enabled: true },
+      { storeId: store.id, name: "VAT", rateBps: 2000, inclusive: true, enabled: true },
+      { storeId: store2.id, name: "VAT", rateBps: 2000, inclusive: true, enabled: true },
     ],
   });
 
