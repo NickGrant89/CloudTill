@@ -122,7 +122,6 @@ export function App() {
       store={store}
       registers={registers}
       registerId={registerId}
-      onRegisterChange={setRegisterId}
       onLogout={logout}
     />
   );

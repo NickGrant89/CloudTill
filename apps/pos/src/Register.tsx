@@ -132,7 +132,6 @@ interface Props {
   store: SessionStore;
   registers: SessionRegister[];
   registerId: string;
-  onRegisterChange: (id: string) => void;
   onLogout: () => void;
 }
 
@@ -188,7 +187,7 @@ interface KitchenOrder {
   lines: { name: string; quantity: number }[];
 }
 
-export function Register({ user, store, registers, registerId, onRegisterChange, onLogout }: Props) {
+export function Register({ user, store, registers, registerId, onLogout }: Props) {
   const [pinnedId, setPinnedId] = useState(() => readPinnedTill(store.id)?.registerId ?? "");
   const [fullScreen, setFullScreen] = useState(false);
   useEffect(() => {
@@ -1572,7 +1571,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   return (
     <div className={`app-shell till-${tillPhase}`}>
       <div className="toolbar-dark">
-        <div className={`toolbar-identity${pinnedId !== registerId ? " is-choosing" : ""}`}>
+        <div className="toolbar-identity">
           <strong className="store-name">{store.name}</strong>
           <span className="who">{user.name}</span>
           {currentRegister && (
@@ -1583,19 +1582,6 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             >
               {currentRegister.name}
             </span>
-          )}
-          {pinnedId !== registerId && (
-            <select
-              aria-label="Register"
-              value={registerId}
-              onChange={(e) => onRegisterChange(e.target.value)}
-            >
-              {registers.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
           )}
           <button type="button" className="lock-btn" onClick={onLogout}>
             Lock
@@ -1664,7 +1650,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
         </button>
         <span>
           {pinnedId !== registerId && currentRegister
-            ? `Pick the till above, then tap Use this iPad as ${currentRegister.name}. After that, Guided Access keeps Safari on this page.`
+            ? `Tap Use this iPad as ${currentRegister.name} to pin this device. Change till from Lock → Change till. Guided Access keeps Safari on this page.`
             : "Full screen only fills this window. To keep an iPad on this till, use Guided Access: Settings, Accessibility, Guided Access, then triple-click the side button."}
         </span>
       </p>
