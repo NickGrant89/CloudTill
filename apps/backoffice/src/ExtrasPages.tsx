@@ -289,7 +289,7 @@ export function EodPage() {
   );
 }
 
-type ImportKind = "items" | "customers" | "stock";
+type ImportKind = "items" | "customers" | "stock" | "loyverse";
 
 type PreviewRow = {
   line: number;
@@ -308,6 +308,12 @@ type PreviewResult = {
 };
 
 const IMPORT_KINDS: { id: ImportKind; label: string; blurb: string }[] = [
+  {
+    id: "loyverse",
+    label: "Loyverse",
+    blurb:
+      "Item list or customer export from Loyverse Back Office. Items, categories, stock, barcodes, and options come in. Modifier prices, images, and receipts are not in the Loyverse file.",
+  },
   { id: "items", label: "Items", blurb: "Name, group, SKU, price, stock" },
   { id: "customers", label: "Customers", blurb: "Name, email, phone, credit, loyalty" },
   { id: "stock", label: "Stock levels", blurb: "Set or receive qty by SKU / barcode" },
@@ -384,6 +390,8 @@ export function ImportPage() {
         created?: number;
         updated?: number;
         categoriesCreated?: number;
+        modifiersLinked?: number;
+        componentsLinked?: number;
       }>("/import/apply", {
         method: "POST",
         body: JSON.stringify({ kind, csv }),
@@ -392,6 +400,8 @@ export function ImportPage() {
         result.created != null ? `${result.created} created` : null,
         result.updated != null ? `${result.updated} updated` : null,
         result.categoriesCreated ? `${result.categoriesCreated} categories created` : null,
+        result.modifiersLinked ? `${result.modifiersLinked} modifiers linked` : null,
+        result.componentsLinked ? `${result.componentsLinked} components linked` : null,
       ].filter(Boolean);
       setMessage(`Imported · ${bits.join(" · ")}`);
       setPreview(null);

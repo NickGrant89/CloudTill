@@ -4,6 +4,13 @@ import { prisma } from "../db.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 import { csvEscape, parseBool, parseCsv, parseNumber, parsePoundsToCents } from "../csv.js";
 import { storeAllowsFeature } from "./billing.js";
+import {
+  applyLoyverse,
+  detectLoyverse,
+  loyverseNotes,
+  previewLoyverseCustomers,
+  previewLoyverseItems,
+} from "../loyverseImport.js";
 
 export const importRouter = Router();
 importRouter.use(requireAuth);
@@ -19,9 +26,9 @@ importRouter.use(async (req: AuthedRequest, res, next) => {
   next();
 });
 
-export type ImportKind = "items" | "customers" | "stock";
+export type ImportKind = "items" | "customers" | "stock" | "loyverse";
 
-const KINDS: ImportKind[] = ["items", "customers", "stock"];
+const KINDS: ImportKind[] = ["items", "customers", "stock", "loyverse"];
 
 const TEMPLATES: Record<
   ImportKind,
@@ -67,6 +74,34 @@ const TEMPLATES: Record<
     ],
     notes: "Match by sku or barcode. mode=set replaces on-hand qty; mode=receive adds to it.",
   },
+  loyverse: {
+    filename: "loyverse-items-example.csv",
+    headers: [
+      "Handle",
+      "SKU",
+      "Name",
+      "Category",
+      "Description",
+      "Cost",
+      "Default price",
+      "Sold by weight",
+      "Option 1 name",
+      "Option 1 value",
+      "Barcode",
+      "Track stock",
+      "In stock",
+      "Low stock",
+      "Available for sale",
+      "Modifier - Milk",
+      "Tax - VAT",
+    ],
+    sample: [
+      ["latte", "10001", "Latte", "Coffee", "12oz", "0.80", "3.50", "N", "Size", "Regular", "2001", "Y", "20", "5", "Y", "Y", "Y"],
+      ["latte", "10002", "", "", "", "0.90", "4.00", "N", "Size", "Large", "2002", "Y", "10", "5", "Y", "Y", "Y"],
+    ],
+    notes:
+      "Paste a Loyverse Item list export or a Loyverse Customers export. Items, variants, categories, stock, and modifier names are imported. Customers are a separate file from Loyverse → Customers → Export.",
+  },
 };
 
 type RowIssue = { level: "error" | "warning"; message: string };
@@ -102,7 +137,7 @@ importRouter.get("/templates/:kind.csv", (req, res) => {
 });
 
 const importBody = z.object({
-  kind: z.enum(["items", "customers", "stock"]),
+  kind: z.enum(["items", "customers", "stock", "loyverse"]),
   csv: z.string().min(1),
 });
 
@@ -115,6 +150,31 @@ importRouter.post("/preview", async (req: AuthedRequest, res) => {
 
   const parsed = parseCsv(body.csv);
   if (!parsed.headers.length) return res.status(400).json({ error: "CSV is empty" });
+
+  if (body.kind === "loyverse") {
+    const detected = detectLoyverse(parsed.headers);
+    if (!detected) {
+      return res.status(400).json({
+        error:
+          "This does not look like a Loyverse item or customer export. Use Item list → Export, or Customers → Export.",
+        headers: parsed.headers,
+      });
+    }
+    const preview =
+      detected === "items"
+        ? await previewLoyverseItems(req.user!.storeId, parsed.headers, parsed.rows)
+        : await previewLoyverseCustomers(req.user!.storeId, parsed.headers, parsed.rows);
+    return res.json({
+      kind: body.kind,
+      detected,
+      headers: parsed.headers,
+      notes: loyverseNotes(detected),
+      total: preview.length,
+      valid: preview.filter((r) => r.action !== "error").length,
+      errors: preview.filter((r) => r.action === "error").length,
+      rows: preview,
+    });
+  }
 
   const missing = requiredHeaders(body.kind).filter((h) => !parsed.headers.includes(h));
   if (missing.length) {
@@ -151,6 +211,29 @@ importRouter.post("/apply", async (req: AuthedRequest, res) => {
   const body = parsedBody.data;
 
   const parsed = parseCsv(body.csv);
+  if (body.kind === "loyverse") {
+    const detected = detectLoyverse(parsed.headers);
+    if (!detected) {
+      return res.status(400).json({
+        error: "This does not look like a Loyverse item or customer export.",
+      });
+    }
+    const preview =
+      detected === "items"
+        ? await previewLoyverseItems(req.user!.storeId, parsed.headers, parsed.rows)
+        : await previewLoyverseCustomers(req.user!.storeId, parsed.headers, parsed.rows);
+    const blockers = preview.filter((r) => r.action === "error");
+    if (blockers.length) {
+      return res.status(400).json({
+        error: `Fix ${blockers.length} row error(s) before importing`,
+        errors: blockers.length,
+        rows: blockers.slice(0, 25),
+      });
+    }
+    const result = await applyLoyverse(req.user!.storeId, preview, detected);
+    return res.json({ kind: body.kind, detected, ...result });
+  }
+
   const missing = requiredHeaders(body.kind).filter((h) => !parsed.headers.includes(h));
   if (missing.length) {
     return res.status(400).json({ error: `Missing required columns: ${missing.join(", ")}` });

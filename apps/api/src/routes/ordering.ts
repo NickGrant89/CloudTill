@@ -91,7 +91,11 @@ publicOrderingRouter.get("/stores/:slug/menu", async (req, res) => {
     },
     tax,
     categories,
-    items: items.map((item) => ({ ...item, soldOut: soldOut.has(item.id) })),
+    items: items.map((item) => ({
+      ...item,
+      soldOut: soldOut.has(item.id),
+      modifierGroups: item.modifierGroups.filter((group) => group.modifiers.length > 0),
+    })),
     popularItemIds: popular,
     ordering: publicOrderingInfo(settings),
     delivery: {

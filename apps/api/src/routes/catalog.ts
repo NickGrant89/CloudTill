@@ -72,6 +72,7 @@ catalogRouter.get("/items", async (req: AuthedRequest, res) => {
 
   const mapped = items.map((item) => ({
     ...item,
+    modifierGroups: item.modifierGroups.filter((group) => group.modifiers.length > 0),
     variants: item.variants.map((v) => ({
       ...v,
       stockQty: levelMap.get(v.id)?.quantity ?? 0,
