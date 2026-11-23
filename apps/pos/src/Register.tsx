@@ -1021,7 +1021,17 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
         body: JSON.stringify({ payments, tipCents: ticket.tipCents }),
       });
       const s = result.sale;
-      const lines = s.lines.map((l) => `${l.quantity} x ${l.name}`.padEnd(28) + money(l.totalCents)).join("\n");
+      const lines = s.lines
+        .map((l, index) => {
+          const head = `${l.quantity} x ${l.name}`.padEnd(28) + money(l.totalCents);
+          const blocks = groupModifierLines(ticket.lines[index]?.modifiers ?? []);
+          const modLines = blocks.flatMap((block) => [
+            ...(block.groupName ? [`  ${block.groupName}`] : []),
+            ...block.names.map((name) => `  + ${name}`),
+          ]);
+          return [head, ...modLines].join("\n");
+        })
+        .join("\n");
       const pays = s.payments.map((p) => `${p.paymentTypeName}`.padEnd(28) + money(p.amountCents)).join("\n");
       const text = [
         settings?.receipt.header ?? store.name,
@@ -1574,12 +1584,19 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
       </div>
 
       <div className={`mobile-dock${modifierItem ? " is-hidden" : ""}`}>
-        <button type="button" className="dock-ticket" onClick={() => setMobilePane("ticket")}>
-          <span>{lineCount === 0 ? "Ticket empty" : `${lineCount} ${lineCount === 1 ? "item" : "items"}`}</span>
-          <strong>{money(ticket?.totalCents ?? 0)}</strong>
-        </button>
+        {mobilePane === "ticket" ? (
+          <button type="button" className="dock-ticket" onClick={() => setMobilePane("items")}>
+            <span>← Items</span>
+            <strong>{lineCount === 0 ? "Empty" : `${lineCount} ${lineCount === 1 ? "item" : "items"}`}</strong>
+          </button>
+        ) : (
+          <button type="button" className="dock-ticket" onClick={() => setMobilePane("ticket")}>
+            <span>{lineCount === 0 ? "Ticket empty" : `${lineCount} ${lineCount === 1 ? "item" : "items"}`}</span>
+            <strong>{money(ticket?.totalCents ?? 0)}</strong>
+          </button>
+        )}
         <button type="button" className="dock-pay" onClick={openPay} disabled={lineCount === 0}>
-          Charge
+          Charge{lineCount > 0 ? ` ${money(ticket?.totalCents ?? 0)}` : ""}
         </button>
       </div>
 

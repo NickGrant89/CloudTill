@@ -601,6 +601,44 @@ kitchenRouter.post("/orders", async (req: AuthedRequest, res) => {
   if (body.ticketId) {
     await prisma.ticket.update({ where: { id: body.ticketId }, data: { kitchenStatus: "queued" } });
   }
+
+  const kitchenText = [
+    `KITCHEN · ${order.orderNumber}`,
+    body.fulfillment === "delivery" ? ">>> DELIVERY <<<" : body.fulfillment === "pickup" ? "TAKE AWAY" : "EAT IN",
+    body.name,
+    "----",
+    ...order.lines.map((line) => {
+      let extra = "";
+      try {
+        const mods = receiptModifierLines(JSON.parse(line.modifiersJson || "[]") as { name?: string; groupName?: string }[]);
+        extra = mods.length ? `\n${mods.map((mod) => `  ${mod}`).join("\n")}` : "";
+      } catch {
+        extra = "";
+      }
+      return `${line.quantity} x ${line.name}${extra}${line.note ? `\n  Note: ${line.note}` : ""}`;
+    }),
+    body.note?.trim() ? `Note: ${body.note.trim()}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const encoder = new TextEncoder();
+  const payload = encoder.encode(`\x1b\x40${kitchenText}\n\n\x1d\x56\x01`);
+  const printer = await prisma.printerDevice.findFirst({
+    where: { storeId, enabled: true },
+    orderBy: { isDefault: "desc" },
+  });
+  await prisma.printJob.create({
+    data: {
+      storeId,
+      printerId: printer?.id,
+      type: "kitchen",
+      status: "queued",
+      payloadB64: Buffer.from(payload).toString("base64"),
+      preview: kitchenText,
+      ticketId: body.ticketId,
+    },
+  });
+
   res.status(201).json(order);
 });
 

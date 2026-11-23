@@ -320,6 +320,55 @@ export function ModifierEditor({
     }
   }
 
+  async function saveOption(
+    modifier: { id: string; name: string; priceCents: number },
+    next: { name: string; price: string }
+  ) {
+    const name = next.name.trim();
+    const pounds = Number(next.price);
+    if (!name) {
+      setError("Option name is required.");
+      return;
+    }
+    if (!Number.isFinite(pounds)) {
+      setError("Price must be a number.");
+      return;
+    }
+    setError("");
+    try {
+      await api(`/catalog/modifiers/${modifier.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name, priceCents: Math.round(pounds * 100) }),
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save option");
+    }
+  }
+
+  async function addOption(groupId: string) {
+    setError("");
+    try {
+      await api(`/catalog/modifier-groups/${groupId}/modifiers`, {
+        method: "POST",
+        body: JSON.stringify({ name: "New option", priceCents: 0 }),
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not add option");
+    }
+  }
+
+  async function removeOption(id: string) {
+    setError("");
+    try {
+      await api(`/catalog/modifiers/${id}`, { method: "DELETE" });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not remove option");
+    }
+  }
+
   async function addExisting(e: React.FormEvent) {
     e.preventDefault();
     const set = sets.find((entry) => entry.name === picked);
@@ -348,6 +397,7 @@ export function ModifierEditor({
       <div className="page-head" style={{ marginBottom: 12 }}>
         <div>
           <h3 style={{ margin: 0 }}>Modifiers · {itemName}</h3>
+          <p style={{ margin: "6px 0 0", color: "var(--muted)" }}>Change names and prices here. Saving an option only updates this item.</p>
         </div>
         <button type="button" className="secondary" onClick={onClose}>
           Close
@@ -358,7 +408,7 @@ export function ModifierEditor({
       {groups.map((g, groupIndex) => {
         const active = g.modifiers.filter((m) => m.active);
         return (
-        <div key={g.id} style={{ marginBottom: 14 }}>
+        <div key={g.id} style={{ marginBottom: 18 }}>
           <strong>{g.name}</strong>{" "}
           <span style={{ color: "var(--muted)" }}>
             {g.minSelect > 0 ? "Required" : "Optional"} · {g.maxSelect > 1 ? "pick many" : "pick one"}
@@ -379,22 +429,42 @@ export function ModifierEditor({
           >
             Remove
           </button>
-          <ul>
+          <ul style={{ listStyle: "none", padding: 0, margin: "10px 0 0" }}>
             {active.map((m, optionIndex) => (
-                <li key={m.id} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
-                  <span>
-                    {m.name}
-                    {m.priceCents ? ` +${money(m.priceCents)}` : ""}
-                  </span>
+                <li key={m.id} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 8 }}>
+                  <input
+                    defaultValue={m.name}
+                    aria-label={`${g.name} option name`}
+                    style={{ flex: "1 1 140px", minWidth: 120 }}
+                    onBlur={(e) => {
+                      if (e.target.value.trim() === m.name) return;
+                      void saveOption(m, { name: e.target.value, price: (m.priceCents / 100).toFixed(2) });
+                    }}
+                  />
+                  <input
+                    defaultValue={(m.priceCents / 100).toFixed(2)}
+                    aria-label={`${m.name} price`}
+                    style={{ width: 96 }}
+                    onBlur={(e) => {
+                      if (e.target.value.trim() === (m.priceCents / 100).toFixed(2)) return;
+                      void saveOption(m, { name: m.name, price: e.target.value });
+                    }}
+                  />
                   <button type="button" className="secondary" style={{ minHeight: 32 }} disabled={optionIndex === 0} onClick={() => void moveOptions(g, optionIndex, -1)}>
                     Up
                   </button>
                   <button type="button" className="secondary" style={{ minHeight: 32 }} disabled={optionIndex === active.length - 1} onClick={() => void moveOptions(g, optionIndex, 1)}>
                     Down
                   </button>
+                  <button type="button" className="secondary" style={{ minHeight: 32 }} onClick={() => void removeOption(m.id)}>
+                    Remove
+                  </button>
                 </li>
               ))}
           </ul>
+          <button type="button" className="secondary" style={{ minHeight: 32 }} onClick={() => void addOption(g.id)}>
+            Add option
+          </button>
         </div>
         );
       })}
@@ -439,6 +509,7 @@ export function ModifierLibrary({
   ]);
   const [itemIds, setItemIds] = useState<string[]>([]);
   const [createItemIds, setCreateItemIds] = useState<string[]>([]);
+  const [editOptions, setEditOptions] = useState<{ name: string; price: string }[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -450,9 +521,11 @@ export function ModifierLibrary({
     if (match) {
       setSelected(match.name);
       setItemIds(match.assignments.map((assignment) => assignment.itemId));
+      setEditOptions(match.options.map((option) => ({ name: option.name, price: (option.priceCents / 100).toFixed(2) })));
     } else if (nameToKeep) {
       setSelected("");
       setItemIds([]);
+      setEditOptions([]);
     }
     return next;
   }
@@ -464,10 +537,13 @@ export function ModifierLibrary({
   async function moveSetOption(index: number, dir: -1 | 1) {
     if (!selectedSet) return;
     const next = index + dir;
-    if (next < 0 || next >= selectedSet.options.length) return;
-    const names = selectedSet.options.map((option) => option.name);
-    const [name] = names.splice(index, 1);
-    names.splice(next, 0, name);
+    if (next < 0 || next >= editOptions.length) return;
+    const rows = [...editOptions];
+    const [row] = rows.splice(index, 1);
+    rows.splice(next, 0, row);
+    setEditOptions(rows);
+    const names = rows.map((option) => option.name.trim()).filter(Boolean);
+    if (names.length !== rows.length) return;
     setError("");
     try {
       await api("/catalog/modifier-sets/order", {
@@ -537,6 +613,43 @@ export function ModifierLibrary({
     setNotice("");
     const set = sets.find((entry) => entry.name === name);
     setItemIds(set ? set.assignments.map((assignment) => assignment.itemId) : []);
+    setEditOptions(
+      set ? set.options.map((option) => ({ name: option.name, price: (option.priceCents / 100).toFixed(2) })) : []
+    );
+  }
+
+  async function saveOptions(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedSet) return;
+    const cleaned = editOptions
+      .map((option) => ({ name: option.name.trim(), priceCents: Math.round(Number(option.price) * 100) }))
+      .filter((option) => option.name);
+    if (!cleaned.length) {
+      setError("Add at least one option.");
+      return;
+    }
+    if (cleaned.some((option) => !Number.isFinite(option.priceCents))) {
+      setError("Every option needs a price.");
+      return;
+    }
+    setError("");
+    setNotice("");
+    try {
+      await api("/catalog/modifier-sets", {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: selectedSet.name,
+          minSelect: selectedSet.minSelect,
+          maxSelect: selectedSet.maxSelect,
+          options: cleaned,
+        }),
+      });
+      setNotice(`Updated ${selectedSet.name} on every item that uses it.`);
+      await load(selectedSet.name);
+      onChange();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save options");
+    }
   }
 
   async function saveAssignment(e: React.FormEvent) {
@@ -697,23 +810,53 @@ export function ModifierLibrary({
             <p style={{ color: "var(--muted)", marginTop: 0 }}>
               {selectedSet.minSelect > 0 ? "Required" : "Optional"} · {selectedSet.maxSelect > 1 ? "pick many" : "pick one"}
             </p>
-            <p style={{ marginTop: 0 }}>This order is used on the till, the kitchen ticket, and the receipt. Moving an option updates every item that uses {selectedSet.name}.</p>
+            <p style={{ marginTop: 0 }}>
+              Change names and prices, then Save options. That updates every item that uses {selectedSet.name}. Up and Down set the till order.
+            </p>
             <ul style={{ listStyle: "none", padding: 0, margin: "0 0 14px" }}>
-              {selectedSet.options.map((option, index) => (
-                <li key={`${option.name}-${index}`} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
-                  <span>
-                    {option.name}
-                    {option.priceCents ? ` +${money(option.priceCents)}` : ""}
-                  </span>
+              {editOptions.map((option, index) => (
+                <li key={`edit-${index}`} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 8 }}>
+                  <input
+                    value={option.name}
+                    placeholder="Option name"
+                    style={{ flex: "1 1 140px", minWidth: 120 }}
+                    onChange={(e) =>
+                      setEditOptions((rows) => rows.map((row, i) => (i === index ? { ...row, name: e.target.value } : row)))
+                    }
+                  />
+                  <input
+                    value={option.price}
+                    placeholder="0.00"
+                    style={{ width: 96 }}
+                    onChange={(e) =>
+                      setEditOptions((rows) => rows.map((row, i) => (i === index ? { ...row, price: e.target.value } : row)))
+                    }
+                  />
                   <button type="button" className="secondary" style={{ minHeight: 32 }} disabled={index === 0} onClick={() => void moveSetOption(index, -1)}>
                     Up
                   </button>
-                  <button type="button" className="secondary" style={{ minHeight: 32 }} disabled={index === selectedSet.options.length - 1} onClick={() => void moveSetOption(index, 1)}>
+                  <button type="button" className="secondary" style={{ minHeight: 32 }} disabled={index === editOptions.length - 1} onClick={() => void moveSetOption(index, 1)}>
                     Down
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    style={{ minHeight: 32 }}
+                    onClick={() => setEditOptions((rows) => rows.filter((_, i) => i !== index))}
+                  >
+                    Remove
                   </button>
                 </li>
               ))}
             </ul>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+              <button type="button" className="secondary" onClick={() => setEditOptions((rows) => [...rows, { name: "", price: "0.00" }])}>
+                Add option
+              </button>
+              <button type="button" onClick={(e) => void saveOptions(e)}>
+                Save options
+              </button>
+            </div>
             <div className="field">
               <label>Items</label>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>

@@ -332,6 +332,17 @@ function CatalogPage() {
   const [groupBusy, setGroupBusy] = useState(false);
   const [groupMsg, setGroupMsg] = useState("");
   const [editMods, setEditMods] = useState<{ id: string; name: string } | null>(null);
+  const [editItem, setEditItem] = useState<(typeof items)[number] | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    categoryId: "",
+    price: "0.00",
+    sku: "",
+    barcode: "",
+    trackStock: true,
+  });
+  const [pizzaMsg, setPizzaMsg] = useState("");
+  const [pizzaBusy, setPizzaBusy] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [branchStores, setBranchStores] = useState<{ id: string; name: string; slug?: string }[]>([]);
   const [currentStoreId, setCurrentStoreId] = useState("");
@@ -451,6 +462,56 @@ function CatalogPage() {
     await load();
   }
 
+  function openEdit(item: (typeof items)[number]) {
+    const variant = item.variants[0];
+    setEditMods(null);
+    setShowForm(false);
+    setEditItem(item);
+    setEditForm({
+      name: item.name,
+      categoryId: item.categoryId ?? "",
+      price: ((variant?.priceCents ?? 0) / 100).toFixed(2),
+      sku: variant?.sku ?? "",
+      barcode: variant?.barcode ?? "",
+      trackStock: variant?.trackStock ?? true,
+    });
+  }
+
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editItem) return;
+    await api(`/catalog/items/${editItem.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: editForm.name.trim(),
+        categoryId: editForm.categoryId || null,
+        priceCents: Math.round(parseFloat(editForm.price) * 100),
+        sku: editForm.sku.trim() || undefined,
+        barcode: editForm.barcode.trim() || null,
+        trackStock: editForm.trackStock,
+      }),
+    });
+    setEditItem(null);
+    await load();
+  }
+
+  async function addPizzaMenu() {
+    setPizzaBusy(true);
+    setPizzaMsg("");
+    try {
+      const result = await api<{ message: string; created: string[]; skipped: string[] }>("/catalog/pizza-menu", {
+        method: "POST",
+        body: "{}",
+      });
+      setPizzaMsg(result.message);
+      await load();
+    } catch (err) {
+      setPizzaMsg(err instanceof Error ? err.message : "Could not add pizza menu");
+    } finally {
+      setPizzaBusy(false);
+    }
+  }
+
   async function createGroup(e: React.FormEvent) {
     e.preventDefault();
     const name = newGroupName.trim();
@@ -483,11 +544,15 @@ function CatalogPage() {
           <button type="button" className="secondary" onClick={() => setShowGroups((v) => !v)}>
             {showGroups ? "Hide groups" : "Manage groups"}
           </button>
+          <button type="button" className="secondary" disabled={pizzaBusy} onClick={() => void addPizzaMenu()}>
+            {pizzaBusy ? "Adding pizzas…" : "Add pizza menu"}
+          </button>
           <button type="button" onClick={() => setShowForm((v) => !v)}>
             {showForm ? "Close" : "Add item"}
           </button>
         </div>
       </div>
+      {pizzaMsg && <p style={{ color: "var(--muted)" }}>{pizzaMsg}</p>}
 
       {showGroups && (
         <form className="panel-box" onSubmit={(e) => void createGroup(e)}>
@@ -602,6 +667,67 @@ function CatalogPage() {
           </button>
         ))}
       </div>
+
+      {editItem && (
+        <form className="panel-box" onSubmit={(e) => void saveEdit(e)}>
+          <div className="page-head" style={{ marginBottom: 12 }}>
+            <h3 style={{ margin: 0 }}>Edit · {editItem.name}</h3>
+            <button type="button" className="secondary" onClick={() => setEditItem(null)}>
+              Close
+            </button>
+          </div>
+          <div className="grid-2">
+            <div className="field">
+              <label>Name</label>
+              <input required value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>Group</label>
+              <select value={editForm.categoryId} onChange={(e) => setEditForm({ ...editForm, categoryId: e.target.value })}>
+                <option value="">Ungrouped</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>Price</label>
+              <input value={editForm.price} onChange={(e) => setEditForm({ ...editForm, price: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>SKU</label>
+              <input value={editForm.sku} onChange={(e) => setEditForm({ ...editForm, sku: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>Barcode</label>
+              <input value={editForm.barcode} onChange={(e) => setEditForm({ ...editForm, barcode: e.target.value })} />
+            </div>
+          </div>
+          <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+            <input
+              type="checkbox"
+              checked={editForm.trackStock}
+              onChange={(e) => setEditForm({ ...editForm, trackStock: e.target.checked })}
+            />
+            Track stock
+          </label>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="submit">Save item</button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                setEditMods({ id: editItem.id, name: editForm.name });
+                setEditItem(null);
+              }}
+            >
+              Edit options
+            </button>
+          </div>
+        </form>
+      )}
 
       {editMods && (
         <ModifierEditor itemId={editMods.id} itemName={editMods.name} onClose={() => { setEditMods(null); void load(); }} />
@@ -719,13 +845,16 @@ function CatalogPage() {
                       ? item.modifierGroups.map((g) => g.name).join(", ")
                       : "—"}
                   </td>
-                  <td>
+                  <td style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <button type="button" className="secondary" onClick={() => openEdit(item)}>
+                      Edit
+                    </button>
                     <button
                       type="button"
                       className="secondary"
                       onClick={() => setEditMods({ id: item.id, name: item.name })}
                     >
-                      Edit modifiers
+                      Options
                     </button>
                   </td>
                 </tr>

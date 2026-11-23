@@ -4,6 +4,7 @@ import { prisma } from "../db.js";
 import { owned, rejectForeign } from "../tenant.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 import { companyStoreIds, sameCompany } from "../company.js";
+import { ensurePizzaMenu } from "../pizzaMenu.js";
 
 export const catalogRouter = Router();
 catalogRouter.use(requireAuth);
@@ -533,6 +534,81 @@ catalogRouter.post("/modifier-sets", requireRole("owner", "manager"), async (req
   res.status(201).json({ created, skipped });
 });
 
+catalogRouter.post("/pizza-menu", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const result = await ensurePizzaMenu(req.user!.storeId);
+  res.status(result.created.length ? 201 : 200).json(result);
+});
+
+catalogRouter.patch("/modifier-sets", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const body = z
+    .object({
+      name: z.string().min(1).max(80),
+      minSelect: z.number().int().min(0).optional(),
+      maxSelect: z.number().int().min(1).optional(),
+      options: z
+        .array(
+          z.object({
+            name: z.string().min(1).max(80),
+            priceCents: z.number().int(),
+            active: z.boolean().optional(),
+          })
+        )
+        .min(1)
+        .max(40),
+    })
+    .parse(req.body);
+  const wanted = body.name.trim().toLowerCase();
+  const groups = await prisma.modifierGroup.findMany({
+    where: { item: { storeId: req.user!.storeId } },
+    include: { modifiers: true },
+  });
+  const matching = groups.filter((group) => group.name.toLowerCase() === wanted);
+  if (!matching.length) return res.status(404).json({ error: "modifier not found" });
+
+  for (const group of matching) {
+    if (body.minSelect !== undefined || body.maxSelect !== undefined) {
+      await prisma.modifierGroup.update({
+        where: { id: group.id },
+        data: {
+          ...(body.minSelect !== undefined ? { minSelect: Math.min(body.minSelect, body.maxSelect ?? group.maxSelect) } : {}),
+          ...(body.maxSelect !== undefined ? { maxSelect: body.maxSelect } : {}),
+        },
+      });
+    }
+    const keep = new Set(body.options.map((option) => option.name.trim().toLowerCase()));
+    for (const modifier of group.modifiers) {
+      if (!keep.has(modifier.name.toLowerCase()) && modifier.active) {
+        await prisma.modifier.update({ where: { id: modifier.id }, data: { active: false } });
+      }
+    }
+    for (const [index, option] of body.options.entries()) {
+      const found = group.modifiers.find((modifier) => modifier.name.toLowerCase() === option.name.trim().toLowerCase());
+      if (found) {
+        await prisma.modifier.update({
+          where: { id: found.id },
+          data: {
+            name: option.name.trim(),
+            priceCents: option.priceCents,
+            sortOrder: index,
+            active: option.active !== false,
+          },
+        });
+      } else {
+        await prisma.modifier.create({
+          data: {
+            groupId: group.id,
+            name: option.name.trim(),
+            priceCents: option.priceCents,
+            sortOrder: index,
+            active: option.active !== false,
+          },
+        });
+      }
+    }
+  }
+  res.json({ ok: true, updatedGroups: matching.length });
+});
+
 catalogRouter.post("/modifier-sets/order", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
   const body = z
     .object({
@@ -679,6 +755,6 @@ catalogRouter.post(
 );
 
 catalogRouter.delete("/modifiers/:id", owned("modifier"), requireRole("owner", "manager"), async (req, res) => {
-  await prisma.modifier.update({ where: { id: req.params.id }, data: { active: false } });
+  await prisma.modifier.update({ where: { id: String(req.params.id) }, data: { active: false } });
   res.status(204).end();
 });

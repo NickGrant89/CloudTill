@@ -1497,12 +1497,19 @@ select:focus-visible {
     align-items: center;
   }
 
-  .register.pane-items + .mobile-dock {
+  .register.pane-items + .mobile-dock,
+  .register.pane-ticket + .mobile-dock {
     display: flex;
     flex: 0 0 auto;
   }
 
-  .register.pane-items + .mobile-dock.is-hidden {
+  .register.pane-items + .mobile-dock.is-hidden,
+  .register.pane-ticket + .mobile-dock.is-hidden {
+    display: none;
+  }
+
+  /* Tickets button opens the board; the rail steals Charge on a short phone. */
+  .open-tickets-rail {
     display: none;
   }
 
@@ -1535,7 +1542,7 @@ select:focus-visible {
 
   .grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-auto-rows: 140px;
+    grid-auto-rows: minmax(108px, 22vw);
     gap: 8px;
     padding: 8px 10px 14px;
   }
@@ -1560,17 +1567,6 @@ select:focus-visible {
   .live-sync-toast {
     flex: 1 0 100%;
     order: -1;
-  }
-
-  .open-tickets-rail {
-    padding: 0 10px 8px;
-  }
-
-  .open-ticket-chip {
-    min-width: 120px;
-    max-width: 160px;
-    min-height: 44px;
-    padding: 6px 10px;
   }
 
   .ticket-head > div {
@@ -1607,16 +1603,14 @@ select:focus-visible {
   .actions {
     flex-shrink: 0;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
-    padding: 0 10px calc(10px + env(safe-area-inset-bottom));
+    padding: 0 10px 8px;
     background: #f6f1e8;
   }
 
   .actions .pay-btn {
-    grid-column: 1 / -1;
-    order: -1;
-    min-height: 46px;
+    display: none;
   }
 
   .actions button {
