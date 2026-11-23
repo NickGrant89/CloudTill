@@ -1438,7 +1438,7 @@ select:focus-visible {
   }
 
   .toolbar-identity select {
-    flex: 1 1 auto;
+    flex: 0 1 136px;
     max-width: 136px;
     min-width: 0;
     min-height: 36px;
@@ -1446,25 +1446,22 @@ select:focus-visible {
     font-size: 0.85rem;
   }
 
-  .toolbar-identity {
-    flex-wrap: wrap;
+  /* iPad pin controls stay on wider screens. A phone shows one register name. */
+  .pin-till-btn,
+  .guided-note {
+    display: none;
+  }
+
+  .toolbar-identity.is-choosing .register-badge {
+    display: none;
   }
 
   .register-badge {
-    max-width: 46vw;
+    flex: 0 1 auto;
+    max-width: 128px;
     min-height: 36px;
-    padding: 0 12px;
-    font-size: 0.85rem;
-  }
-
-  .pin-till-btn {
-    flex: 1 1 100%;
-    min-height: 36px;
-  }
-
-  .guided-note {
-    margin: 6px 6px 0;
-    align-items: flex-start;
+    padding: 0 10px;
+    font-size: 0.82rem;
   }
 
   .lock-btn {

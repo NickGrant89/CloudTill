@@ -1167,7 +1167,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   return (
     <div className={`app-shell till-${tillPhase}`}>
       <div className="toolbar-dark">
-        <div className="toolbar-identity">
+        <div className={`toolbar-identity${pinnedId !== registerId ? " is-choosing" : ""}`}>
           <strong className="store-name">{store.name}</strong>
           <span className="who">{user.name}</span>
           {currentRegister && (
