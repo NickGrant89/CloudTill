@@ -1351,7 +1351,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             </button>
             <div>
               <h2>{ticket?.name ?? "New sale"}</h2>
-              <div style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
+              <div className="ticket-sub" style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
                 {ticket?.customer ? `${ticket.customer.name} · ${ticket.customer.loyaltyPoints} pts` : "Walk-in"}
                 {ticket?.registerName ? ` · ${ticket.registerName}` : ""}
                 {offline.online ? " · live sync" : ""}
@@ -1436,18 +1436,22 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
               <span>Subtotal</span>
               <span>{money(ticket?.subtotalCents ?? 0)}</span>
             </div>
+            {(ticket?.discountCents ?? 0) > 0 && (
+              <div className="row">
+                <span>Discount</span>
+                <span>{money(-(ticket?.discountCents ?? 0))}</span>
+              </div>
+            )}
             <div className="row">
-              <span>Discount</span>
-              <span>{money(-(ticket?.discountCents ?? 0))}</span>
-            </div>
-            <div className="row">
-              <span>Tax</span>
+              <span>VAT</span>
               <span>{money(ticket?.taxCents ?? 0)}</span>
             </div>
-            <div className="row">
-              <span>Tip</span>
-              <span>{money(ticket?.tipCents ?? 0)}</span>
-            </div>
+            {(ticket?.tipCents ?? 0) > 0 && (
+              <div className="row">
+                <span>Tip</span>
+                <span>{money(ticket?.tipCents ?? 0)}</span>
+              </div>
+            )}
             <div className="row grand">
               <span>Total</span>
               <span>{money(ticket?.totalCents ?? 0)}</span>
