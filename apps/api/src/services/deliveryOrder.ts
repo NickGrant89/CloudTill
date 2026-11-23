@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { receiptModifierLines } from "@cloudtill/shared";
 import { prisma } from "../db.js";
 import { calcTax, lineSubtotal } from "../money.js";
 import { attributionEmployee } from "../company.js";
@@ -356,9 +357,14 @@ export async function injectDeliveryOrder(input: IngestOrderInput) {
     input.paidByPlatform === false ? "UNPAID / confirm on tablet" : `PAID via ${label}`,
     "----",
     ...resolvedLines.map((l) => {
-      const mods = JSON.parse(l.modifiersJson || "[]") as { name: string }[];
-      const modLabel = mods.length ? ` (${mods.map((m) => m.name).join(", ")})` : "";
-      return `${l.quantity} x ${l.name}${modLabel}`;
+      let extra = "";
+      try {
+        const lines = receiptModifierLines(JSON.parse(l.modifiersJson || "[]") as { name?: string; groupName?: string }[]);
+        extra = lines.length ? `\n${lines.map((line) => `  ${line}`).join("\n")}` : "";
+      } catch {
+        extra = "";
+      }
+      return `${l.quantity} x ${l.name}${extra}`;
     }),
     input.note ? `Note: ${input.note}` : null,
   ]

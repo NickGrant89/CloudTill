@@ -278,6 +278,48 @@ export function ModifierEditor({
     (set) => !groups.some((group) => group.name.toLowerCase() === set.name.toLowerCase())
   );
 
+  async function moveGroups(index: number, dir: -1 | 1) {
+    const next = index + dir;
+    if (next < 0 || next >= groups.length) return;
+    const ids = groups.map((group) => group.id);
+    const [id] = ids.splice(index, 1);
+    ids.splice(next, 0, id);
+    setError("");
+    try {
+      await api(`/catalog/items/${itemId}/modifier-order`, {
+        method: "POST",
+        body: JSON.stringify({ groupIds: ids }),
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not reorder modifiers");
+    }
+  }
+
+  async function moveOptions(
+    group: (typeof groups)[number],
+    index: number,
+    dir: -1 | 1
+  ) {
+    const active = group.modifiers.filter((modifier) => modifier.active);
+    const next = index + dir;
+    if (next < 0 || next >= active.length) return;
+    const ordered = [...active];
+    const [row] = ordered.splice(index, 1);
+    ordered.splice(next, 0, row);
+    const inactive = group.modifiers.filter((modifier) => !modifier.active);
+    setError("");
+    try {
+      await api(`/catalog/modifier-groups/${group.id}/modifier-order`, {
+        method: "POST",
+        body: JSON.stringify({ modifierIds: [...ordered, ...inactive].map((modifier) => modifier.id) }),
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not reorder options");
+    }
+  }
+
   async function addExisting(e: React.FormEvent) {
     e.preventDefault();
     const set = sets.find((entry) => entry.name === picked);
@@ -313,12 +355,20 @@ export function ModifierEditor({
       </div>
       {error && <p className="error">{error}</p>}
       {groups.length === 0 && <p style={{ color: "var(--muted)" }}>No modifiers on this item yet.</p>}
-      {groups.map((g) => (
+      {groups.map((g, groupIndex) => {
+        const active = g.modifiers.filter((m) => m.active);
+        return (
         <div key={g.id} style={{ marginBottom: 14 }}>
           <strong>{g.name}</strong>{" "}
           <span style={{ color: "var(--muted)" }}>
             {g.minSelect > 0 ? "Required" : "Optional"} · {g.maxSelect > 1 ? "pick many" : "pick one"}
           </span>
+          <button type="button" className="secondary" style={{ marginLeft: 8, minHeight: 32 }} disabled={groupIndex === 0} onClick={() => void moveGroups(groupIndex, -1)}>
+            Up
+          </button>
+          <button type="button" className="secondary" style={{ marginLeft: 6, minHeight: 32 }} disabled={groupIndex === groups.length - 1} onClick={() => void moveGroups(groupIndex, 1)}>
+            Down
+          </button>
           <button
             type="button"
             className="secondary"
@@ -330,17 +380,24 @@ export function ModifierEditor({
             Remove
           </button>
           <ul>
-            {g.modifiers
-              .filter((m) => m.active)
-              .map((m) => (
-                <li key={m.id}>
-                  {m.name}
-                  {m.priceCents ? ` +${money(m.priceCents)}` : ""}
+            {active.map((m, optionIndex) => (
+                <li key={m.id} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
+                  <span>
+                    {m.name}
+                    {m.priceCents ? ` +${money(m.priceCents)}` : ""}
+                  </span>
+                  <button type="button" className="secondary" style={{ minHeight: 32 }} disabled={optionIndex === 0} onClick={() => void moveOptions(g, optionIndex, -1)}>
+                    Up
+                  </button>
+                  <button type="button" className="secondary" style={{ minHeight: 32 }} disabled={optionIndex === active.length - 1} onClick={() => void moveOptions(g, optionIndex, 1)}>
+                    Down
+                  </button>
                 </li>
               ))}
           </ul>
         </div>
-      ))}
+        );
+      })}
       <form onSubmit={(e) => void addExisting(e)} className="grid-2">
         <div className="field">
           <label>Add a modifier</label>
@@ -403,6 +460,26 @@ export function ModifierLibrary({
   useEffect(() => {
     void load().catch((err) => setError(err instanceof Error ? err.message : "Could not load modifiers"));
   }, []);
+
+  async function moveSetOption(index: number, dir: -1 | 1) {
+    if (!selectedSet) return;
+    const next = index + dir;
+    if (next < 0 || next >= selectedSet.options.length) return;
+    const names = selectedSet.options.map((option) => option.name);
+    const [name] = names.splice(index, 1);
+    names.splice(next, 0, name);
+    setError("");
+    try {
+      await api("/catalog/modifier-sets/order", {
+        method: "POST",
+        body: JSON.stringify({ name: selectedSet.name, optionNames: names }),
+      });
+      await load(selectedSet.name);
+      onChange();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not reorder options");
+    }
+  }
 
   function toggle(list: string[], id: string, setList: (next: string[]) => void) {
     setList(list.includes(id) ? list.filter((itemId) => itemId !== id) : [...list, id]);
@@ -619,11 +696,24 @@ export function ModifierLibrary({
             <h3 style={{ marginTop: 0 }}>{selectedSet.name}</h3>
             <p style={{ color: "var(--muted)", marginTop: 0 }}>
               {selectedSet.minSelect > 0 ? "Required" : "Optional"} · {selectedSet.maxSelect > 1 ? "pick many" : "pick one"}
-              {" · "}
-              {selectedSet.options
-                .map((option) => `${option.name}${option.priceCents ? ` +${money(option.priceCents)}` : ""}`)
-                .join(" · ")}
             </p>
+            <p style={{ marginTop: 0 }}>This order is used on the till, the kitchen ticket, and the receipt. Moving an option updates every item that uses {selectedSet.name}.</p>
+            <ul style={{ listStyle: "none", padding: 0, margin: "0 0 14px" }}>
+              {selectedSet.options.map((option, index) => (
+                <li key={`${option.name}-${index}`} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                  <span>
+                    {option.name}
+                    {option.priceCents ? ` +${money(option.priceCents)}` : ""}
+                  </span>
+                  <button type="button" className="secondary" style={{ minHeight: 32 }} disabled={index === 0} onClick={() => void moveSetOption(index, -1)}>
+                    Up
+                  </button>
+                  <button type="button" className="secondary" style={{ minHeight: 32 }} disabled={index === selectedSet.options.length - 1} onClick={() => void moveSetOption(index, 1)}>
+                    Down
+                  </button>
+                </li>
+              ))}
+            </ul>
             <div className="field">
               <label>Items</label>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>

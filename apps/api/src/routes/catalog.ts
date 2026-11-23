@@ -61,7 +61,12 @@ catalogRouter.get("/items", async (req: AuthedRequest, res) => {
     },
     include: {
       variants: { where: { active: true } },
-      modifierGroups: { include: { modifiers: { where: { active: true } } } },
+      modifierGroups: {
+        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+        include: {
+          modifiers: { where: { active: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] },
+        },
+      },
       kitComponents: true,
     },
     orderBy: { name: "asc" },
@@ -145,14 +150,21 @@ catalogRouter.post("/items", requireRole("owner", "manager"), async (req: Authed
   });
 
   if (body.modifiers?.length) {
-    for (const g of body.modifiers) {
+    for (const [index, g] of body.modifiers.entries()) {
       await prisma.modifierGroup.create({
         data: {
           itemId: item.id,
           name: g.name,
           minSelect: g.minSelect ?? 0,
           maxSelect: g.maxSelect ?? 1,
-          modifiers: { create: g.options.map((o) => ({ name: o.name, priceCents: o.priceCents })) },
+          sortOrder: index,
+          modifiers: {
+            create: g.options.map((o, optionIndex) => ({
+              name: o.name,
+              priceCents: o.priceCents,
+              sortOrder: optionIndex,
+            })),
+          },
         },
       });
     }
@@ -162,7 +174,10 @@ catalogRouter.post("/items", requireRole("owner", "manager"), async (req: Authed
     where: { id: item.id },
     include: {
       variants: true,
-      modifierGroups: { include: { modifiers: true } },
+      modifierGroups: {
+        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+        include: { modifiers: { orderBy: [{ sortOrder: "asc" }, { id: "asc" }] } },
+      },
     },
   });
   res.status(201).json(full);
@@ -261,7 +276,12 @@ catalogRouter.post("/items/assign-stores", requireRole("owner", "manager"), asyn
     include: {
       variants: { where: { active: true } },
       category: true,
-      modifierGroups: { include: { modifiers: { where: { active: true } } } },
+      modifierGroups: {
+        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+        include: {
+          modifiers: { where: { active: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] },
+        },
+      },
     },
   });
   if (!sources.length) return res.status(404).json({ error: "No items found in this store" });
@@ -347,10 +367,12 @@ catalogRouter.post("/items/assign-stores", requireRole("owner", "manager"), asyn
             name: g.name,
             minSelect: g.minSelect,
             maxSelect: g.maxSelect,
+            sortOrder: g.sortOrder,
             modifiers: {
               create: g.modifiers.map((m) => ({
                 name: m.name,
                 priceCents: m.priceCents,
+                sortOrder: m.sortOrder,
               })),
             },
           },
@@ -410,7 +432,13 @@ catalogRouter.patch("/items/:id", owned("item"), requireRole("owner", "manager")
 
   const full = await prisma.item.findUnique({
     where: { id: req.params.id },
-    include: { variants: true, modifierGroups: { include: { modifiers: true } } },
+    include: {
+      variants: true,
+      modifierGroups: {
+        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+        include: { modifiers: { orderBy: [{ sortOrder: "asc" }, { id: "asc" }] } },
+      },
+    },
   });
   res.json(full);
 });
@@ -424,7 +452,7 @@ catalogRouter.get("/modifier-sets", async (req: AuthedRequest, res) => {
   const groups = await prisma.modifierGroup.findMany({
     where: { item: { storeId: req.user!.storeId, active: true } },
     include: {
-      modifiers: { where: { active: true } },
+      modifiers: { where: { active: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] },
       item: { select: { id: true, name: true } },
     },
     orderBy: { name: "asc" },
@@ -491,7 +519,11 @@ catalogRouter.post("/modifier-sets", requireRole("owner", "manager"), async (req
         minSelect: Math.min(body.minSelect, body.maxSelect),
         maxSelect: body.maxSelect,
         modifiers: {
-          create: body.options.map((option) => ({ name: option.name.trim(), priceCents: option.priceCents })),
+          create: body.options.map((option, index) => ({
+            name: option.name.trim(),
+            priceCents: option.priceCents,
+            sortOrder: index,
+          })),
         },
       },
     });
@@ -501,13 +533,52 @@ catalogRouter.post("/modifier-sets", requireRole("owner", "manager"), async (req
   res.status(201).json({ created, skipped });
 });
 
+catalogRouter.post("/modifier-sets/order", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const body = z
+    .object({
+      name: z.string().min(1).max(80),
+      optionNames: z.array(z.string().min(1).max(80)).min(1).max(40),
+    })
+    .parse(req.body);
+  const wanted = body.name.trim().toLowerCase();
+  const groups = await prisma.modifierGroup.findMany({
+    where: { item: { storeId: req.user!.storeId } },
+    include: { modifiers: true },
+  });
+  const matching = groups.filter((group) => group.name.toLowerCase() === wanted);
+  if (!matching.length) return res.status(404).json({ error: "Modifier not found" });
+  const rank = new Map(body.optionNames.map((name, index) => [name.trim().toLowerCase(), index]));
+  for (const group of matching) {
+    for (const modifier of group.modifiers) {
+      const index = rank.get(modifier.name.toLowerCase());
+      if (index === undefined || modifier.sortOrder === index) continue;
+      await prisma.modifier.update({ where: { id: modifier.id }, data: { sortOrder: index } });
+    }
+  }
+  res.json({ ok: true });
+});
+
 catalogRouter.get("/items/:id/modifiers", owned("item"), async (req, res) => {
   const groups = await prisma.modifierGroup.findMany({
     where: { itemId: req.params.id },
-    include: { modifiers: true },
-    orderBy: { name: "asc" },
+    include: { modifiers: { orderBy: [{ sortOrder: "asc" }, { id: "asc" }] } },
+    orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
   });
   res.json(groups);
+});
+
+catalogRouter.post("/items/:id/modifier-order", owned("item"), requireRole("owner", "manager"), async (req, res) => {
+  const body = z.object({ groupIds: z.array(z.string()).min(1).max(40) }).parse(req.body);
+  const itemId = String(req.params.id);
+  const groups = await prisma.modifierGroup.findMany({ where: { itemId } });
+  const ids = new Set(groups.map((group) => group.id));
+  if (body.groupIds.length !== groups.length || body.groupIds.some((id) => !ids.has(id))) {
+    return res.status(400).json({ error: "Send every modifier on this item, in the new order." });
+  }
+  await Promise.all(
+    body.groupIds.map((id, index) => prisma.modifierGroup.update({ where: { id }, data: { sortOrder: index } }))
+  );
+  res.json({ ok: true });
 });
 
 catalogRouter.post("/items/:id/modifier-groups", owned("item"), requireRole("owner", "manager"), async (req, res) => {
@@ -527,8 +598,11 @@ catalogRouter.post("/items/:id/modifier-groups", owned("item"), requireRole("own
       name: body.name,
       minSelect: body.minSelect ?? 0,
       maxSelect: body.maxSelect ?? 1,
+      sortOrder: await prisma.modifierGroup.count({ where: { itemId: String(req.params.id) } }),
       modifiers: body.modifiers?.length
-        ? { create: body.modifiers.map((m) => ({ name: m.name, priceCents: m.priceCents })) }
+        ? {
+            create: body.modifiers.map((m, index) => ({ name: m.name, priceCents: m.priceCents, sortOrder: index })),
+          }
         : undefined,
     },
     include: { modifiers: true },
@@ -563,7 +637,12 @@ catalogRouter.post("/modifier-groups/:id/modifiers", owned("modifierGroup"), req
     .object({ name: z.string().min(1), priceCents: z.number().int().default(0) })
     .parse(req.body);
   const mod = await prisma.modifier.create({
-    data: { groupId: req.params.id, name: body.name, priceCents: body.priceCents },
+    data: {
+      groupId: req.params.id,
+      name: body.name,
+      priceCents: body.priceCents,
+      sortOrder: await prisma.modifier.count({ where: { groupId: String(req.params.id) } }),
+    },
   });
   res.status(201).json(mod);
 });
@@ -579,6 +658,25 @@ catalogRouter.patch("/modifiers/:id", owned("modifier"), requireRole("owner", "m
   const mod = await prisma.modifier.update({ where: { id: req.params.id }, data: body });
   res.json(mod);
 });
+
+catalogRouter.post(
+  "/modifier-groups/:id/modifier-order",
+  owned("modifierGroup"),
+  requireRole("owner", "manager"),
+  async (req, res) => {
+    const body = z.object({ modifierIds: z.array(z.string()).min(1).max(40) }).parse(req.body);
+    const groupId = String(req.params.id);
+    const modifiers = await prisma.modifier.findMany({ where: { groupId } });
+    const ids = new Set(modifiers.map((modifier) => modifier.id));
+    if (body.modifierIds.length !== modifiers.length || body.modifierIds.some((id) => !ids.has(id))) {
+      return res.status(400).json({ error: "Send every option in this modifier, in the new order." });
+    }
+    await Promise.all(
+      body.modifierIds.map((id, index) => prisma.modifier.update({ where: { id }, data: { sortOrder: index } }))
+    );
+    res.json({ ok: true });
+  }
+);
 
 catalogRouter.delete("/modifiers/:id", owned("modifier"), requireRole("owner", "manager"), async (req, res) => {
   await prisma.modifier.update({ where: { id: req.params.id }, data: { active: false } });

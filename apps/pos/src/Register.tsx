@@ -1,3 +1,4 @@
+import { groupModifierLines } from "@cloudtill/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, getToken, loadCatalogSnapshot, money, OfflineError, saveCatalogSnapshot } from "./api";
 import type { SessionRegister, SessionStore, SessionUser } from "./App";
@@ -63,7 +64,26 @@ interface TicketLine {
   quantity: number;
   unitPriceCents: number;
   discountCents: number;
-  modifiers: { name: string; priceCents: number; modifierId?: string }[];
+  modifiers: { name: string; priceCents: number; modifierId?: string; groupName?: string }[];
+}
+
+function ModifierList({ mods }: { mods: { name: string; groupName?: string }[] }) {
+  const blocks = groupModifierLines(mods);
+  if (!blocks.length) return null;
+  return (
+    <ul className="mod-list">
+      {blocks.map((block, index) => (
+        <li key={`${block.groupName ?? "mods"}-${index}`}>
+          {block.groupName && <div className="mod-group">{block.groupName}</div>}
+          {block.names.map((name, nameIndex) => (
+            <div key={`${name}-${nameIndex}`} className="mod-name">
+              {name}
+            </div>
+          ))}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 interface Ticket {
@@ -480,7 +500,10 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     await addVariant(item, []);
   }
 
-  async function addVariant(item: Item, modifiers: { modifierId?: string; name: string; priceCents: number }[]) {
+  async function addVariant(
+    item: Item,
+    modifiers: { modifierId?: string; name: string; priceCents: number; groupName?: string }[]
+  ) {
     const variant = item.variants[0];
     if (!variant) {
       fail("Item", new Error(`${item.name} has no price`));
@@ -561,9 +584,14 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
         return;
       }
     }
-    const mods = Object.values(selectedMods)
-      .flat()
-      .map((option) => ({ modifierId: option.id, name: option.name, priceCents: option.priceCents }));
+    const mods = modifierItem.modifierGroups.flatMap((group) =>
+      (selectedMods[group.id] ?? []).map((option) => ({
+        modifierId: option.id,
+        name: option.name,
+        priceCents: option.priceCents,
+        groupName: group.name,
+      }))
+    );
     if (await addVariant(modifierItem, mods)) setModifierItem(null);
   }
 
@@ -1097,7 +1125,14 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             name: line.name,
             quantity,
             unitPriceCents: line.unitPriceCents,
-            modifiersJson: JSON.stringify(line.modifiers.map((m) => ({ name: m.name, priceCents: m.priceCents }))),
+            modifiersJson: JSON.stringify(
+              line.modifiers.map((m) => ({
+                name: m.name,
+                priceCents: m.priceCents,
+                ...(m.modifierId ? { modifierId: m.modifierId } : {}),
+                ...(m.groupName ? { groupName: m.groupName } : {}),
+              }))
+            ),
           })),
         }),
       });
@@ -1119,12 +1154,11 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     .flat()
     .reduce((sum, option) => sum + option.priceCents, 0);
   const modifierTotal = (modifierItem?.variants[0]?.priceCents ?? 0) + modifierExtra;
-  const modifierSummary = modifierItem
-    ? modifierItem.modifierGroups
-        .map((group) => (selectedMods[group.id] ?? []).map((option) => option.name).join(", "))
-        .filter(Boolean)
-        .join(" · ")
-    : "";
+  const modifierPreview = modifierItem
+    ? modifierItem.modifierGroups.flatMap((group) =>
+        (selectedMods[group.id] ?? []).map((option) => ({ name: option.name, groupName: group.name }))
+      )
+    : [];
   const tillPhase: "sale" | "options" | "pay" | "done" = modifierItem
     ? "options"
     : modal?.type === "pay"
@@ -1372,7 +1406,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
               <div>
                 <p className="step-kicker">Step 2 · Options</p>
                 <strong>{modifierItem.name}</strong>
-                <div className="meta">{modifierSummary || "Choose options"}</div>
+                {modifierPreview.length > 0 ? <ModifierList mods={modifierPreview} /> : <div className="meta">Choose options</div>}
               </div>
               <button type="button" className="pay-btn" onClick={() => void confirmModifiers()}>
                 Add {money(modifierTotal)}
@@ -1443,9 +1477,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
                 <div key={line.key} className="line">
                   <div>
                     <div style={{ fontWeight: 600 }}>{line.name}</div>
-                    {line.modifiers.length > 0 && (
-                      <div className="meta">{line.modifiers.map((m) => m.name).join(", ")}</div>
-                    )}
+                    {line.modifiers.length > 0 && <ModifierList mods={line.modifiers} />}
                     <div className="qty-controls" style={{ marginTop: 6 }}>
                       <button type="button" onClick={() => void updateQty(line, line.quantity - 1)}>
                         −
@@ -1793,7 +1825,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
               {unsentLines.map(({ line, quantity }) => (
                 <li key={line.key}>
                   <strong>{quantity}×</strong> {line.name}
-                  {line.modifiers.length > 0 && <small> · {line.modifiers.map((m) => m.name).join(", ")}</small>}
+                  {line.modifiers.length > 0 && <ModifierList mods={line.modifiers} />}
                 </li>
               ))}
             </ul>

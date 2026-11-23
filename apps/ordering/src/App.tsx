@@ -56,8 +56,38 @@ interface CartLine {
   name: string;
   quantity: number;
   unitPriceCents: number;
-  modifiers: { id?: string; name: string; priceCents: number }[];
+  modifiers: { id?: string; name: string; priceCents: number; groupName?: string }[];
   note?: string;
+}
+
+function modifierBlocks(mods: { name?: string; groupName?: string }[]) {
+  const blocks: { groupName?: string; names: string[] }[] = [];
+  for (const mod of mods) {
+    const name = mod.name?.trim();
+    if (!name) continue;
+    const groupName = mod.groupName?.trim() || undefined;
+    const last = blocks[blocks.length - 1];
+    if (last && last.groupName === groupName) last.names.push(name);
+    else blocks.push({ groupName, names: [name] });
+  }
+  return blocks;
+}
+
+function ModifierLines({ mods }: { mods: { name?: string; groupName?: string }[] }) {
+  const blocks = modifierBlocks(mods);
+  if (!blocks.length) return null;
+  return (
+    <ul className="mod-list">
+      {blocks.map((block, index) => (
+        <li key={`${block.groupName ?? "mods"}-${index}`}>
+          {block.groupName && <div className="mod-group">{block.groupName}</div>}
+          {block.names.map((name, nameIndex) => (
+            <div key={`${name}-${nameIndex}`}>{name}</div>
+          ))}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 interface StoreInfo {
@@ -232,13 +262,13 @@ function quoteDeliveryFee(subtotal: number, quote: DeliveryQuote | null, fulfill
 
 function parseMods(json: string) {
   try {
-    const parsed = JSON.parse(json) as { name?: string; priceCents?: number }[];
+    const parsed = JSON.parse(json) as { name?: string; priceCents?: number; groupName?: string }[];
     return {
-      label: parsed.map((mod) => mod.name).filter(Boolean).join(", "),
+      mods: parsed.filter((mod) => mod.name),
       priceCents: parsed.reduce((sum, mod) => sum + (mod.priceCents ?? 0), 0),
     };
   } catch {
-    return { label: "", priceCents: 0 };
+    return { mods: [] as { name?: string; groupName?: string }[], priceCents: 0 };
   }
 }
 
@@ -429,7 +459,7 @@ export function App() {
 
   function pushCartLine(
     item: Item,
-    modifiers: { id?: string; name: string; priceCents: number }[],
+    modifiers: { id?: string; name: string; priceCents: number; groupName?: string }[],
     quantity: number,
     lineNote?: string
   ) {
@@ -484,9 +514,14 @@ export function App() {
         return;
       }
     }
-    const modifiers = Object.values(pickedMods)
-      .flat()
-      .map((mod) => ({ id: mod.id, name: mod.name, priceCents: mod.priceCents }));
+    const modifiers = modItem.modifierGroups.flatMap((group) =>
+      (pickedMods[group.id] ?? []).map((mod) => ({
+        id: mod.id,
+        name: mod.name,
+        priceCents: mod.priceCents,
+        groupName: group.name,
+      }))
+    );
     pushCartLine(modItem, modifiers, modQty, modNote.trim());
     setModItem(null);
     setView("menu");
@@ -678,7 +713,7 @@ export function App() {
                     <strong>
                       {line.quantity} × {line.name}
                     </strong>
-                    {mods.label && <small>{mods.label}</small>}
+                    {mods.mods.length > 0 && <ModifierLines mods={mods.mods} />}
                   </span>
                   <span>{money((line.unitPriceCents + mods.priceCents) * line.quantity)}</span>
                 </li>
@@ -1175,9 +1210,7 @@ function Checkout({
           <div key={line.key} className="line">
             <div>
               <div className="line-title">{line.name}</div>
-              {line.modifiers.length > 0 && (
-                <div className="line-mods">{line.modifiers.map((mod) => mod.name).join(", ")}</div>
-              )}
+              {line.modifiers.length > 0 && <ModifierLines mods={line.modifiers} />}
               {line.note && <div className="line-mods">{line.note}</div>}
               <div className="qty">
                 <button type="button" aria-label={`Decrease ${line.name}`} onClick={() => onQty(line.key, line.quantity - 1)}>

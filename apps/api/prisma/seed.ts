@@ -209,17 +209,19 @@ async function seedDemo() {
     });
 
     if (opts.modifiers) {
-      for (const g of opts.modifiers) {
+      for (const [index, g] of opts.modifiers.entries()) {
         await prisma.modifierGroup.create({
           data: {
             itemId: item.id,
             name: g.group,
             minSelect: g.min ?? 0,
             maxSelect: g.max ?? 1,
+            sortOrder: index,
             modifiers: {
-              create: g.options.map((o) => ({
+              create: g.options.map((o, optionIndex) => ({
                 name: o.name,
                 priceCents: o.priceCents,
+                sortOrder: optionIndex,
               })),
             },
           },

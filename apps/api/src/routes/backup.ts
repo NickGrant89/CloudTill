@@ -219,11 +219,13 @@ backupRouter.post("/restore", requireRole("owner"), async (req: AuthedRequest, r
           name: String(g.name || "Options"),
           minSelect: Number(g.minSelect ?? 0),
           maxSelect: Number(g.maxSelect ?? 1),
+          sortOrder: Number(g.sortOrder ?? 0),
           modifiers: {
-            create: mods.map((m) => ({
+            create: mods.map((m, index) => ({
               name: String(m.name || "Option"),
               priceCents: Number(m.priceCents ?? 0),
               active: m.active === false ? false : true,
+              sortOrder: Number(m.sortOrder ?? index),
             })),
           },
         },

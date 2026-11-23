@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
+import { receiptModifierLines } from "@cloudtill/shared";
 import { owned } from "../tenant.js";
 import { soldOutItemIds } from "../services/soldOut.js";
 import { requireAuth, type AuthedRequest } from "../auth.js";
@@ -70,7 +71,12 @@ publicOrderingRouter.get("/stores/:slug/menu", async (req, res) => {
       where: { storeId: store.id, active: true },
       include: {
         variants: { where: { active: true } },
-        modifierGroups: { include: { modifiers: { where: { active: true } } } },
+        modifierGroups: {
+          orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+          include: {
+            modifiers: { where: { active: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] },
+          },
+        },
       },
       orderBy: { name: "asc" },
     }),
@@ -211,15 +217,25 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
     if (soldOut.has(variant.itemId)) {
       return res.status(409).json({ error: `Sorry, ${variant.item.name} has just sold out. Please remove it.` });
     }
-    const allowed = variant.item.modifierGroups.flatMap((g) => g.modifiers);
-    const mods: { name: string; priceCents: number }[] = [];
+    const allowed = variant.item.modifierGroups.flatMap((group) =>
+      group.modifiers.map((modifier) => ({ ...modifier, groupName: group.name, groupOrder: group.sortOrder }))
+    );
+    const mods: { name: string; priceCents: number; groupName?: string; groupOrder: number; optionOrder: number; groupId: string }[] = [];
     for (const m of line.modifiers ?? []) {
       const match = allowed.find((a) => (m.id ? a.id === m.id : a.name === m.name));
       if (!match) {
         return res.status(400).json({ error: `"${m.name}" isn't available for ${variant.item.name} any more.` });
       }
-      mods.push({ name: match.name, priceCents: match.priceCents });
+      mods.push({
+        name: match.name,
+        priceCents: match.priceCents,
+        groupName: match.groupName,
+        groupOrder: match.groupOrder,
+        optionOrder: match.sortOrder,
+        groupId: match.groupId,
+      });
     }
+    mods.sort((a, b) => a.groupOrder - b.groupOrder || a.groupId.localeCompare(b.groupId) || a.optionOrder - b.optionOrder);
     const modSum = mods.reduce((s, m) => s + m.priceCents, 0);
     subtotal += lineSubtotal(variant.priceCents, line.quantity, modSum, 0);
     resolvedLines.push({
@@ -227,7 +243,9 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
       name: variant.item.name,
       quantity: line.quantity,
       unitPriceCents: variant.priceCents,
-      modifiersJson: JSON.stringify(mods),
+      modifiersJson: JSON.stringify(
+        mods.map((mod) => ({ name: mod.name, priceCents: mod.priceCents, ...(mod.groupName ? { groupName: mod.groupName } : {}) }))
+      ),
       note: line.note,
     });
   }
@@ -326,9 +344,14 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
     `PAID ${card.brand} •••• ${card.last4}`,
     "----",
     ...resolvedLines.map((l) => {
-      const mods = JSON.parse(l.modifiersJson || "[]") as { name: string }[];
-      const modLabel = mods.length ? ` (${mods.map((m) => m.name).join(", ")})` : "";
-      return `${l.quantity} x ${l.name}${modLabel}`;
+      let extra = "";
+      try {
+        const lines = receiptModifierLines(JSON.parse(l.modifiersJson || "[]") as { name?: string; groupName?: string }[]);
+        extra = lines.length ? `\n${lines.map((line) => `  ${line}`).join("\n")}` : "";
+      } catch {
+        extra = "";
+      }
+      return `${l.quantity} x ${l.name}${extra}`;
     }),
     orderNote ? `Note: ${orderNote}` : null,
   ]

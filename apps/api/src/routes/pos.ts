@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import { prisma } from "../db.js";
+import { orderStoredModifiers } from "../modifierOrder.js";
 import { owned, rejectForeign } from "../tenant.js";
 import { requireAuth, type AuthedRequest } from "../auth.js";
 import { calcTax, lineSubtotal } from "../money.js";
@@ -127,7 +128,14 @@ posRouter.post("/tickets/:id/lines", owned("ticket"), async (req: AuthedRequest,
       variantId: z.string(),
       quantity: z.number().positive().default(1),
       modifiers: z
-        .array(z.object({ modifierId: z.string().optional(), name: z.string(), priceCents: z.number().int() }))
+        .array(
+          z.object({
+            modifierId: z.string().optional(),
+            name: z.string(),
+            priceCents: z.number().int(),
+            groupName: z.string().max(80).optional(),
+          })
+        )
         .optional(),
       note: z.string().optional(),
     })
@@ -147,7 +155,7 @@ posRouter.post("/tickets/:id/lines", owned("ticket"), async (req: AuthedRequest,
       name: variant.item.name + (variant.name !== "Regular" ? ` (${variant.name})` : ""),
       quantity: body.quantity,
       unitPriceCents: variant.priceCents,
-      modifiersJson: JSON.stringify(body.modifiers ?? []),
+      modifiersJson: JSON.stringify(await orderStoredModifiers(body.modifiers ?? [])),
       note: body.note,
     },
   });
@@ -485,7 +493,14 @@ posRouter.post("/offline-sales", async (req: AuthedRequest, res) => {
             unitPriceCents: z.number().int(),
             discountCents: z.number().int().default(0),
             modifiers: z
-              .array(z.object({ name: z.string(), priceCents: z.number().int(), modifierId: z.string().optional() }))
+              .array(
+                z.object({
+                  name: z.string(),
+                  priceCents: z.number().int(),
+                  modifierId: z.string().optional(),
+                  groupName: z.string().max(80).optional(),
+                })
+              )
               .default([]),
           })
         )
@@ -578,19 +593,22 @@ posRouter.post("/offline-sales", async (req: AuthedRequest, res) => {
       changeCents: paid - totalCents,
       note: offlineNote,
       lines: {
-        create: body.lines.map((line) => {
-          const modSum = line.modifiers.reduce((s, m) => s + m.priceCents, 0);
-          return {
-            variantId: line.variantId,
-            name: line.name,
-            quantity: line.quantity,
-            unitPriceCents: line.unitPriceCents,
-            discountCents: line.discountCents,
-            taxCents: 0,
-            totalCents: lineSubtotal(line.unitPriceCents, line.quantity, modSum, line.discountCents),
-            modifiersJson: JSON.stringify(line.modifiers),
-          };
-        }),
+        create: await Promise.all(
+          body.lines.map(async (line) => {
+            const modifiers = await orderStoredModifiers(line.modifiers);
+            const modSum = modifiers.reduce((s, m) => s + m.priceCents, 0);
+            return {
+              variantId: line.variantId,
+              name: line.name,
+              quantity: line.quantity,
+              unitPriceCents: line.unitPriceCents,
+              discountCents: line.discountCents,
+              taxCents: 0,
+              totalCents: lineSubtotal(line.unitPriceCents, line.quantity, modSum, line.discountCents),
+              modifiersJson: JSON.stringify(modifiers),
+            };
+          })
+        ),
       },
       payments: {
         create: body.payments.map((p) => ({

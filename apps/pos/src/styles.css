@@ -597,6 +597,26 @@ select:focus-visible {
   font-size: 0.82rem;
 }
 
+.mod-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+
+.mod-list .mod-group {
+  margin-top: 4px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.mod-list .mod-name {
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
 .qty-controls {
   display: flex;
   gap: 6px;
@@ -1744,7 +1764,8 @@ select:focus-visible {
   overflow: auto;
 }
 
-.kitchen-send-list small {
+.kitchen-send-list small,
+.kitchen-send-list .mod-list {
   color: var(--muted);
 }
 

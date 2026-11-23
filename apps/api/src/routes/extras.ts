@@ -65,7 +65,12 @@ extrasRouter.get("/favorites", async (req: AuthedRequest, res) => {
     where: { id: { in: itemIds }, storeId: req.user!.storeId, active: true },
     include: {
       variants: { where: { active: true } },
-      modifierGroups: { include: { modifiers: { where: { active: true } } } },
+      modifierGroups: {
+        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+        include: {
+          modifiers: { where: { active: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] },
+        },
+      },
     },
   });
   const order = new Map(itemIds.map((id, i) => [id, i]));

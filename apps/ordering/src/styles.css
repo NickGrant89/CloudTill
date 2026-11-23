@@ -699,6 +699,22 @@ textarea:focus-visible {
   font-size: 0.88rem;
   margin-top: 2px;
 }
+
+.mod-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.mod-list .mod-group {
+  margin-top: 4px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
 .line .qty { margin-top: 8px; }
 
 .totals {

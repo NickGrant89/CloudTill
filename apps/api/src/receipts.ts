@@ -3,6 +3,7 @@ import {
   buildReceiptHtml,
   buildReceiptText,
   drawerKickBytes,
+  receiptModifierLines,
   type ReceiptData,
 } from "@cloudtill/shared";
 import { prisma } from "./db.js";
@@ -33,7 +34,7 @@ export async function loadReceiptData(saleId: string): Promise<ReceiptData> {
     lines: sale.lines.map((l) => {
       let modifiers: string[] = [];
       try {
-        modifiers = (JSON.parse(l.modifiersJson) as { name: string }[]).map((m) => m.name);
+        modifiers = receiptModifierLines(JSON.parse(l.modifiersJson) as { name?: string; groupName?: string }[]);
       } catch {
         /* ignore */
       }

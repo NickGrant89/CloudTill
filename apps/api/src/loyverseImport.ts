@@ -670,11 +670,12 @@ async function applyItems(storeId: string, rows: LoyversePreviewRow[]) {
       include: { modifiers: true },
     });
     const byName = new Map(groups.map((group) => [group.name.toLowerCase(), group]));
+    let nextGroup = groups.length;
 
     for (const flag of data.modifierFlags) {
       if (byName.has(flag.toLowerCase())) continue;
       const createdGroup = await prisma.modifierGroup.create({
-        data: { itemId, name: flag, minSelect: 0, maxSelect: 1 },
+        data: { itemId, name: flag, minSelect: 0, maxSelect: 1, sortOrder: nextGroup++ },
         include: { modifiers: true },
       });
       byName.set(flag.toLowerCase(), createdGroup);
@@ -690,7 +691,14 @@ async function applyItems(storeId: string, rows: LoyversePreviewRow[]) {
             name: group.name,
             minSelect: group.minSelect ?? 1,
             maxSelect: 1,
-            modifiers: { create: group.options },
+            sortOrder: nextGroup++,
+            modifiers: {
+              create: group.options.map((option, index) => ({
+                name: option.name,
+                priceCents: option.priceCents,
+                sortOrder: index,
+              })),
+            },
           },
           include: { modifiers: true },
         });
@@ -698,6 +706,7 @@ async function applyItems(storeId: string, rows: LoyversePreviewRow[]) {
         modifiersLinked += group.options.length;
         continue;
       }
+      let nextOption = existing.modifiers.reduce((max, modifier) => Math.max(max, modifier.sortOrder), -1) + 1;
       for (const option of group.options) {
         const found = existing.modifiers.find((modifier) => modifier.name.toLowerCase() === option.name.toLowerCase());
         if (found) {
@@ -705,9 +714,10 @@ async function applyItems(storeId: string, rows: LoyversePreviewRow[]) {
             await prisma.modifier.update({ where: { id: found.id }, data: { priceCents: option.priceCents } });
           }
         } else {
-          await prisma.modifier.create({
-            data: { groupId: existing.id, name: option.name, priceCents: option.priceCents },
+          const created = await prisma.modifier.create({
+            data: { groupId: existing.id, name: option.name, priceCents: option.priceCents, sortOrder: nextOption++ },
           });
+          existing.modifiers.push(created);
           modifiersLinked += 1;
         }
       }

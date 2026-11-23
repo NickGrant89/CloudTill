@@ -466,6 +466,26 @@
   color: #475569;
 }
 
+.kds-mods,
+.kds-mod-group,
+.kds-mod-name {
+  display: block;
+}
+
+.kds-mod-group {
+  margin-top: 4px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #334155;
+}
+
+.kds-mod-name {
+  font-size: 0.95rem;
+  color: #1e293b;
+}
+
 .kds-lines em {
   display: block;
   font-style: normal;

@@ -42,6 +42,28 @@ function padLine(left: string, right: string, width = 32): string {
   return left + " ".repeat(space) + right;
 }
 
+export function groupModifierLines(mods: { name?: string; groupName?: string }[]) {
+  const blocks: { groupName?: string; names: string[] }[] = [];
+  for (const mod of mods) {
+    const name = mod.name?.trim();
+    if (!name) continue;
+    const groupName = mod.groupName?.trim() || undefined;
+    const last = blocks[blocks.length - 1];
+    if (last && last.groupName === groupName) last.names.push(name);
+    else blocks.push({ groupName, names: [name] });
+  }
+  return blocks;
+}
+
+export function receiptModifierLines(mods: { name?: string; groupName?: string }[]) {
+  const lines: string[] = [];
+  for (const block of groupModifierLines(mods)) {
+    if (block.groupName) lines.push(block.groupName);
+    for (const name of block.names) lines.push(`+ ${name}`);
+  }
+  return lines;
+}
+
 export function buildReceiptText(data: ReceiptData, width = 32): string {
   const $ = (c: number) => formatMoney(c, data.currencySymbol ?? "£");
   const lines: string[] = [
@@ -57,7 +79,7 @@ export function buildReceiptText(data: ReceiptData, width = 32): string {
   for (const line of data.lines) {
     lines.push(padLine(`${line.quantity} x ${line.name}`.slice(0, width - 8), $(line.totalCents), width));
     for (const m of line.modifiers ?? []) {
-      lines.push(`  + ${m}`.slice(0, width));
+      lines.push(`  ${m}`.slice(0, width));
     }
   }
   lines.push("-".repeat(width));

@@ -1,3 +1,4 @@
+import { groupModifierLines } from "@cloudtill/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, getToken } from "./api";
 import type { SessionStore, SessionUser } from "./App";
@@ -91,7 +92,9 @@ function actionLabel(order: KitchenOrder) {
 
 function parseMods(json: string) {
   try {
-    return (JSON.parse(json) as { name?: string }[]).map((m) => m.name).filter(Boolean) as string[];
+    return (JSON.parse(json) as { name?: string; groupName?: string }[])
+      .filter((mod) => mod.name)
+      .map((mod) => ({ name: mod.name as string, groupName: mod.groupName }));
   } catch {
     return [];
   }
@@ -575,7 +578,20 @@ export function KitchenScreen({
                             <b>{l.quantity}×</b>
                             <span>
                               {l.name}
-                              {mods.length > 0 && <small>{mods.join(", ")}</small>}
+                              {mods.length > 0 && (
+                                <span className="kds-mods">
+                                  {groupModifierLines(mods).map((block, index) => (
+                                    <span key={`${block.groupName ?? "mods"}-${index}`}>
+                                      {block.groupName && <span className="kds-mod-group">{block.groupName}</span>}
+                                      {block.names.map((name, nameIndex) => (
+                                        <span key={`${name}-${nameIndex}`} className="kds-mod-name">
+                                          {name}
+                                        </span>
+                                      ))}
+                                    </span>
+                                  ))}
+                                </span>
+                              )}
                               {l.note && <em>{l.note}</em>}
                             </span>
                           </button>

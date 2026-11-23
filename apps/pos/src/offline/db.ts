@@ -29,7 +29,7 @@ export type QueuedSale = {
       quantity: number;
       unitPriceCents: number;
       discountCents: number;
-      modifiers: { name: string; priceCents: number; modifierId?: string }[];
+      modifiers: { name: string; priceCents: number; modifierId?: string; groupName?: string }[];
     }[];
     payments: {
       paymentTypeId: string;
@@ -56,7 +56,7 @@ export type LocalTicket = {
     quantity: number;
     unitPriceCents: number;
     discountCents: number;
-    modifiers: { name: string; priceCents: number; modifierId?: string }[];
+    modifiers: { name: string; priceCents: number; modifierId?: string; groupName?: string }[];
   }[];
   discountCents: number;
   discountPercent: number;
