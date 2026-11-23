@@ -833,59 +833,6 @@ select:focus-visible {
   cursor: pointer;
 }
 
-.till-steps {
-  display: flex;
-  gap: 6px;
-  list-style: none;
-  margin: 10px 14px 0;
-  padding: 0;
-}
-
-.till-step {
-  flex: 1;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  justify-content: center;
-  min-height: 40px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 248, 238, 0.12);
-  background: rgba(255, 248, 238, 0.05);
-  color: rgba(244, 240, 232, 0.55);
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.till-step .till-dot {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: rgba(244, 240, 232, 0.12);
-  color: inherit;
-  font-size: 0.75rem;
-}
-
-.till-step.done {
-  color: #cfe8d7;
-  border-color: rgba(47, 111, 78, 0.45);
-  background: rgba(47, 111, 78, 0.22);
-}
-
-.till-step.active {
-  color: #1c2420;
-  border-color: transparent;
-  background: #f4f0e8;
-}
-
-.till-step.active .till-dot {
-  background: #2f6f4e;
-  color: #f4f0e8;
-}
-
 .step-kicker {
   margin: 0 0 4px;
   color: var(--muted);
@@ -1173,17 +1120,6 @@ select:focus-visible {
     white-space: nowrap;
   }
 
-  .till-steps {
-    margin: 6px 8px 0;
-    flex: 0 0 auto;
-  }
-
-  .till-step {
-    min-height: 32px;
-    padding: 0 8px;
-    font-size: 0.75rem;
-  }
-
   .register {
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
     gap: 8px;
@@ -1300,10 +1236,6 @@ select:focus-visible {
   .pin-till-btn,
   .register-badge {
     min-height: 32px;
-  }
-
-  .till-steps {
-    display: none;
   }
 
   .register {
@@ -1508,24 +1440,6 @@ select:focus-visible {
 
   .toolbar-actions button:focus-visible {
     outline-offset: 0;
-  }
-
-  .till-steps {
-    margin: 6px 6px 0;
-    gap: 4px;
-  }
-
-  .till-step {
-    min-height: 30px;
-    padding: 0 4px;
-    font-size: 0.68rem;
-    gap: 4px;
-  }
-
-  .till-step .till-dot {
-    width: 16px;
-    height: 16px;
-    font-size: 0.65rem;
   }
 
   .qty-controls button {

@@ -1132,13 +1132,6 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
       : modal?.type === "receipt"
         ? "done"
         : "sale";
-  const tillSteps = [
-    { id: "sale", label: "Sale" },
-    { id: "options", label: "Options" },
-    { id: "pay", label: "Pay" },
-    { id: "done", label: "Done" },
-  ] as const;
-  const tillIndex = tillSteps.findIndex((step) => step.id === tillPhase);
   const currentRegister = registers.find((register) => register.id === registerId);
 
   function pinThisIpad() {
@@ -1262,18 +1255,6 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
           Guided Access, then triple-click the side button. This page cannot lock the iPad.
         </span>
       </p>
-
-      <ol className="till-steps" aria-label="Till steps">
-        {tillSteps.map((step, index) => (
-          <li
-            key={step.id}
-            className={`till-step${index < tillIndex ? " done" : ""}${index === tillIndex ? " active" : ""}`}
-          >
-            <span className="till-dot">{index + 1}</span>
-            {step.label}
-          </li>
-        ))}
-      </ol>
 
       <div className={`register pane-${mobilePane}`}>
         <section className="panel catalog-panel">
