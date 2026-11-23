@@ -191,7 +191,10 @@ export function App() {
                 key={n.id}
                 type="button"
                 className={`nav-btn ${page === n.id ? "active" : ""}`}
-                onClick={() => setPage(n.id)}
+                onClick={() => {
+                  setPage(n.id);
+                  setNavOpen(false);
+                }}
               >
                 {n.label}
               </button>
