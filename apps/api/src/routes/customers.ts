@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
+import { owned } from "../tenant.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 
 export const customersRouter = Router();
@@ -26,7 +27,7 @@ customersRouter.get("/", async (req: AuthedRequest, res) => {
   res.json(customers);
 });
 
-customersRouter.get("/:id", async (req, res) => {
+customersRouter.get("/:id", owned("customer"), async (req, res) => {
   const customer = await prisma.customer.findUniqueOrThrow({ where: { id: req.params.id } });
   const sales = await prisma.sale.findMany({
     where: { customerId: customer.id },
@@ -67,7 +68,7 @@ customersRouter.post("/", async (req: AuthedRequest, res) => {
   res.status(201).json(customer);
 });
 
-customersRouter.patch("/:id", requireRole("owner", "manager"), async (req, res) => {
+customersRouter.patch("/:id", owned("customer"), requireRole("owner", "manager"), async (req, res) => {
   const body = z
     .object({
       name: z.string().optional(),

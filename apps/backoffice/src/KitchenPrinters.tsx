@@ -19,6 +19,132 @@ type DeliveryConfig = {
   credentialsNeeded: Record<string, string[]>;
 };
 
+type OrderingSettings = {
+  pickupEnabled: boolean;
+  dineInEnabled: boolean;
+  deliveryEnabled: boolean;
+  prepMinutes: number;
+  deliveryMinutes: number;
+  deliveryFeeCents: number;
+  freeDeliveryAboveCents: number;
+  pausedUntil: string;
+  paused: boolean;
+};
+
+function OnlineOrderingPanel() {
+  const [s, setS] = useState<OrderingSettings | null>(null);
+  const [draft, setDraft] = useState({ prep: "", delivery: "", fee: "", free: "" });
+  const [msg, setMsg] = useState("");
+
+  function fill(next: OrderingSettings) {
+    setS(next);
+    setDraft({
+      prep: String(next.prepMinutes),
+      delivery: String(next.deliveryMinutes),
+      fee: (next.deliveryFeeCents / 100).toFixed(2),
+      free: (next.freeDeliveryAboveCents / 100).toFixed(2),
+    });
+  }
+
+  useEffect(() => {
+    api<OrderingSettings>("/kitchen/settings")
+      .then(fill)
+      .catch((e) => setMsg(e instanceof Error ? e.message : "Could not load"));
+  }, []);
+
+  async function save(patch: Partial<OrderingSettings>, done = "Saved") {
+    setMsg("");
+    try {
+      fill(await api<OrderingSettings>("/kitchen/settings", { method: "PATCH", body: JSON.stringify(patch) }));
+      setMsg(done);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Save failed");
+    }
+  }
+
+  if (!s) return msg ? <p className="error">{msg}</p> : null;
+  const pausedText = s.paused
+    ? s.pausedUntil === "off"
+      ? "Paused until someone resumes"
+      : `Paused until ${new Date(s.pausedUntil).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`
+    : "Taking orders";
+
+  return (
+    <div className="panel-box" style={{ marginBottom: 18 }}>
+      <div className="toolbar" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <h3 style={{ margin: 0 }}>Online ordering</h3>
+        <span className={`badge${s.paused ? " warn" : ""}`}>{pausedText}</span>
+      </div>
+      <p style={{ color: "var(--muted)", marginTop: 0 }}>
+        Choose what customers can order online and how long it takes. The kitchen screen can also pause orders and
+        change the prep time when it gets busy.
+      </p>
+      <div className="toolbar" style={{ gap: 18, marginBottom: 12 }}>
+        {(
+          [
+            ["pickupEnabled", "Collection"],
+            ["dineInEnabled", "Eat in"],
+            ["deliveryEnabled", "Delivery"],
+          ] as const
+        ).map(([key, label]) => (
+          <label key={key} className="check-row">
+            <input type="checkbox" checked={s[key]} onChange={(e) => void save({ [key]: e.target.checked })} />
+            {label}
+          </label>
+        ))}
+      </div>
+      <form
+        className="toolbar"
+        style={{ alignItems: "flex-end" }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          const prep = parseInt(draft.prep, 10);
+          const delivery = parseInt(draft.delivery, 10);
+          const fee = Math.round(parseFloat(draft.fee) * 100);
+          const free = Math.round(parseFloat(draft.free) * 100);
+          if (![prep, delivery, fee, free].every(Number.isFinite)) {
+            setMsg("Check the numbers");
+            return;
+          }
+          void save({ prepMinutes: prep, deliveryMinutes: delivery, deliveryFeeCents: fee, freeDeliveryAboveCents: free });
+        }}
+      >
+        <div className="field" style={{ margin: 0 }}>
+          <label htmlFor="oo-prep">Prep time (min)</label>
+          <input id="oo-prep" inputMode="numeric" style={{ width: 90 }} value={draft.prep} onChange={(e) => setDraft({ ...draft, prep: e.target.value })} />
+        </div>
+        <div className="field" style={{ margin: 0 }}>
+          <label htmlFor="oo-del">Delivery travel (min)</label>
+          <input id="oo-del" inputMode="numeric" style={{ width: 90 }} value={draft.delivery} onChange={(e) => setDraft({ ...draft, delivery: e.target.value })} />
+        </div>
+        <div className="field" style={{ margin: 0 }}>
+          <label htmlFor="oo-fee">Delivery fee (£)</label>
+          <input id="oo-fee" inputMode="decimal" style={{ width: 90 }} value={draft.fee} onChange={(e) => setDraft({ ...draft, fee: e.target.value })} />
+        </div>
+        <div className="field" style={{ margin: 0 }}>
+          <label htmlFor="oo-free">Free delivery over (£)</label>
+          <input id="oo-free" inputMode="decimal" style={{ width: 90 }} value={draft.free} onChange={(e) => setDraft({ ...draft, free: e.target.value })} />
+        </div>
+        <button type="submit">Save</button>
+        {s.paused ? (
+          <button type="button" className="secondary" onClick={() => void save({ pausedUntil: "" }, "Online orders resumed")}>
+            Resume online orders
+          </button>
+        ) : (
+          <button type="button" className="secondary" onClick={() => void save({ pausedUntil: "off" }, "Online orders paused")}>
+            Pause online orders
+          </button>
+        )}
+      </form>
+      <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginBottom: 0 }}>
+        Customers see collection and eat-in ready in {s.prepMinutes}–{s.prepMinutes + 10} min, delivery in{" "}
+        {s.prepMinutes + s.deliveryMinutes}–{s.prepMinutes + s.deliveryMinutes + 10} min.
+        {msg && <strong style={{ marginLeft: 8, color: "var(--ink, inherit)" }}>{msg}</strong>}
+      </p>
+    </div>
+  );
+}
+
 export function KitchenPage() {
   const [orders, setOrders] = useState<
     {
@@ -72,7 +198,8 @@ export function KitchenPage() {
   }
 
   function channelLabel(channel?: string) {
-    if (!channel || channel === "web") return "Web";
+    if (!channel || channel === "web") return "Website";
+    if (channel === "till") return "Till";
     const hit = delivery?.channels.find((c) => c.id === channel);
     return hit?.label ?? channel;
   }
@@ -119,12 +246,18 @@ export function KitchenPage() {
       <div className="page-head">
         <div>
           <h2>Kitchen / online orders</h2>
-          <p>Web ordering and UK delivery apps (Just Eat, Deliveroo, Uber Eats, HungryPanda, Foodhub) land here</p>
+          <p>Orders from the till, your website and delivery apps (Just Eat, Deliveroo, Uber Eats, HungryPanda, Foodhub)</p>
         </div>
-        <button type="button" className="secondary" onClick={() => void loadOrders()}>
-          Refresh
-        </button>
+        <div className="toolbar">
+          <a className="ghost-link" href="/pos/kitchen" target="_blank" rel="noreferrer">
+            Open kitchen screen
+          </a>
+          <button type="button" className="secondary" onClick={() => void loadOrders()}>
+            Refresh
+          </button>
+        </div>
       </div>
+      <OnlineOrderingPanel />
       <div className="table-wrap">
         <table>
           <thead>
@@ -144,7 +277,8 @@ export function KitchenPage() {
                 <td>
                   <strong>{o.orderNumber}</strong>
                   <div style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
-                    {o.fulfillment} · {new Date(o.createdAt).toLocaleTimeString()}
+                    {o.fulfillment === "dine_in" ? "Eat in" : o.fulfillment === "delivery" ? "Delivery" : "Collection"} ·{" "}
+                    {new Date(o.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
                   </div>
                 </td>
                 <td>
@@ -160,11 +294,13 @@ export function KitchenPage() {
                 <td>{o.lines.map((l) => `${l.quantity}× ${l.name}`).join(", ")}</td>
                 <td>{money(o.totalCents)}</td>
                 <td>
-                  <span className="badge warn">{o.status}</span>
+                  <span className="badge warn">
+                    {{ pending: "New", accepted: "New", preparing: "Making", ready: "Ready" }[o.status] ?? o.status}
+                  </span>
                 </td>
                 <td>
                   <button type="button" onClick={() => void advance(o.id, o.status)}>
-                    Advance
+                    {o.status === "preparing" ? "Mark ready" : o.status === "ready" ? "Done" : "Start"}
                   </button>
                 </td>
               </tr>

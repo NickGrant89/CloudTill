@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
+import { owned } from "../tenant.js";
 import { hashPin, requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 
 export const employeesRouter = Router();
@@ -57,7 +58,7 @@ employeesRouter.post("/", requireRole("owner", "manager"), async (req: AuthedReq
   });
 });
 
-employeesRouter.patch("/:id", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+employeesRouter.patch("/:id", owned("employee"), requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
   const body = z
     .object({
       name: z.string().optional(),

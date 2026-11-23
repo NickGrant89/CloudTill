@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
+import { owned } from "../tenant.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 import { loadReceiptData, renderReceipt } from "../receipts.js";
 
@@ -72,7 +73,7 @@ salesRouter.get("/", async (req: AuthedRequest, res) => {
   res.json(sales.map(mapSale));
 });
 
-salesRouter.get("/:id", async (req, res) => {
+salesRouter.get("/:id", owned("sale"), async (req, res) => {
   const sale = await prisma.sale.findUniqueOrThrow({
     where: { id: req.params.id },
     include: { lines: true, payments: true, employee: true, customer: true, register: true },
@@ -80,7 +81,7 @@ salesRouter.get("/:id", async (req, res) => {
   res.json({ ...mapSale(sale), registerName: sale.register.name });
 });
 
-salesRouter.post("/:id/void", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+salesRouter.post("/:id/void", owned("sale"), requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
   const sale = await prisma.sale.findUniqueOrThrow({
     where: { id: req.params.id },
     include: { lines: true },
@@ -121,7 +122,7 @@ salesRouter.post("/:id/void", requireRole("owner", "manager"), async (req: Authe
   res.json(mapSale(updated));
 });
 
-salesRouter.post("/:id/refund", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+salesRouter.post("/:id/refund", owned("sale"), requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
   const body = z
     .object({
       lineIds: z.array(z.string()).optional(),
@@ -173,7 +174,7 @@ salesRouter.post("/:id/refund", requireRole("owner", "manager"), async (req: Aut
   res.json(mapSale(updated));
 });
 
-salesRouter.get("/:id/receipt", async (req, res) => {
+salesRouter.get("/:id/receipt", owned("sale"), async (req, res) => {
   const format = (typeof req.query.format === "string" ? req.query.format : "text") as
     | "text"
     | "html"
@@ -197,7 +198,7 @@ salesRouter.get("/:id/receipt", async (req, res) => {
   res.type("text").send(rendered.body);
 });
 
-salesRouter.post("/:id/print", async (req: AuthedRequest, res) => {
+salesRouter.post("/:id/print", owned("sale"), async (req: AuthedRequest, res) => {
   const body = z
     .object({
       format: z.enum(["text", "html", "escpos-base64"]).default("escpos-base64"),

@@ -169,7 +169,9 @@ export function Login({ onSuccess }: Props) {
         <p className="tag">{pairing ? "Set up this till for your business" : "Enter your PIN"}</p>
 
         <p className="device-line">
-          {pairing ? "Sign in once with your email — after that staff only need their PIN." : `Till: ${device?.storeName ?? "PurePOS Demo Café"}`}
+          {pairing
+            ? "Sign in once with your email — after that staff only need their PIN."
+            : `${/\/kitchen\/?$/.test(window.location.pathname) ? "Kitchen screen" : "Till"}: ${device?.storeName ?? "PurePOS Demo Café"}`}
           {!pairing && (
             <button type="button" className="linkish" onClick={() => { setPairing(true); setPinValue(""); setError(""); }}>
               {device ? "Change business" : "Use my business"}

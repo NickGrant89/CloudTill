@@ -127,6 +127,7 @@ type Modal =
   | { type: "shift" }
   | { type: "board" }
   | { type: "kitchen" }
+  | { type: "kitchenSend" }
   | { type: "message"; title: string; body: string };
 
 interface BoardTicket {
@@ -192,6 +193,8 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   const queueRef = useRef(Promise.resolve());
   const [board, setBoard] = useState<BoardTicket[]>([]);
   const [kitchenOrders, setKitchenOrders] = useState<KitchenOrder[]>([]);
+  const [sentToKitchen, setSentToKitchen] = useState<Record<string, Record<string, number>>>({});
+  const [kitchenForm, setKitchenForm] = useState({ name: "", fulfillment: "dine_in" as "dine_in" | "pickup", note: "" });
   const [tipSuggestions, setTipSuggestions] = useState<
     { label: string; tipCents: number; percent: number | null }[]
   >([]);
@@ -1053,6 +1056,54 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   const paidSum = Object.values(payAmounts).reduce((a, b) => a + b, 0);
   const lineCount = (ticket?.lines ?? []).reduce((n, line) => n + line.quantity, 0);
   const hasLines = lineCount > 0;
+  const kitchenSent = ticket ? sentToKitchen[ticket.id] ?? {} : {};
+  const unsentLines = (ticket?.lines ?? [])
+    .map((line) => ({ line, quantity: line.quantity - (kitchenSent[line.key] ?? 0) }))
+    .filter((entry) => entry.quantity > 0);
+  const unsentCount = unsentLines.reduce((n, entry) => n + entry.quantity, 0);
+  const sentBefore = Object.keys(kitchenSent).length > 0;
+
+  function openKitchenSend() {
+    if (!ticket || !unsentCount) return;
+    setKitchenForm({
+      name: ticket.customer?.name || (/^Ticket\b/i.test(ticket.name) ? "" : ticket.name),
+      fulfillment: "dine_in",
+      note: "",
+    });
+    setModal({ type: "kitchenSend" });
+  }
+
+  async function sendToKitchen() {
+    if (!ticket || !unsentLines.length) return;
+    const name = kitchenForm.name.trim() || ticket.name || "Till order";
+    setBusy(true);
+    try {
+      await api("/kitchen/orders", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          fulfillment: kitchenForm.fulfillment,
+          note: kitchenForm.note.trim() || undefined,
+          lines: unsentLines.map(({ line, quantity }) => ({
+            variantId: line.variantId,
+            name: line.name,
+            quantity,
+            unitPriceCents: line.unitPriceCents,
+            modifiersJson: JSON.stringify(line.modifiers.map((m) => ({ name: m.name, priceCents: m.priceCents }))),
+          })),
+        }),
+      });
+      setSentToKitchen((prev) => ({
+        ...prev,
+        [ticket.id]: Object.fromEntries(ticket.lines.map((line) => [line.key, line.quantity])),
+      }));
+      setModal(null);
+    } catch (error) {
+      fail("Send to kitchen", error);
+    } finally {
+      setBusy(false);
+    }
+  }
   const visibleItems = showFavorites && favorites.length ? favorites : filtered;
   const activeModGroup =
     modifierItem?.modifierGroups.find((group) => group.id === modifierGroupId) ?? modifierItem?.modifierGroups[0];
@@ -1438,6 +1489,9 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             <button type="button" disabled={!ticket} onClick={() => void openPhoneOrder()}>
               Phone order
             </button>
+            <button type="button" disabled={!unsentCount || !offline.online} onClick={openKitchenSend}>
+              {sentBefore && unsentCount ? `Kitchen · ${unsentCount} new` : sentBefore && hasLines ? "Sent to kitchen" : "Send to kitchen"}
+            </button>
             <button type="button" className="pay-btn" disabled={!hasLines} onClick={openPay}>
               Charge {money(ticket?.totalCents ?? 0)}
             </button>
@@ -1682,6 +1736,66 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
         </div>
       )}
 
+      {modal?.type === "kitchenSend" && ticket && (
+        <div className="modal-backdrop" onClick={() => setModal(null)}>
+          <form
+            className="modal"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={(e) => {
+              e.preventDefault();
+              void sendToKitchen();
+            }}
+          >
+            <h3>{sentBefore ? "Send the new items to the kitchen" : "Send to kitchen"}</h3>
+            <ul className="kitchen-send-list">
+              {unsentLines.map(({ line, quantity }) => (
+                <li key={line.key}>
+                  <strong>{quantity}×</strong> {line.name}
+                  {line.modifiers.length > 0 && <small> · {line.modifiers.map((m) => m.name).join(", ")}</small>}
+                </li>
+              ))}
+            </ul>
+            <label className="field">
+              <span>Name or table</span>
+              <input
+                autoFocus
+                value={kitchenForm.name}
+                placeholder="e.g. Table 4 or Sam"
+                onChange={(e) => setKitchenForm({ ...kitchenForm, name: e.target.value })}
+              />
+            </label>
+            <div className="seg" role="group" aria-label="Eat in or take away">
+              {(["dine_in", "pickup"] as const).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  className={kitchenForm.fulfillment === f ? "active" : ""}
+                  onClick={() => setKitchenForm({ ...kitchenForm, fulfillment: f })}
+                >
+                  {f === "dine_in" ? "Eat in" : "Take away"}
+                </button>
+              ))}
+            </div>
+            <label className="field">
+              <span>Note for the kitchen</span>
+              <input
+                value={kitchenForm.note}
+                placeholder="Allergies, timing…"
+                onChange={(e) => setKitchenForm({ ...kitchenForm, note: e.target.value })}
+              />
+            </label>
+            <div className="modal-actions">
+              <button type="button" className="btn ghost" onClick={() => setModal(null)}>
+                Cancel
+              </button>
+              <button type="submit" className="btn primary" disabled={busy}>
+                {busy ? "Sending…" : "Send"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {modal?.type === "discount" && ticket && (
         <DiscountModal
           onClose={() => setModal(null)}
@@ -1742,7 +1856,12 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
       {modal?.type === "kitchen" && (
         <div className="modal-backdrop" onClick={() => setModal(null)}>
           <div className="modal wide" onClick={(e) => e.stopPropagation()}>
-            <h3>Kitchen / delivery orders</h3>
+            <div className="modal-head-row">
+              <h3>Kitchen / delivery orders</h3>
+              <a className="btn ghost" href={`${import.meta.env.BASE_URL}kitchen`} target="_blank" rel="noreferrer">
+                Open kitchen screen
+              </a>
+            </div>
             {kitchenOrders.length === 0 && <p style={{ color: "var(--muted)" }}>Queue empty.</p>}
             {kitchenOrders.map((o) => (
               <div key={o.id} className="list-btn" style={{ cursor: "default" }}>

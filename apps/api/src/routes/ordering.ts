@@ -1,10 +1,22 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
+import { owned } from "../tenant.js";
 import { requireAuth, type AuthedRequest } from "../auth.js";
 import { calcTax, lineSubtotal } from "../money.js";
 import { storeAllowsFeature } from "./billing.js";
 import { attributionEmployee } from "../company.js";
+import { randomBytes } from "node:crypto";
+import {
+  deliveryFeeFor,
+  estimateLabel,
+  fulfillmentEnabled,
+  isPaused,
+  orderingSettingsSchema,
+  publicOrderingInfo,
+  readOrderingSettings,
+  writeOrderingSettings,
+} from "../services/orderingSettings.js";
 
 export const publicOrderingRouter = Router();
 export const kitchenRouter = Router();
@@ -24,11 +36,57 @@ publicOrderingRouter.get("/stores", async (_req, res) => {
   res.json(stores);
 });
 
+/** Items sold out by the kitchen, or tracked items with no stock left. */
+async function soldOutItemIds(storeId: string) {
+  const [flagged, levels] = await Promise.all([
+    prisma.item.findMany({ where: { storeId, soldOut: true }, select: { id: true } }),
+    prisma.inventoryLevel.findMany({
+      where: { storeId, quantity: { lte: 0 }, variant: { trackStock: true, active: true, item: { isComposite: false } } },
+      select: { variant: { select: { itemId: true } } },
+    }),
+  ]);
+  const ids = new Set(flagged.map((i) => i.id));
+  const emptyByItem = new Map<string, number>();
+  for (const l of levels) emptyByItem.set(l.variant.itemId, (emptyByItem.get(l.variant.itemId) ?? 0) + 1);
+  if (emptyByItem.size) {
+    const variantCounts = await prisma.variant.groupBy({
+      by: ["itemId"],
+      where: { itemId: { in: [...emptyByItem.keys()] }, active: true },
+      _count: { _all: true },
+    });
+    for (const v of variantCounts) if ((emptyByItem.get(v.itemId) ?? 0) >= v._count._all) ids.add(v.itemId);
+  }
+  return ids;
+}
+
+/** Best sellers by quantity over the last 30 days. */
+async function popularItemIds(storeId: string, limit = 6) {
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const rows = await prisma.saleLine.groupBy({
+    by: ["variantId"],
+    where: { variantId: { not: null }, sale: { storeId, status: "completed", createdAt: { gte: since } } },
+    _sum: { quantity: true },
+    orderBy: { _sum: { quantity: "desc" } },
+    take: limit * 3,
+  });
+  const variants = await prisma.variant.findMany({
+    where: { id: { in: rows.map((r) => r.variantId!).filter(Boolean) } },
+    select: { id: true, itemId: true },
+  });
+  const itemOf = new Map(variants.map((v) => [v.id, v.itemId]));
+  const ordered: string[] = [];
+  for (const r of rows) {
+    const itemId = r.variantId ? itemOf.get(r.variantId) : undefined;
+    if (itemId && !ordered.includes(itemId)) ordered.push(itemId);
+  }
+  return ordered.slice(0, limit);
+}
+
 publicOrderingRouter.get("/stores/:slug/menu", async (req, res) => {
   const store = await resolveStore(req.params.slug);
   if (!store) return res.status(404).json({ error: "Store not found" });
 
-  const [categories, items, tax] = await Promise.all([
+  const [categories, items, tax, settings, soldOut, popular] = await Promise.all([
     prisma.category.findMany({ where: { storeId: store.id }, orderBy: { sortOrder: "asc" } }),
     prisma.item.findMany({
       where: { storeId: store.id, active: true },
@@ -39,6 +97,9 @@ publicOrderingRouter.get("/stores/:slug/menu", async (req, res) => {
       orderBy: { name: "asc" },
     }),
     prisma.tax.findFirst({ where: { storeId: store.id, enabled: true } }),
+    readOrderingSettings(store.id),
+    soldOutItemIds(store.id),
+    popularItemIds(store.id),
   ]);
 
   res.json({
@@ -52,11 +113,13 @@ publicOrderingRouter.get("/stores/:slug/menu", async (req, res) => {
     },
     tax,
     categories,
-    items,
+    items: items.map((item) => ({ ...item, soldOut: soldOut.has(item.id) })),
+    popularItemIds: popular,
+    ordering: publicOrderingInfo(settings),
     delivery: {
-      feeCents: 399,
-      freeAboveCents: 3000,
-      estimateMinutes: "35–50 min",
+      feeCents: settings.deliveryFeeCents,
+      freeAboveCents: settings.freeDeliveryAboveCents,
+      estimateMinutes: estimateLabel(settings, "delivery"),
     },
   });
 });
@@ -89,16 +152,33 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
         .array(
           z.object({
             variantId: z.string(),
-            quantity: z.number().positive().default(1),
+            quantity: z.number().int().min(1).max(99).default(1),
             modifiers: z
-              .array(z.object({ name: z.string(), priceCents: z.number().int() }))
+              .array(z.object({ id: z.string().optional(), name: z.string(), priceCents: z.number().int().optional() }))
+              .max(30)
               .optional(),
-            note: z.string().optional(),
+            note: z.string().max(200).optional(),
           })
         )
-        .min(1),
+        .min(1)
+        .max(60),
     })
     .parse(req.body);
+
+  const settings = await readOrderingSettings(store.id);
+  if (isPaused(settings)) {
+    const until = settings.pausedUntil !== "off" ? new Date(settings.pausedUntil) : null;
+    return res.status(409).json({
+      error: until
+        ? `${store.name} has paused online orders until ${until.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: store.timezone || "Europe/London" })}.`
+        : `${store.name} isn't taking online orders right now.`,
+    });
+  }
+  if (!fulfillmentEnabled(settings, body.fulfillment)) {
+    const label = body.fulfillment === "dine_in" ? "Dine in" : body.fulfillment === "delivery" ? "Delivery" : "Pickup";
+    return res.status(409).json({ error: `${label} isn't available right now. Choose another option.` });
+  }
+  const soldOut = await soldOutItemIds(store.id);
 
   if (body.fulfillment === "delivery") {
     if (!body.deliveryAddress?.trim()) {
@@ -139,12 +219,25 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
   for (const line of body.lines) {
     const variant = await prisma.variant.findUnique({
       where: { id: line.variantId },
-      include: { item: true },
+      include: {
+        item: { include: { modifierGroups: { include: { modifiers: { where: { active: true } } } } } },
+      },
     });
-    if (!variant || variant.item.storeId !== store.id) {
-      return res.status(400).json({ error: `Invalid variant ${line.variantId}` });
+    if (!variant || variant.item.storeId !== store.id || !variant.active || !variant.item.active) {
+      return res.status(400).json({ error: "Something in your basket is no longer on the menu. Please remove it." });
     }
-    const mods = line.modifiers ?? [];
+    if (soldOut.has(variant.itemId)) {
+      return res.status(409).json({ error: `Sorry, ${variant.item.name} has just sold out. Please remove it.` });
+    }
+    const allowed = variant.item.modifierGroups.flatMap((g) => g.modifiers);
+    const mods: { name: string; priceCents: number }[] = [];
+    for (const m of line.modifiers ?? []) {
+      const match = allowed.find((a) => (m.id ? a.id === m.id : a.name === m.name));
+      if (!match) {
+        return res.status(400).json({ error: `"${m.name}" isn't available for ${variant.item.name} any more.` });
+      }
+      mods.push({ name: match.name, priceCents: match.priceCents });
+    }
     const modSum = mods.reduce((s, m) => s + m.priceCents, 0);
     subtotal += lineSubtotal(variant.priceCents, line.quantity, modSum, 0);
     resolvedLines.push({
@@ -157,19 +250,15 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
     });
   }
 
-  // Flat delivery fee stub — free over £30 subtotal
-  const DELIVERY_FEE_CENTS = 399;
-  const deliveryFeeCents =
-    body.fulfillment === "delivery" ? (subtotal >= 3000 ? 0 : DELIVERY_FEE_CENTS) : 0;
-  const deliveryEstimate =
-    body.fulfillment === "delivery" ? "35–50 min" : body.fulfillment === "dine_in" ? "15–25 min" : "10–20 min";
+  const deliveryFeeCents = body.fulfillment === "delivery" ? deliveryFeeFor(settings, subtotal) : 0;
+  const deliveryEstimate = estimateLabel(settings, body.fulfillment);
   const deliveryAddressLine = [body.deliveryAddress?.trim(), body.deliveryUnit?.trim()]
     .filter(Boolean)
     .join(", ");
 
   const taxCents = tax ? calcTax(subtotal, tax.rateBps, tax.inclusive) : 0;
   const totalCents = subtotal + (tax?.inclusive ? 0 : taxCents) + deliveryFeeCents;
-  const count = await prisma.onlineOrder.count({ where: { storeId: store.id } });
+  const count = await prisma.onlineOrder.count({ where: { storeId: store.id, channel: "web" } });
   const orderNumber = `OL-${1000 + count + 1}`;
 
   const orderNoteParts = [
@@ -223,6 +312,7 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
       fulfillment: body.fulfillment,
       status: "pending",
       channel: "web",
+      trackingToken: randomBytes(16).toString("base64url"),
       note: orderNote,
       deliveryAddress: body.fulfillment === "delivery" ? deliveryAddressLine || null : null,
       deliveryFeeCents,
@@ -367,7 +457,8 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
   });
 
   res.status(201).json({
-    order: paidOrder,
+    order: publicOrderView(paidOrder, store, deliveryEstimate),
+    trackingToken: paidOrder.trackingToken,
     ticketId: ticket.id,
     deliveryFeeCents,
     deliveryEstimate,
@@ -376,31 +467,177 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
   });
 });
 
-publicOrderingRouter.get("/orders/:orderNumber", async (req, res) => {
+type OrderWithLines = Awaited<ReturnType<typeof prisma.onlineOrder.findFirstOrThrow<{ include: { lines: true } }>>>;
+
+/** What the customer's tracking page may see: no phone, email or internal ids. */
+function publicOrderView(
+  order: OrderWithLines,
+  store: { name: string; address: string | null; phone: string | null },
+  estimate: string
+) {
+  return {
+    orderNumber: order.orderNumber,
+    status: order.status,
+    fulfillment: order.fulfillment,
+    customerName: order.customerName,
+    deliveryAddress: order.deliveryAddress,
+    deliveryFeeCents: order.deliveryFeeCents,
+    subtotalCents: order.subtotalCents,
+    taxCents: order.taxCents,
+    totalCents: order.totalCents,
+    cardBrand: order.cardBrand,
+    cardLast4: order.cardLast4,
+    receiptNumber: order.receiptNumber,
+    createdAt: order.createdAt,
+    updatedAt: order.updatedAt,
+    estimate,
+    lines: order.lines.map((l) => ({
+      name: l.name,
+      quantity: l.quantity,
+      unitPriceCents: l.unitPriceCents,
+      modifiersJson: l.modifiersJson,
+      note: l.note,
+    })),
+    store: { name: store.name, address: store.address, phone: store.phone },
+  };
+}
+
+publicOrderingRouter.get("/orders/:token", async (req, res) => {
+  const token = String(req.params.token);
+  if (token.length < 16) return res.status(404).json({ error: "Not found" });
   const order = await prisma.onlineOrder.findFirst({
-    where: { orderNumber: req.params.orderNumber },
+    where: { trackingToken: token },
     include: { lines: true, store: true },
   });
   if (!order) return res.status(404).json({ error: "Not found" });
-  res.json(order);
+  const settings = await readOrderingSettings(order.storeId);
+  res.json(publicOrderView(order, order.store, estimateLabel(settings, order.fulfillment as "pickup")));
 });
 
 kitchenRouter.use(requireAuth);
 
 kitchenRouter.get("/orders", async (req: AuthedRequest, res) => {
   const status = typeof req.query.status === "string" ? req.query.status : undefined;
+  const recent = req.query.recent === "1";
   const orders = await prisma.onlineOrder.findMany({
     where: {
       storeId: req.user!.storeId,
-      ...(status ? { status } : { status: { in: ["pending", "accepted", "preparing", "ready"] } }),
+      ...(recent
+        ? { status: { in: ["completed", "cancelled"] }, updatedAt: { gte: new Date(Date.now() - 3 * 60 * 60 * 1000) } }
+        : status
+          ? { status }
+          : { status: { in: ["pending", "accepted", "preparing", "ready"] } }),
     },
     include: { lines: true, ticket: true },
-    orderBy: { createdAt: "asc" },
+    orderBy: recent ? { updatedAt: "desc" } : { createdAt: "asc" },
+    ...(recent ? { take: 12 } : {}),
   });
+  res.setHeader("X-Server-Time", new Date().toISOString());
   res.json(orders);
 });
 
-kitchenRouter.patch("/orders/:id", async (req: AuthedRequest, res) => {
+/** The till sends a ticket to the kitchen screen. No payment is taken here. */
+kitchenRouter.post("/orders", async (req: AuthedRequest, res) => {
+  const body = z
+    .object({
+      name: z.string().trim().min(1).max(60),
+      fulfillment: z.enum(["pickup", "dine_in", "delivery"]).default("dine_in"),
+      note: z.string().max(300).optional(),
+      ticketId: z.string().optional(),
+      lines: z
+        .array(
+          z.object({
+            variantId: z.string(),
+            name: z.string().max(120),
+            quantity: z.number().positive().max(999),
+            unitPriceCents: z.number().int().default(0),
+            modifiersJson: z.string().max(4000).default("[]"),
+            note: z.string().max(200).nullable().optional(),
+          })
+        )
+        .min(1)
+        .max(100),
+    })
+    .parse(req.body);
+  const storeId = req.user!.storeId;
+  const variantIds = [...new Set(body.lines.map((l) => l.variantId))];
+  const known = await prisma.variant.count({ where: { id: { in: variantIds }, item: { storeId } } });
+  if (known !== variantIds.length) return res.status(400).json({ error: "Some items aren't on this store's menu." });
+  if (body.ticketId && !(await prisma.ticket.count({ where: { id: body.ticketId, storeId } }))) {
+    return res.status(404).json({ error: "Ticket not found" });
+  }
+  const count = await prisma.onlineOrder.count({ where: { storeId, channel: "till" } });
+  const subtotal = body.lines.reduce((s, l) => s + Math.round(l.unitPriceCents * l.quantity), 0);
+  const order = await prisma.onlineOrder.create({
+    data: {
+      storeId,
+      ticketId: body.ticketId,
+      orderNumber: `T-${100 + count + 1}`,
+      customerName: body.name,
+      fulfillment: body.fulfillment,
+      channel: "till",
+      status: "pending",
+      note: body.note?.trim() || null,
+      subtotalCents: subtotal,
+      totalCents: subtotal,
+      lines: {
+        create: body.lines.map((l) => ({
+          variantId: l.variantId,
+          name: l.name,
+          quantity: l.quantity,
+          unitPriceCents: l.unitPriceCents,
+          modifiersJson: l.modifiersJson,
+          note: l.note ?? null,
+        })),
+      },
+    },
+    include: { lines: true },
+  });
+  if (body.ticketId) {
+    await prisma.ticket.update({ where: { id: body.ticketId }, data: { kitchenStatus: "queued" } });
+  }
+  res.status(201).json(order);
+});
+
+kitchenRouter.get("/settings", async (req: AuthedRequest, res) => {
+  const settings = await readOrderingSettings(req.user!.storeId);
+  res.json({ ...settings, paused: isPaused(settings) });
+});
+
+/** Pause and prep time are for anyone in the kitchen; the rest is owner/manager. */
+kitchenRouter.patch("/settings", async (req: AuthedRequest, res) => {
+  const patch = orderingSettingsSchema.partial().parse(req.body);
+  const managerOnly = Object.keys(patch).some((k) => k !== "pausedUntil" && k !== "prepMinutes");
+  if (managerOnly && !["owner", "manager"].includes(req.user!.role)) {
+    return res.status(403).json({ error: "Only an owner or manager can change delivery and order types." });
+  }
+  if (patch.pausedUntil && patch.pausedUntil !== "off" && !Number.isFinite(Date.parse(patch.pausedUntil))) {
+    return res.status(400).json({ error: "Invalid pause time" });
+  }
+  const settings = await writeOrderingSettings(req.user!.storeId, patch);
+  res.json({ ...settings, paused: isPaused(settings) });
+});
+
+kitchenRouter.get("/items", async (req: AuthedRequest, res) => {
+  const items = await prisma.item.findMany({
+    where: { storeId: req.user!.storeId, active: true },
+    select: { id: true, name: true, soldOut: true, color: true, category: { select: { name: true } } },
+    orderBy: [{ soldOut: "desc" }, { name: "asc" }],
+  });
+  res.json(items);
+});
+
+kitchenRouter.patch("/items/:id", owned("item"), async (req: AuthedRequest, res) => {
+  const { soldOut } = z.object({ soldOut: z.boolean() }).parse(req.body);
+  const item = await prisma.item.update({
+    where: { id: String(req.params.id) },
+    data: { soldOut },
+    select: { id: true, name: true, soldOut: true },
+  });
+  res.json(item);
+});
+
+kitchenRouter.patch("/orders/:id", owned("onlineOrder"), async (req: AuthedRequest, res) => {
   const body = z
     .object({
       status: z.enum(["pending", "accepted", "preparing", "ready", "completed", "cancelled"]),
@@ -435,7 +672,7 @@ kitchenRouter.patch("/orders/:id", async (req: AuthedRequest, res) => {
   res.json(order);
 });
 
-kitchenRouter.post("/orders/:id/recall-ticket", async (req: AuthedRequest, res) => {
+kitchenRouter.post("/orders/:id/recall-ticket", owned("onlineOrder"), async (req: AuthedRequest, res) => {
   const order = await prisma.onlineOrder.findUniqueOrThrow({ where: { id: req.params.id } });
   if (!order.ticketId) return res.status(400).json({ error: "No ticket linked" });
   const ticket = await prisma.ticket.update({

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import { prisma } from "../db.js";
+import { owned } from "../tenant.js";
 import { requireAuth, type AuthedRequest } from "../auth.js";
 import { calcTax, lineSubtotal } from "../money.js";
 
@@ -115,11 +116,11 @@ posRouter.post("/tickets", async (req: AuthedRequest, res) => {
   res.status(201).json(await serializeTicket(ticket.id));
 });
 
-posRouter.get("/tickets/:id", async (req, res) => {
+posRouter.get("/tickets/:id", owned("ticket"), async (req, res) => {
   res.json(await serializeTicket(req.params.id));
 });
 
-posRouter.post("/tickets/:id/lines", async (req: AuthedRequest, res) => {
+posRouter.post("/tickets/:id/lines", owned("ticket"), async (req: AuthedRequest, res) => {
   const body = z
     .object({
       variantId: z.string(),
@@ -151,7 +152,7 @@ posRouter.post("/tickets/:id/lines", async (req: AuthedRequest, res) => {
   res.status(201).json(await serializeTicket(req.params.id));
 });
 
-posRouter.patch("/tickets/:id/lines/:lineId", async (req, res) => {
+posRouter.patch("/tickets/:id/lines/:lineId", owned("ticket"), owned("ticketLine", "lineId"), async (req, res) => {
   const body = z
     .object({
       quantity: z.number().positive().optional(),
@@ -163,12 +164,12 @@ posRouter.patch("/tickets/:id/lines/:lineId", async (req, res) => {
   res.json(await serializeTicket(req.params.id));
 });
 
-posRouter.delete("/tickets/:id/lines/:lineId", async (req, res) => {
+posRouter.delete("/tickets/:id/lines/:lineId", owned("ticket"), owned("ticketLine", "lineId"), async (req, res) => {
   await prisma.ticketLine.delete({ where: { id: req.params.lineId } });
   res.json(await serializeTicket(req.params.id));
 });
 
-posRouter.patch("/tickets/:id", async (req, res) => {
+posRouter.patch("/tickets/:id", owned("ticket"), async (req, res) => {
   const body = z
     .object({
       name: z.string().optional(),
@@ -184,18 +185,18 @@ posRouter.patch("/tickets/:id", async (req, res) => {
   res.json(await serializeTicket(req.params.id));
 });
 
-posRouter.post("/tickets/:id/hold", async (req, res) => {
+posRouter.post("/tickets/:id/hold", owned("ticket"), async (req, res) => {
   await prisma.ticket.update({ where: { id: req.params.id }, data: { status: "held" } });
   res.json(await serializeTicket(req.params.id));
 });
 
-posRouter.post("/tickets/:id/recall", async (req, res) => {
+posRouter.post("/tickets/:id/recall", owned("ticket"), async (req, res) => {
   await prisma.ticket.update({ where: { id: req.params.id }, data: { status: "open" } });
   res.json(await serializeTicket(req.params.id));
 });
 
 /** Pull an open/held ticket onto this till (live sync across registers). */
-posRouter.post("/tickets/:id/claim", async (req: AuthedRequest, res) => {
+posRouter.post("/tickets/:id/claim", owned("ticket"), async (req: AuthedRequest, res) => {
   const body = z.object({ registerId: z.string() }).safeParse(req.body);
   if (!body.success) return res.status(400).json({ error: "registerId required" });
   const existing = await prisma.ticket.findFirst({
@@ -221,7 +222,7 @@ posRouter.post("/tickets/:id/claim", async (req: AuthedRequest, res) => {
   res.json(await serializeTicket(existing.id));
 });
 
-posRouter.post("/tickets/:id/pay", async (req: AuthedRequest, res) => {
+posRouter.post("/tickets/:id/pay", owned("ticket"), async (req: AuthedRequest, res) => {
   const body = z
     .object({
       payments: z

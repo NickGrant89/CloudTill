@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import { prisma } from "../db.js";
+import { owned } from "../tenant.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 
 export const giftCardsRouter = Router();
@@ -66,7 +67,7 @@ giftCardsRouter.post("/", requireRole("owner", "manager", "cashier"), async (req
   res.status(201).json(card);
 });
 
-giftCardsRouter.post("/:id/reload", requireRole("owner", "manager", "cashier"), async (req: AuthedRequest, res) => {
+giftCardsRouter.post("/:id/reload", owned("giftCard"), requireRole("owner", "manager", "cashier"), async (req: AuthedRequest, res) => {
   const body = z.object({ amountCents: z.number().int().positive(), note: z.string().optional() }).parse(req.body);
   const card = await prisma.giftCard.findUniqueOrThrow({ where: { id: req.params.id } });
   if (card.status !== "active") return res.status(400).json({ error: "Card disabled" });
@@ -90,7 +91,7 @@ giftCardsRouter.post("/:id/reload", requireRole("owner", "manager", "cashier"), 
   res.json(updated);
 });
 
-giftCardsRouter.post("/:id/adjust", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+giftCardsRouter.post("/:id/adjust", owned("giftCard"), requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
   const body = z.object({ balanceCents: z.number().int().nonnegative(), note: z.string().optional() }).parse(req.body);
   const card = await prisma.giftCard.findUniqueOrThrow({ where: { id: req.params.id } });
   const delta = body.balanceCents - card.balanceCents;
@@ -113,7 +114,7 @@ giftCardsRouter.post("/:id/adjust", requireRole("owner", "manager"), async (req:
   res.json(updated);
 });
 
-giftCardsRouter.patch("/:id", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+giftCardsRouter.patch("/:id", owned("giftCard"), requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
   const body = z.object({ status: z.enum(["active", "disabled"]).optional(), customerId: z.string().nullable().optional() }).parse(req.body);
   const updated = await prisma.giftCard.update({ where: { id: req.params.id }, data: body });
   res.json(updated);

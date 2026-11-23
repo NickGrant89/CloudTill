@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { api, getToken, setToken } from "./api";
 import { Login } from "./Login";
 import { Register } from "./Register";
+import { KitchenScreen } from "./KitchenScreen";
+
+const KITCHEN_MODE = /\/kitchen\/?$/.test(window.location.pathname);
 
 export interface SessionUser {
   id: string;
@@ -52,7 +55,7 @@ export function App() {
       <div className="login">
         <div className="login-card">
           <h1 className="brand">PurePOS</h1>
-          <p className="tag">Loading register…</p>
+          <p className="tag">{KITCHEN_MODE ? "Loading kitchen screen…" : "Loading register…"}</p>
         </div>
       </div>
     );
@@ -72,6 +75,14 @@ export function App() {
     );
   }
 
+  const logout = () => {
+    setToken(null);
+    setUser(null);
+    setStore(null);
+  };
+
+  if (KITCHEN_MODE) return <KitchenScreen user={user} store={store} onLogout={logout} />;
+
   return (
     <Register
       user={user}
@@ -79,11 +90,7 @@ export function App() {
       registers={registers}
       registerId={registerId}
       onRegisterChange={setRegisterId}
-      onLogout={() => {
-        setToken(null);
-        setUser(null);
-        setStore(null);
-      }}
+      onLogout={logout}
     />
   );
 }

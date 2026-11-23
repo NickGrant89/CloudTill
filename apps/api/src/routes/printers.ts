@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
+import { owned } from "../tenant.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 import { createDriver, getMockDriver } from "../printers/drivers.js";
 import { loadReceiptData, renderReceipt } from "../receipts.js";
@@ -121,7 +122,7 @@ printersRouter.post("/print-receipt", async (req: AuthedRequest, res) => {
   res.json({ job: updated, result, printer });
 });
 
-printersRouter.post("/jobs/:id/retry", async (req: AuthedRequest, res) => {
+printersRouter.post("/jobs/:id/retry", owned("printJob"), async (req: AuthedRequest, res) => {
   const job = await prisma.printJob.findUniqueOrThrow({
     where: { id: req.params.id },
     include: { printer: true },

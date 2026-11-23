@@ -98,6 +98,8 @@ model Item {
   soldBy      String   @default("each") // each | weight
   isComposite Boolean  @default(false) // kit/bundle
   active      Boolean  @default(true)
+  /// Hidden from online ordering until the kitchen marks it back in
+  soldOut     Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -430,7 +432,7 @@ model OnlineOrder {
   customerEmail   String?
   fulfillment     String   @default("pickup") // pickup | dine_in | delivery
   status          String   @default("pending") // pending | accepted | preparing | ready | completed | cancelled
-  /// web | justeat | deliveroo | ubereats | hungrypanda | foodhub | generic
+  /// web | till | justeat | deliveroo | ubereats | hungrypanda | foodhub | generic
   channel         String   @default("web")
   externalOrderId String?
   partnerMetaJson String? // truncated raw/partner ids for support
@@ -443,6 +445,8 @@ model OnlineOrder {
   cardBrand       String?
   cardLast4       String?
   receiptNumber   String?
+  /// Unguessable id for the customer's public tracking link
+  trackingToken   String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -451,6 +455,7 @@ model OnlineOrder {
   lines  OnlineOrderLine[]
 
   @@index([storeId, channel, externalOrderId])
+  @@index([trackingToken])
 }
 
 model OnlineOrderLine {

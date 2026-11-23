@@ -1698,3 +1698,66 @@ select:focus-visible {
     transform: translateY(0);
   }
 }
+
+.field > span {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.kitchen-send-list {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 4px;
+  max-height: 200px;
+  overflow: auto;
+}
+
+.kitchen-send-list small {
+  color: var(--muted);
+}
+
+.seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.seg button {
+  min-height: 48px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.seg button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.modal-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.modal-head-row h3 {
+  margin: 0;
+}
+
+.modal-head-row a.btn {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}

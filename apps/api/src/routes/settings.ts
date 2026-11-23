@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
+import { owned } from "../tenant.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 
 export const settingsRouter = Router();
@@ -121,7 +122,7 @@ settingsRouter.post("/taxes", requireRole("owner", "manager"), async (req: Authe
   res.status(201).json(tax);
 });
 
-settingsRouter.patch("/taxes/:id", requireRole("owner", "manager"), async (req, res) => {
+settingsRouter.patch("/taxes/:id", owned("tax"), requireRole("owner", "manager"), async (req, res) => {
   const body = z
     .object({
       name: z.string().optional(),
@@ -155,7 +156,7 @@ settingsRouter.post("/payment-types", requireRole("owner", "manager"), async (re
   res.status(201).json(pt);
 });
 
-settingsRouter.patch("/payment-types/:id", requireRole("owner", "manager"), async (req, res) => {
+settingsRouter.patch("/payment-types/:id", owned("paymentType"), requireRole("owner", "manager"), async (req, res) => {
   const body = z
     .object({
       name: z.string().optional(),

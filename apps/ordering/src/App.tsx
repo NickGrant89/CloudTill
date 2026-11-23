@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 const DEFAULT_SLUG = "demo-cafe";
 const CART_KEY = "purepos.order.cart.v1";
+const TRACK_KEY = "purepos.order.track.v1";
 
 function resolveStoreSlug() {
   try {
@@ -41,6 +42,7 @@ interface Item {
   categoryId: string | null;
   variants: { id: string; priceCents: number }[];
   modifierGroups: ModGroup[];
+  soldOut?: boolean;
 }
 
 interface Category {
@@ -54,7 +56,7 @@ interface CartLine {
   name: string;
   quantity: number;
   unitPriceCents: number;
-  modifiers: { name: string; priceCents: number }[];
+  modifiers: { id?: string; name: string; priceCents: number }[];
   note?: string;
 }
 
@@ -68,6 +70,22 @@ interface StoreInfo {
 
 type Fulfillment = "pickup" | "dine_in" | "delivery";
 type View = "menu" | "item" | "cart" | "details" | "pay";
+
+interface OrderingInfo {
+  open: boolean;
+  paused: boolean;
+  pausedUntil: string | null;
+  fulfillments: Fulfillment[];
+  estimates: Record<Fulfillment, string>;
+}
+
+const DEFAULT_ORDERING: OrderingInfo = {
+  open: true,
+  paused: false,
+  pausedUntil: null,
+  fulfillments: ["pickup", "dine_in", "delivery"],
+  estimates: { pickup: "15–25 min", dine_in: "15–25 min", delivery: "45–55 min" },
+};
 
 interface DeliveryQuote {
   feeCents: number;
@@ -84,6 +102,9 @@ interface OrderLine {
 
 interface PlacedOrder {
   orderNumber: string;
+  trackingToken: string;
+  createdAt?: string;
+  estimate?: string;
   totalCents: number;
   fulfillment: Fulfillment;
   customerName: string;
@@ -98,6 +119,8 @@ interface PlacedOrder {
 interface OrderStatus {
   orderNumber: string;
   status: string;
+  createdAt?: string;
+  estimate?: string;
   fulfillment: string;
   customerName: string;
   totalCents: number;
@@ -109,7 +132,7 @@ interface OrderStatus {
   receiptNumber?: string | null;
 }
 
-const STATUS_STEPS = ["pending", "accepted", "preparing", "ready"] as const;
+const STATUS_STEPS = ["pending", "preparing", "ready"] as const;
 
 function money(cents: number) {
   return `£${(cents / 100).toFixed(2)}`;
@@ -123,6 +146,7 @@ function lineTotal(line: CartLine) {
 function statusIndex(status: string) {
   if (status === "completed") return STATUS_STEPS.length;
   if (status === "cancelled") return -1;
+  if (status === "accepted") return 0;
   const idx = STATUS_STEPS.indexOf(status as (typeof STATUS_STEPS)[number]);
   return idx >= 0 ? idx : 0;
 }
@@ -133,10 +157,30 @@ function fulfillmentLabel(fulfillment: string) {
   return "Pickup";
 }
 
-function estimateLabel(fulfillment: Fulfillment) {
-  if (fulfillment === "delivery") return "35–50 min";
-  if (fulfillment === "dine_in") return "15–25 min";
-  return "10–20 min";
+function readyAround(createdAt: string | undefined, estimate: string | undefined) {
+  const minutes = Number(estimate?.match(/\d+/)?.[0]);
+  if (!createdAt || !Number.isFinite(minutes)) return "";
+  return new Date(Date.parse(createdAt) + minutes * 60000).toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function pausedMessage(info: OrderingInfo) {
+  if (info.pausedUntil) {
+    const at = new Date(info.pausedUntil).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+    return `Not taking online orders until ${at}`;
+  }
+  return info.paused ? "Not taking online orders right now" : "Online ordering is closed";
+}
+
+function readTracked(slug: string): PlacedOrder | null {
+  try {
+    const raw = localStorage.getItem(`${TRACK_KEY}:${slug}`);
+    return raw ? (JSON.parse(raw) as PlacedOrder) : null;
+  } catch {
+    return null;
+  }
 }
 
 function statusTitle(status: string, fulfillment: string) {
@@ -163,7 +207,7 @@ function statusTitle(status: string, fulfillment: string) {
 function statusCopy(status: string, fulfillment: string) {
   switch (status) {
     case "pending":
-      return "We’ve got it. The café will accept it in a moment.";
+      return "We’ve got it and paid. The kitchen will start on it shortly.";
     case "accepted":
       return "Accepted. The kitchen is about to start.";
     case "preparing":
@@ -204,6 +248,9 @@ export function App() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [taxRateBps, setTaxRateBps] = useState(0);
+  const [taxInclusive, setTaxInclusive] = useState(true);
+  const [ordering, setOrdering] = useState<OrderingInfo>(DEFAULT_ORDERING);
+  const [popularIds, setPopularIds] = useState<string[]>([]);
   const [categoryId, setCategoryId] = useState<string | "all">("all");
   const [query, setQuery] = useState("");
   const [cart, setCart] = useState<CartLine[]>(() => {
@@ -231,7 +278,7 @@ export function App() {
   const [error, setError] = useState("");
   const [menuError, setMenuError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [placed, setPlaced] = useState<PlacedOrder | null>(null);
+  const [placed, setPlaced] = useState<PlacedOrder | null>(() => readTracked(resolveStoreSlug()));
   const [liveOrder, setLiveOrder] = useState<OrderStatus | null>(null);
   const [toast, setToast] = useState("");
 
@@ -263,7 +310,14 @@ export function App() {
           }))
         );
         setTaxRateBps(data.tax?.rateBps ?? 0);
+        setTaxInclusive(data.tax?.inclusive ?? true);
         if (data.delivery) setDeliveryQuote(data.delivery);
+        if (data.ordering) {
+          const info = data.ordering as OrderingInfo;
+          setOrdering(info);
+          setFulfillment((current) => (info.fulfillments.includes(current) ? current : info.fulfillments[0] ?? current));
+        }
+        setPopularIds(data.popularItemIds ?? []);
         document.title = `Order · ${data.store?.name || "PurePOS"}`;
       })
       .catch((err) => setMenuError(err instanceof Error ? err.message : "Could not load menu"))
@@ -276,10 +330,16 @@ export function App() {
 
     async function poll() {
       try {
-        const res = await fetch(`/api/public/orders/${placed!.orderNumber}`);
+        const res = await fetch(`/api/public/orders/${encodeURIComponent(placed!.trackingToken)}`);
+        if (res.status === 404) {
+          localStorage.removeItem(`${TRACK_KEY}:${slug}`);
+          if (!cancelled) setPlaced(null);
+          return;
+        }
         const data = await res.json();
         if (!res.ok) return;
         if (!cancelled) setLiveOrder(data);
+        if (data.status === "completed" || data.status === "cancelled") window.clearInterval(id);
       } catch {
         /* keep last known status */
       }
@@ -291,7 +351,7 @@ export function App() {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [placed]);
+  }, [placed, slug]);
 
   useEffect(() => {
     if (!toast) return;
@@ -334,9 +394,12 @@ export function App() {
 
   const cartCount = cart.reduce((sum, line) => sum + line.quantity, 0);
   const subtotal = cart.reduce((sum, line) => sum + lineTotal(line), 0);
-  const tax = Math.round((subtotal * taxRateBps) / 10000);
+  const tax = taxInclusive
+    ? subtotal - Math.round(subtotal / (1 + taxRateBps / 10000))
+    : Math.round((subtotal * taxRateBps) / 10000);
   const deliveryFee = quoteDeliveryFee(subtotal, deliveryQuote, fulfillment);
-  const total = subtotal + tax + deliveryFee;
+  const total = subtotal + (taxInclusive ? 0 : tax) + deliveryFee;
+  const estimateLabel = (f: Fulfillment) => ordering.estimates[f] ?? "";
 
   function openItem(item: Item) {
     const initial: Record<string, Modifier[]> = {};
@@ -366,7 +429,7 @@ export function App() {
 
   function pushCartLine(
     item: Item,
-    modifiers: { name: string; priceCents: number }[],
+    modifiers: { id?: string; name: string; priceCents: number }[],
     quantity: number,
     lineNote?: string
   ) {
@@ -401,6 +464,10 @@ export function App() {
   }
 
   function addItem(item: Item) {
+    if (item.soldOut) {
+      setToast(`${item.name} is sold out`);
+      return;
+    }
     if (item.modifierGroups.length > 0) {
       openItem(item);
       return;
@@ -419,7 +486,7 @@ export function App() {
     }
     const modifiers = Object.values(pickedMods)
       .flat()
-      .map((mod) => ({ name: mod.name, priceCents: mod.priceCents }));
+      .map((mod) => ({ id: mod.id, name: mod.name, priceCents: mod.priceCents }));
     pushCartLine(modItem, modifiers, modQty, modNote.trim());
     setModItem(null);
     setView("menu");
@@ -434,6 +501,10 @@ export function App() {
 
   async function placeOrder(e: React.FormEvent) {
     e.preventDefault();
+    if (!ordering.open) {
+      setError(`${pausedMessage(ordering)}. Your basket is saved.`);
+      return;
+    }
     if (!cart.length) {
       setError("Add something from the menu first.");
       setView("cart");
@@ -495,8 +566,11 @@ export function App() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Order failed");
-      setPlaced({
+      const next: PlacedOrder = {
         orderNumber: data.order.orderNumber,
+        trackingToken: data.trackingToken,
+        createdAt: data.order.createdAt,
+        estimate: data.order.estimate,
         totalCents: data.order.totalCents,
         fulfillment,
         customerName: name.trim(),
@@ -506,7 +580,13 @@ export function App() {
         cardBrand: data.order.cardBrand,
         cardLast4: data.order.cardLast4,
         receiptNumber: data.order.receiptNumber,
-      });
+      };
+      setPlaced(next);
+      try {
+        localStorage.setItem(`${TRACK_KEY}:${slug}`, JSON.stringify(next));
+      } catch {
+        /* private mode */
+      }
       setLiveOrder(data.order);
       setCart([]);
       setView("menu");
@@ -522,6 +602,7 @@ export function App() {
   }
 
   function resetToMenu() {
+    localStorage.removeItem(`${TRACK_KEY}:${slug}`);
     setPlaced(null);
     setLiveOrder(null);
     setError("");
@@ -534,11 +615,13 @@ export function App() {
   const modEach = (modItem?.variants[0]?.priceCents ?? 0) + modExtra;
   const modTotal = modEach * modQty;
 
-  const popular = useMemo(() => {
-    return [...items]
-      .sort((a, b) => (b.variants[0]?.priceCents ?? 0) - (a.variants[0]?.priceCents ?? 0))
-      .slice(0, 6);
-  }, [items]);
+  const popular = useMemo(
+    () =>
+      popularIds
+        .map((id) => items.find((item) => item.id === id))
+        .filter((item): item is Item => Boolean(item && !item.soldOut)),
+    [items, popularIds]
+  );
 
   if (loading) {
     return (
@@ -555,7 +638,7 @@ export function App() {
     const status = liveOrder?.status ?? "pending";
     const idx = statusIndex(status);
     const lines = liveOrder?.lines?.length ? liveOrder.lines : placed.lines;
-    const stepLabels = ["Received", "Accepted", "Preparing", "Ready"];
+    const stepLabels = ["Received", "Being made", "Ready"];
     return (
       <div className="status-shell">
         <div className="status-card">
@@ -563,6 +646,15 @@ export function App() {
           <h1>{statusTitle(status, placed.fulfillment)}</h1>
           <p className="order-no">{placed.orderNumber}</p>
           <p className="status-note">{statusCopy(status, placed.fulfillment)}</p>
+          {(status === "pending" || status === "accepted" || status === "preparing") &&
+            readyAround(liveOrder?.createdAt ?? placed.createdAt, liveOrder?.estimate ?? placed.estimate) && (
+              <p className="ready-at">
+                {placed.fulfillment === "delivery" ? "Arriving around " : "Ready around "}
+                <strong>
+                  {readyAround(liveOrder?.createdAt ?? placed.createdAt, liveOrder?.estimate ?? placed.estimate)}
+                </strong>
+              </p>
+            )}
           {status !== "cancelled" && (
             <div className="steps" aria-label="Order progress">
               {STATUS_STEPS.map((step, i) => {
@@ -595,12 +687,17 @@ export function App() {
           </ul>
           <p className="status-total">{money(liveOrder?.totalCents ?? placed.totalCents)}</p>
           <p className="muted">
-            {fulfillmentLabel(placed.fulfillment)} · about {estimateLabel(placed.fulfillment)} · {placed.customerName}
+            {fulfillmentLabel(placed.fulfillment)} · {placed.customerName}
           </p>
           {placed.fulfillment === "delivery" && placed.deliveryAddress && (
             <p className="muted">{placed.deliveryAddress}</p>
           )}
           {store?.address && <p className="muted">{store.address}</p>}
+          {liveOrder?.store?.phone && (
+            <p className="muted">
+              Questions? Call <a href={`tel:${liveOrder.store.phone.replace(/\s/g, "")}`}>{liveOrder.store.phone}</a>
+            </p>
+          )}
           <p className="pay-note">
             Paid with {liveOrder?.cardBrand ?? placed.cardBrand ?? "card"}
             {(liveOrder?.cardLast4 ?? placed.cardLast4) ? ` •••• ${liveOrder?.cardLast4 ?? placed.cardLast4}` : ""}
@@ -609,8 +706,13 @@ export function App() {
               : ""}
           </p>
           <button type="button" onClick={resetToMenu}>
-            Order something else
+            {status === "completed" || status === "cancelled" ? "Start a new order" : "Order something else"}
           </button>
+          {status !== "completed" && status !== "cancelled" && (
+            <p className="muted" style={{ fontSize: "0.85rem" }}>
+              You can close this page. Open the menu again on this phone to see your order.
+            </p>
+          )}
         </div>
       </div>
     );
@@ -627,12 +729,12 @@ export function App() {
             <p className="eyebrow">Order online · PurePOS</p>
             <h1 className="hero-brand">{store?.name ?? "Café"}</h1>
             <p className="hero-lede">
-              Order in seconds — pickup, dine-in, or delivery. Live kitchen tracking when you’re done.
+              Order ahead and pay by card. We’ll show you live when it’s being made and when it’s ready.
             </p>
             <div className="hero-meta">
-              <span className="pill">
+              <span className={`pill${ordering.open ? "" : " is-closed"}`}>
                 <span className="dot" aria-hidden="true" />
-                Accepting orders
+                {ordering.open ? "Taking orders now" : pausedMessage(ordering)}
               </span>
               <span className="pill">{fulfillmentLabel(fulfillment)} · ~{estimateLabel(fulfillment)}</span>
               {store?.address && <span className="pill">{store.address}</span>}
@@ -655,8 +757,14 @@ export function App() {
           </button>
         </header>
 
+        {!ordering.open && view === "menu" && (
+          <p className="closed-banner" role="status">
+            {pausedMessage(ordering)}. You can still look at the menu and fill your basket.
+          </p>
+        )}
+
         <div className="header-fulfillment fulfillment" role="group" aria-label="How do you want it">
-          {(["pickup", "dine_in", "delivery"] as const).map((option) => (
+          {ordering.fulfillments.map((option) => (
             <button
               key={option}
               type="button"
@@ -733,8 +841,8 @@ export function App() {
         ) : (
           <section className="menu" aria-label="Menu">
             <div className="trust">
-              <span>Live kitchen status</span>
-              <span>VAT shown at checkout</span>
+              <span>Live order tracking</span>
+              <span>{taxInclusive ? "Prices include VAT" : "VAT added at checkout"}</span>
               <span>Card details not stored</span>
             </div>
             <label className="search">
@@ -796,14 +904,26 @@ export function App() {
                 {section.items.length === 0 && <p className="empty">Nothing matches that search.</p>}
                 <div className="dishes">
                   {section.items.map((item) => (
-                    <button key={item.id} type="button" className="dish" onClick={() => addItem(item)}>
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`dish${item.soldOut ? " is-soldout" : ""}`}
+                      disabled={item.soldOut}
+                      onClick={() => addItem(item)}
+                    >
                       <span className="swatch" style={{ background: item.color || "#0d9488" }} />
                       <span className="dish-copy">
                         <span className="dish-name">{item.name}</span>
                         {item.description && <span className="dish-desc">{item.description}</span>}
                         <span className="dish-hint">
-                          {item.modifierGroups.length > 0 ? "Customise" : "Add to order"}
-                          <span className="add-chip" aria-hidden="true">+</span>
+                          {item.soldOut ? (
+                            "Sold out"
+                          ) : (
+                            <>
+                              {item.modifierGroups.length > 0 ? "Customise" : "Add to order"}
+                              <span className="add-chip" aria-hidden="true">+</span>
+                            </>
+                          )}
                         </span>
                       </span>
                       <span className="dish-price">{money(item.variants[0]?.priceCents ?? 0)}</span>
@@ -826,6 +946,10 @@ export function App() {
           deliveryFee={deliveryFee}
           deliveryQuote={deliveryQuote}
           total={total}
+          taxInclusive={taxInclusive}
+          fulfillments={ordering.fulfillments}
+          estimate={estimateLabel(fulfillment)}
+          closedMessage={ordering.open ? "" : pausedMessage(ordering)}
           name={name}
           phone={phone}
           fulfillment={fulfillment}
@@ -917,6 +1041,10 @@ function Checkout({
   deliveryFee,
   deliveryQuote,
   total,
+  taxInclusive,
+  fulfillments,
+  estimate,
+  closedMessage,
   name,
   phone,
   fulfillment,
@@ -955,6 +1083,10 @@ function Checkout({
   deliveryFee: number;
   deliveryQuote: DeliveryQuote | null;
   total: number;
+  taxInclusive: boolean;
+  fulfillments: Fulfillment[];
+  estimate: string;
+  closedMessage: string;
   name: string;
   phone: string;
   fulfillment: Fulfillment;
@@ -1021,7 +1153,7 @@ function Checkout({
 
       <section className={`step-panel${step === "cart" ? " active" : ""}`} data-step="cart">
         <div className="cart-fulfillment fulfillment" role="group" aria-label="How do you want it">
-          {(["pickup", "dine_in", "delivery"] as const).map((option) => (
+          {fulfillments.map((option) => (
             <button
               key={option}
               type="button"
@@ -1033,7 +1165,7 @@ function Checkout({
           ))}
         </div>
         <p className="eta">
-          About {estimateLabel(fulfillment)}
+          About {estimate}
           {fulfillment === "delivery" && deliveryQuote
             ? freeDelivery
               ? " · free delivery"
@@ -1069,10 +1201,12 @@ function Checkout({
             <span>Subtotal</span>
             <span>{money(subtotal)}</span>
           </div>
-          <div className="row">
-            <span>VAT</span>
-            <span>{money(tax)}</span>
-          </div>
+          {!taxInclusive && (
+            <div className="row">
+              <span>VAT</span>
+              <span>{money(tax)}</span>
+            </div>
+          )}
           {fulfillment === "delivery" && (
             <div className="row">
               <span>Delivery</span>
@@ -1083,6 +1217,12 @@ function Checkout({
             <span>Total</span>
             <span>{money(total)}</span>
           </div>
+          {taxInclusive && tax > 0 && (
+            <div className="row vat-note">
+              <span>Includes VAT</span>
+              <span>{money(tax)}</span>
+            </div>
+          )}
         </div>
 
         {step === "cart" && error && <p className="error">{error}</p>}
@@ -1157,8 +1297,9 @@ function Checkout({
         </div>
         <h3 className="card-title">Card</h3>
         <p className="pay-note">
-        Secure demo checkout for UK shops. Try <strong>4242 4242 4242 4242</strong> — the full card number is never stored.
-      </p>
+          Test checkout: no real money is taken. Use <strong>4242 4242 4242 4242</strong>, any future expiry and any
+          3-digit code. Your full card number is never stored.
+        </p>
         <label className="field">
           <span>Name on card</span>
           <input
@@ -1208,7 +1349,8 @@ function Checkout({
           </label>
         </div>
         {step === "pay" && error && <p className="error">{error}</p>}
-        <button className="place-btn" type="submit" disabled={busy || !cart.length}>
+        {closedMessage && <p className="error">{closedMessage}.</p>}
+        <button className="place-btn" type="submit" disabled={busy || !cart.length || Boolean(closedMessage)}>
           {busy ? "Taking payment…" : cart.length ? `Place order · ${money(total)}` : "Add items to order"}
         </button>
       </section>

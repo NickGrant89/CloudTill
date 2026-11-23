@@ -849,7 +849,7 @@ textarea:focus-visible {
 
 .steps {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   margin: 18px 0;
   position: relative;
@@ -859,8 +859,8 @@ textarea:focus-visible {
   content: "";
   position: absolute;
   top: 7px;
-  left: 10%;
-  right: 10%;
+  left: 16%;
+  right: 16%;
   height: 2px;
   background: var(--line);
 }
@@ -1048,4 +1048,51 @@ textarea:focus-visible {
     animation: none !important;
     transition: none !important;
   }
+}
+
+.pill.is-closed .dot {
+  background: #f59e0b;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.25);
+  animation: none;
+}
+
+.closed-banner {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  color: #78350f;
+  font-weight: 700;
+}
+
+.dish.is-soldout,
+.dish:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  border-color: var(--line);
+  box-shadow: none;
+}
+
+.dish.is-soldout .dish-hint {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.dish.is-soldout .swatch {
+  filter: grayscale(1);
+}
+
+.ready-at {
+  margin: 4px 0 14px;
+  font-size: 1.05rem;
+}
+
+.ready-at strong {
+  font-size: 1.4rem;
+}
+
+.totals .row.vat-note {
+  font-size: 0.85rem;
+  color: var(--muted);
 }

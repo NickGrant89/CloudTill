@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
+import { owned } from "../tenant.js";
 import { requireAuth, type AuthedRequest } from "../auth.js";
 
 export const shiftsRouter = Router();
@@ -100,7 +101,7 @@ shiftsRouter.post("/open", async (req: AuthedRequest, res) => {
   });
 });
 
-shiftsRouter.post("/:id/cash", async (req: AuthedRequest, res) => {
+shiftsRouter.post("/:id/cash", owned("shift"), async (req: AuthedRequest, res) => {
   const body = z
     .object({
       type: z.enum(["pay_in", "pay_out"]),
@@ -119,7 +120,7 @@ shiftsRouter.post("/:id/cash", async (req: AuthedRequest, res) => {
   res.status(201).json(event);
 });
 
-shiftsRouter.post("/:id/close", async (req: AuthedRequest, res) => {
+shiftsRouter.post("/:id/close", owned("shift"), async (req: AuthedRequest, res) => {
   const body = z
     .object({
       closingCashCents: z.number().int().nonnegative(),

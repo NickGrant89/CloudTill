@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
+import { owned } from "../tenant.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 import { companyStoreIds, sameCompany } from "../company.js";
 
@@ -25,13 +26,13 @@ catalogRouter.post("/categories", requireRole("owner", "manager"), async (req: A
   res.status(201).json(cat);
 });
 
-catalogRouter.patch("/categories/:id", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+catalogRouter.patch("/categories/:id", owned("category"), requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
   const body = z.object({ name: z.string().optional(), color: z.string().optional(), sortOrder: z.number().optional() }).parse(req.body);
   const cat = await prisma.category.update({ where: { id: req.params.id }, data: body });
   res.json(cat);
 });
 
-catalogRouter.delete("/categories/:id", requireRole("owner", "manager"), async (req, res) => {
+catalogRouter.delete("/categories/:id", owned("category"), requireRole("owner", "manager"), async (req, res) => {
   await prisma.category.delete({ where: { id: req.params.id } });
   res.status(204).end();
 });
@@ -370,7 +371,7 @@ catalogRouter.post("/items/assign-stores", requireRole("owner", "manager"), asyn
   });
 });
 
-catalogRouter.patch("/items/:id", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+catalogRouter.patch("/items/:id", owned("item"), requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
   const body = z
     .object({
       name: z.string().optional(),
@@ -410,7 +411,7 @@ catalogRouter.patch("/items/:id", requireRole("owner", "manager"), async (req: A
   res.json(full);
 });
 
-catalogRouter.delete("/items/:id", requireRole("owner", "manager"), async (req, res) => {
+catalogRouter.delete("/items/:id", owned("item"), requireRole("owner", "manager"), async (req, res) => {
   await prisma.item.update({ where: { id: req.params.id }, data: { active: false } });
   res.status(204).end();
 });
@@ -495,7 +496,7 @@ catalogRouter.post("/modifier-sets", requireRole("owner", "manager"), async (req
   res.status(201).json({ created, skipped });
 });
 
-catalogRouter.get("/items/:id/modifiers", async (req, res) => {
+catalogRouter.get("/items/:id/modifiers", owned("item"), async (req, res) => {
   const groups = await prisma.modifierGroup.findMany({
     where: { itemId: req.params.id },
     include: { modifiers: true },
@@ -504,7 +505,7 @@ catalogRouter.get("/items/:id/modifiers", async (req, res) => {
   res.json(groups);
 });
 
-catalogRouter.post("/items/:id/modifier-groups", requireRole("owner", "manager"), async (req, res) => {
+catalogRouter.post("/items/:id/modifier-groups", owned("item"), requireRole("owner", "manager"), async (req, res) => {
   const body = z
     .object({
       name: z.string().min(1),
@@ -530,7 +531,7 @@ catalogRouter.post("/items/:id/modifier-groups", requireRole("owner", "manager")
   res.status(201).json(group);
 });
 
-catalogRouter.patch("/modifier-groups/:id", requireRole("owner", "manager"), async (req, res) => {
+catalogRouter.patch("/modifier-groups/:id", owned("modifierGroup"), requireRole("owner", "manager"), async (req, res) => {
   const body = z
     .object({
       name: z.string().optional(),
@@ -546,13 +547,13 @@ catalogRouter.patch("/modifier-groups/:id", requireRole("owner", "manager"), asy
   res.json(group);
 });
 
-catalogRouter.delete("/modifier-groups/:id", requireRole("owner", "manager"), async (req, res) => {
+catalogRouter.delete("/modifier-groups/:id", owned("modifierGroup"), requireRole("owner", "manager"), async (req, res) => {
   await prisma.modifier.deleteMany({ where: { groupId: req.params.id } });
   await prisma.modifierGroup.delete({ where: { id: req.params.id } });
   res.status(204).end();
 });
 
-catalogRouter.post("/modifier-groups/:id/modifiers", requireRole("owner", "manager"), async (req, res) => {
+catalogRouter.post("/modifier-groups/:id/modifiers", owned("modifierGroup"), requireRole("owner", "manager"), async (req, res) => {
   const body = z
     .object({ name: z.string().min(1), priceCents: z.number().int().default(0) })
     .parse(req.body);
@@ -562,7 +563,7 @@ catalogRouter.post("/modifier-groups/:id/modifiers", requireRole("owner", "manag
   res.status(201).json(mod);
 });
 
-catalogRouter.patch("/modifiers/:id", requireRole("owner", "manager"), async (req, res) => {
+catalogRouter.patch("/modifiers/:id", owned("modifier"), requireRole("owner", "manager"), async (req, res) => {
   const body = z
     .object({
       name: z.string().optional(),
@@ -574,7 +575,7 @@ catalogRouter.patch("/modifiers/:id", requireRole("owner", "manager"), async (re
   res.json(mod);
 });
 
-catalogRouter.delete("/modifiers/:id", requireRole("owner", "manager"), async (req, res) => {
+catalogRouter.delete("/modifiers/:id", owned("modifier"), requireRole("owner", "manager"), async (req, res) => {
   await prisma.modifier.update({ where: { id: req.params.id }, data: { active: false } });
   res.status(204).end();
 });
