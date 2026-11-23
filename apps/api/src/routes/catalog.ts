@@ -5,7 +5,15 @@ import { owned, rejectForeign } from "../tenant.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 import { companyStoreIds, sameCompany } from "../company.js";
 import { ensurePizzaMenu } from "../pizzaMenu.js";
-import { defaultModifierFolder, readModifierFolders, setModifierFolder } from "../modifierFolders.js";
+import {
+  defaultModifierFolder,
+  readModifierLayout,
+  saveModifierLayout,
+  setModifierFolder,
+  sortFolders,
+  sortMenus,
+  syncModifierGroupSortOrders,
+} from "../modifierFolders.js";
 
 export const catalogRouter = Router();
 catalogRouter.use(requireAuth);
@@ -452,7 +460,7 @@ catalogRouter.delete("/items/:id", owned("item"), requireRole("owner", "manager"
 
 catalogRouter.get("/modifier-sets", async (req: AuthedRequest, res) => {
   const storeId = req.user!.storeId;
-  const [groups, folderMap] = await Promise.all([
+  const [groups, layout] = await Promise.all([
     prisma.modifierGroup.findMany({
       where: { item: { storeId, active: true } },
       include: {
@@ -461,7 +469,7 @@ catalogRouter.get("/modifier-sets", async (req: AuthedRequest, res) => {
       },
       orderBy: { name: "asc" },
     }),
-    readModifierFolders(storeId),
+    readModifierLayout(storeId),
   ]);
 
   const byName = new Map<
@@ -482,7 +490,7 @@ catalogRouter.get("/modifier-sets", async (req: AuthedRequest, res) => {
     if (!existing) {
       byName.set(group.name.toLowerCase(), {
         name: group.name,
-        folder: folderMap[group.name.toLowerCase()] || defaultModifierFolder(group.name),
+        folder: layout.map[group.name.toLowerCase()] || defaultModifierFolder(group.name),
         minSelect: group.minSelect,
         maxSelect: group.maxSelect,
         options: group.modifiers.map((modifier) => ({ name: modifier.name, priceCents: modifier.priceCents })),
@@ -493,12 +501,25 @@ catalogRouter.get("/modifier-sets", async (req: AuthedRequest, res) => {
     }
   }
 
-  const rows = [...byName.values()].sort((a, b) => {
-    const folderCmp = a.folder.localeCompare(b.folder, undefined, { sensitivity: "base" });
-    if (folderCmp !== 0) return folderCmp;
-    return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  const rows = [...byName.values()];
+  const folderNames = sortFolders([...new Set(rows.map((row) => row.folder))], layout.folderOrder);
+  const menuNames = sortMenus(
+    rows.map((row) => row.name),
+    layout.menuOrder.length ? layout.menuOrder : rows.map((row) => row.name)
+  );
+  const folderRank = new Map(folderNames.map((name, index) => [name.toLowerCase(), index]));
+  const menuRank = new Map(menuNames.map((name, index) => [name.toLowerCase(), index]));
+  rows.sort((a, b) => {
+    const folderCmp = (folderRank.get(a.folder.toLowerCase()) ?? 0) - (folderRank.get(b.folder.toLowerCase()) ?? 0);
+    if (folderCmp) return folderCmp;
+    return (menuRank.get(a.name.toLowerCase()) ?? 0) - (menuRank.get(b.name.toLowerCase()) ?? 0);
   });
-  res.json(rows);
+
+  res.json({
+    sets: rows,
+    folderOrder: folderNames,
+    menuOrder: menuNames,
+  });
 });
 
 catalogRouter.patch("/modifier-sets/folder", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
@@ -510,6 +531,24 @@ catalogRouter.patch("/modifier-sets/folder", requireRole("owner", "manager"), as
     .parse(req.body);
   const folder = await setModifierFolder(req.user!.storeId, body.name, body.folder);
   res.json({ ok: true, name: body.name.trim(), folder });
+});
+
+catalogRouter.patch("/modifier-sets/layout", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const body = z
+    .object({
+      folderOrder: z.array(z.string().min(1).max(40)).max(40).optional(),
+      menuOrder: z.array(z.string().min(1).max(80)).max(80).optional(),
+      renameFolder: z.object({ from: z.string().min(1).max(40), to: z.string().min(1).max(40) }).optional(),
+      renameSet: z.object({ from: z.string().min(1).max(80), to: z.string().min(1).max(80) }).optional(),
+      syncTillOrder: z.boolean().optional(),
+    })
+    .parse(req.body);
+  const layout = await saveModifierLayout(req.user!.storeId, body);
+  let synced = 0;
+  if (body.syncTillOrder || body.menuOrder || body.renameSet) {
+    synced = await syncModifierGroupSortOrders(req.user!.storeId, layout.menuOrder);
+  }
+  res.json({ ok: true, layout, syncedGroups: synced });
 });
 
 catalogRouter.post("/modifier-sets", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {

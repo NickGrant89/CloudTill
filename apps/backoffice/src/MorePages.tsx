@@ -242,6 +242,71 @@ function folderForSet(set: ModifierSet): string {
   return (set.folder || "General").trim() || "General";
 }
 
+type ModifierSetsResponse = {
+  sets: ModifierSet[];
+  folderOrder: string[];
+  menuOrder: string[];
+};
+
+async function fetchModifierSets(): Promise<ModifierSetsResponse> {
+  const raw = await api<ModifierSet[] | ModifierSetsResponse>("/catalog/modifier-sets");
+  if (Array.isArray(raw)) {
+    return {
+      sets: raw,
+      folderOrder: [...new Set(raw.map(folderForSet))],
+      menuOrder: raw.map((set) => set.name),
+    };
+  }
+  return {
+    sets: Array.isArray(raw.sets) ? raw.sets : [],
+    folderOrder: Array.isArray(raw.folderOrder) ? raw.folderOrder : [],
+    menuOrder: Array.isArray(raw.menuOrder) ? raw.menuOrder : [],
+  };
+}
+
+function ItemChecklist({
+  items,
+  selectedIds,
+  onToggle,
+  label,
+}: {
+  items: { id: string; name: string }[];
+  selectedIds: string[];
+  onToggle: (id: string) => void;
+  label: string;
+}) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const visible = q
+    ? items.filter((item) => item.name.toLowerCase().includes(q))
+    : items;
+  const selected = selectedIds.length;
+  return (
+    <div className="field">
+      <label>{label}</label>
+      <input
+        placeholder="Search items…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        style={{ marginBottom: 8 }}
+      />
+      <p style={{ margin: "0 0 8px", color: "var(--muted)", fontSize: "0.88rem" }}>
+        {selected} selected · {visible.length} shown
+        {q ? ` of ${items.length}` : ""}
+      </p>
+      <div className="modifier-item-list">
+        {visible.length === 0 && <p style={{ color: "var(--muted)", margin: 8 }}>No items match.</p>}
+        {visible.map((item) => (
+          <label key={item.id} className="modifier-item-row">
+            <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => onToggle(item.id)} />
+            <span>{item.name}</span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function ModifierEditor({
   itemId,
   itemName,
@@ -268,10 +333,10 @@ export function ModifierEditor({
   async function load() {
     const [nextGroups, nextSets] = await Promise.all([
       api<typeof groups>(`/catalog/items/${itemId}/modifiers`),
-      api<ModifierSet[]>("/catalog/modifier-sets"),
+      fetchModifierSets(),
     ]);
     setGroups(nextGroups);
-    setSets(nextSets);
+    setSets(nextSets.sets);
     setReady(true);
   }
 
@@ -503,6 +568,8 @@ export function ModifierLibrary({
   onChange: () => void;
 }) {
   const [sets, setSets] = useState<ModifierSet[]>([]);
+  const [folderOrder, setFolderOrder] = useState<string[]>([]);
+  const [menuOrder, setMenuOrder] = useState<string[]>([]);
   const [selected, setSelected] = useState("");
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -515,20 +582,26 @@ export function ModifierLibrary({
   const [itemIds, setItemIds] = useState<string[]>([]);
   const [createItemIds, setCreateItemIds] = useState<string[]>([]);
   const [editOptions, setEditOptions] = useState<{ name: string; price: string }[]>([]);
+  const [editSetName, setEditSetName] = useState("");
   const [editFolder, setEditFolder] = useState("General");
   const [customFolder, setCustomFolder] = useState("");
   const [addingFolder, setAddingFolder] = useState(false);
+  const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
+  const [renameFolderValue, setRenameFolderValue] = useState("");
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
   async function load(selectName?: string) {
-    const next = await api<ModifierSet[]>("/catalog/modifier-sets");
-    setSets(next);
+    const next = await fetchModifierSets();
+    setSets(next.sets);
+    setFolderOrder(next.folderOrder);
+    setMenuOrder(next.menuOrder);
     const nameToKeep = selectName ?? selected;
-    const match = next.find((set) => set.name === nameToKeep);
+    const match = next.sets.find((set) => set.name === nameToKeep);
     if (match) {
       setSelected(match.name);
+      setEditSetName(match.name);
       setItemIds(match.assignments.map((assignment) => assignment.itemId));
       setEditOptions(match.options.map((option) => ({ name: option.name, price: (option.priceCents / 100).toFixed(2) })));
       setEditFolder(folderForSet(match));
@@ -536,6 +609,7 @@ export function ModifierLibrary({
       setAddingFolder(false);
     } else if (nameToKeep) {
       setSelected("");
+      setEditSetName("");
       setItemIds([]);
       setEditOptions([]);
       setEditFolder("General");
@@ -627,6 +701,7 @@ export function ModifierLibrary({
     setError("");
     setNotice("");
     const set = sets.find((entry) => entry.name === name);
+    setEditSetName(set?.name ?? name);
     setItemIds(set ? set.assignments.map((assignment) => assignment.itemId) : []);
     setEditOptions(
       set ? set.options.map((option) => ({ name: option.name, price: (option.priceCents / 100).toFixed(2) })) : []
@@ -634,6 +709,110 @@ export function ModifierLibrary({
     setEditFolder(set ? folderForSet(set) : "General");
     setCustomFolder("");
     setAddingFolder(false);
+  }
+
+  function menusInFolder(folder: string) {
+    const inFolder = sets.filter((set) => folderForSet(set) === folder).map((set) => set.name);
+    if (!menuOrder.length) return inFolder;
+    const rank = new Map(menuOrder.map((name, index) => [name.toLowerCase(), index]));
+    return [...inFolder].sort((a, b) => {
+      const ra = rank.has(a.toLowerCase()) ? rank.get(a.toLowerCase())! : 10_000;
+      const rb = rank.has(b.toLowerCase()) ? rank.get(b.toLowerCase())! : 10_000;
+      if (ra !== rb) return ra - rb;
+      return a.localeCompare(b);
+    });
+  }
+
+  async function saveLayout(payload: {
+    folderOrder?: string[];
+    menuOrder?: string[];
+    renameFolder?: { from: string; to: string };
+    renameSet?: { from: string; to: string };
+  }) {
+    setError("");
+    await api("/catalog/modifier-sets/layout", {
+      method: "PATCH",
+      body: JSON.stringify({ ...payload, syncTillOrder: true }),
+    });
+  }
+
+  async function moveFolder(index: number, dir: -1 | 1) {
+    const nextIndex = index + dir;
+    if (nextIndex < 0 || nextIndex >= folderNames.length) return;
+    const next = [...folderNames];
+    const [row] = next.splice(index, 1);
+    next.splice(nextIndex, 0, row);
+    try {
+      await saveLayout({ folderOrder: next });
+      setNotice(`Group order updated. Till order follows menu order within each item.`);
+      await load(selected || undefined);
+      onChange();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not reorder groups");
+    }
+  }
+
+  async function moveMenu(folder: string, index: number, dir: -1 | 1) {
+    const inFolder = menusInFolder(folder);
+    const nextIndex = index + dir;
+    if (nextIndex < 0 || nextIndex >= inFolder.length) return;
+    const swapped = [...inFolder];
+    const [row] = swapped.splice(index, 1);
+    swapped.splice(nextIndex, 0, row);
+    const nextMenu: string[] = [];
+    for (const folderName of folderNames) {
+      const names = folderName === folder ? swapped : menusInFolder(folderName);
+      for (const name of names) {
+        if (!nextMenu.some((entry) => entry.toLowerCase() === name.toLowerCase())) nextMenu.push(name);
+      }
+    }
+    for (const name of menuOrder) {
+      if (!nextMenu.some((entry) => entry.toLowerCase() === name.toLowerCase())) nextMenu.push(name);
+    }
+    try {
+      await saveLayout({ menuOrder: nextMenu, folderOrder: folderNames });
+      setNotice(`Menu order saved — till and tickets use this order for groups on each item.`);
+      await load(selected || undefined);
+      onChange();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not reorder menus");
+    }
+  }
+
+  async function renameFolder(from: string, to: string) {
+    const cleaned = to.trim();
+    if (!cleaned || cleaned.toLowerCase() === from.toLowerCase()) {
+      setRenamingFolder(null);
+      return;
+    }
+    try {
+      await saveLayout({ renameFolder: { from, to: cleaned }, folderOrder: folderNames.map((name) => (name === from ? cleaned : name)) });
+      setRenamingFolder(null);
+      setRenameFolderValue("");
+      setNotice(`Renamed group to ${cleaned}.`);
+      await load(selected || undefined);
+      onChange();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not rename group");
+    }
+  }
+
+  async function renameSelectedSet() {
+    if (!selectedSet) return;
+    const cleaned = editSetName.trim();
+    if (!cleaned) {
+      setError("Menu name is required.");
+      return;
+    }
+    if (cleaned.toLowerCase() === selectedSet.name.toLowerCase()) return;
+    try {
+      await saveLayout({ renameSet: { from: selectedSet.name, to: cleaned } });
+      setNotice(`Renamed to ${cleaned} on the till and tickets.`);
+      await load(cleaned);
+      onChange();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not rename menu");
+    }
   }
 
   async function saveFolder(folder: string) {
@@ -744,51 +923,110 @@ export function ModifierLibrary({
   }
 
   const selectedSet = sets.find((set) => set.name === selected);
-  const folderNames = Array.from(new Set(sets.map(folderForSet))).sort((a, b) =>
-    a.localeCompare(b, undefined, { sensitivity: "base" })
-  );
+  const discoveredFolders = [...new Set(sets.map(folderForSet))];
+  const folderNames = (() => {
+    const ordered = folderOrder.filter((name) =>
+      discoveredFolders.some((folder) => folder.toLowerCase() === name.toLowerCase())
+    );
+    for (const name of discoveredFolders) {
+      if (!ordered.some((folder) => folder.toLowerCase() === name.toLowerCase())) ordered.push(name);
+    }
+    return ordered;
+  })();
   const knownFolders = Array.from(new Set(["General", "Pizza", "Burgers", ...folderNames]));
 
   return (
     <div className="modifier-layout">
-      <aside className="modifier-menu" aria-label="Modifier menus">
+      <aside className="modifier-menu" aria-label="modifier menus">
         <div className="modifier-menu-head">
           <strong>Menus</strong>
           <button type="button" className="secondary" onClick={() => setCreating((open) => !open)}>
             {creating ? "Close" : "New"}
           </button>
         </div>
+        <p className="modifier-menu-empty" style={{ marginTop: 0 }}>
+          Up/Down on groups and menus sets till and ticket order.
+        </p>
         {sets.length === 0 && <p className="modifier-menu-empty">No modifiers yet</p>}
-        {folderNames.map((folder) => {
-          const rows = sets.filter((set) => folderForSet(set) === folder);
+        {folderNames.map((folder, folderIndex) => {
+          const rows = menusInFolder(folder);
           const collapsed = Boolean(collapsedFolders[folder]);
           return (
             <div key={folder} className="modifier-folder">
-              <button
-                type="button"
-                className="modifier-folder-head"
-                onClick={() => setCollapsedFolders((prev) => ({ ...prev, [folder]: !prev[folder] }))}
-              >
-                <span>
-                  {collapsed ? "▸" : "▾"} {folder}
-                </span>
-                <span className="modifier-menu-meta">{rows.length}</span>
-              </button>
+              <div className="modifier-folder-bar">
+                {renamingFolder === folder ? (
+                  <>
+                    <input
+                      value={renameFolderValue}
+                      onChange={(e) => setRenameFolderValue(e.target.value)}
+                      aria-label="Group name"
+                      style={{ flex: 1, minWidth: 0 }}
+                    />
+                    <button type="button" className="secondary" style={{ minHeight: 32 }} onClick={() => void renameFolder(folder, renameFolderValue)}>
+                      Save
+                    </button>
+                    <button type="button" className="secondary" style={{ minHeight: 32 }} onClick={() => setRenamingFolder(null)}>
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="modifier-folder-head"
+                      onClick={() => setCollapsedFolders((prev) => ({ ...prev, [folder]: !prev[folder] }))}
+                    >
+                      <span>
+                        {collapsed ? "▸" : "▾"} {folder}
+                      </span>
+                      <span className="modifier-menu-meta">{rows.length}</span>
+                    </button>
+                    <button type="button" className="secondary" style={{ minHeight: 32 }} disabled={folderIndex === 0} onClick={() => void moveFolder(folderIndex, -1)}>
+                      Up
+                    </button>
+                    <button type="button" className="secondary" style={{ minHeight: 32 }} disabled={folderIndex === folderNames.length - 1} onClick={() => void moveFolder(folderIndex, 1)}>
+                      Down
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      style={{ minHeight: 32 }}
+                      onClick={() => {
+                        setRenamingFolder(folder);
+                        setRenameFolderValue(folder);
+                      }}
+                    >
+                      Rename
+                    </button>
+                  </>
+                )}
+              </div>
               {!collapsed &&
-                rows.map((set) => (
-                  <button
-                    key={set.name}
-                    type="button"
-                    className={`modifier-menu-btn${selected === set.name ? " active" : ""}`}
-                    onClick={() => {
-                      setCreating(false);
-                      chooseSet(set.name);
-                    }}
-                  >
-                    <span>{set.name}</span>
-                    <span className="modifier-menu-meta">{set.assignments.length}</span>
-                  </button>
-                ))}
+                rows.map((setName, menuIndex) => {
+                  const set = sets.find((entry) => entry.name === setName);
+                  if (!set) return null;
+                  return (
+                    <div key={set.name} className="modifier-menu-row">
+                      <button
+                        type="button"
+                        className={`modifier-menu-btn${selected === set.name ? " active" : ""}`}
+                        onClick={() => {
+                          setCreating(false);
+                          chooseSet(set.name);
+                        }}
+                      >
+                        <span>{set.name}</span>
+                        <span className="modifier-menu-meta">{set.assignments.length}</span>
+                      </button>
+                      <button type="button" className="secondary" style={{ minHeight: 32 }} disabled={menuIndex === 0} onClick={() => void moveMenu(folder, menuIndex, -1)}>
+                        Up
+                      </button>
+                      <button type="button" className="secondary" style={{ minHeight: 32 }} disabled={menuIndex === rows.length - 1} onClick={() => void moveMenu(folder, menuIndex, 1)}>
+                        Down
+                      </button>
+                    </div>
+                  );
+                })}
             </div>
           );
         })}
@@ -849,26 +1087,30 @@ export function ModifierLibrary({
                 Add option
               </button>
             </div>
-            <div className="field">
-              <label>Assign to items</label>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {items.map((item) => (
-                  <label key={item.id} className="badge" style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    <input
-                      type="checkbox"
-                      checked={createItemIds.includes(item.id)}
-                      onChange={() => toggle(createItemIds, item.id, setCreateItemIds)}
-                    />
-                    {item.name}
-                  </label>
-                ))}
-              </div>
-            </div>
+            <ItemChecklist
+              items={items}
+              selectedIds={createItemIds}
+              onToggle={(id) => toggle(createItemIds, id, setCreateItemIds)}
+              label="Assign to items"
+            />
             <button type="submit">Create and assign</button>
           </form>
         ) : selectedSet ? (
           <form onSubmit={(e) => void saveAssignment(e)}>
-            <h3 style={{ marginTop: 0 }}>{selectedSet.name}</h3>
+            <div className="field">
+              <label htmlFor="modifier-set-name">Menu name (till & ticket)</label>
+              <div className="modifier-folder-pick">
+                <input
+                  id="modifier-set-name"
+                  value={editSetName}
+                  onChange={(e) => setEditSetName(e.target.value)}
+                  onBlur={() => void renameSelectedSet()}
+                />
+                <button type="button" className="secondary" onClick={() => void renameSelectedSet()}>
+                  Save name
+                </button>
+              </div>
+            </div>
             <p style={{ color: "var(--muted)", marginTop: 0 }}>
               {selectedSet.minSelect > 0 ? "Required" : "Optional"} · {selectedSet.maxSelect > 1 ? "pick many" : "pick one"}
             </p>
@@ -908,7 +1150,7 @@ export function ModifierLibrary({
                 )}
               </div>
               <p style={{ margin: "6px 0 0", color: "var(--muted)", fontSize: "0.88rem" }}>
-                Groups only organise this list — the till still shows the modifier name on the item.
+                Group is the folder on the left. Rename it there, or move this menu into another group.
               </p>
             </div>
             <p style={{ marginTop: 0 }}>
@@ -975,34 +1217,12 @@ export function ModifierLibrary({
                 Save options
               </button>
             </div>
-            <div className="field">
-              <label>Items</label>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {items.map((item) => (
-                  <label key={item.id} className="badge" style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    <input
-                      type="checkbox"
-                      checked={itemIds.includes(item.id)}
-                      onChange={() => toggle(itemIds, item.id, setItemIds)}
-                    />
-                    {item.name}
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-              {selectedSet.assignments.map((assignment) => (
-                <button
-                  key={assignment.groupId}
-                  type="button"
-                  className="secondary"
-                  style={{ minHeight: 32 }}
-                  onClick={() => void unassign(assignment.groupId)}
-                >
-                  {assignment.itemName} ×
-                </button>
-              ))}
-            </div>
+            <ItemChecklist
+              items={items}
+              selectedIds={itemIds}
+              onToggle={(id) => toggle(itemIds, id, setItemIds)}
+              label="Items"
+            />
             <button type="submit">Save {selectedSet.name}</button>
           </form>
         ) : (

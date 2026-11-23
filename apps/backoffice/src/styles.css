@@ -484,12 +484,21 @@ tr:last-child td {
   width: 100%;
 }
 
+.modifier-folder-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  width: 100%;
+}
+
 .modifier-folder-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  width: 100%;
+  flex: 1 1 120px;
+  min-width: 0;
   text-align: left;
   background: transparent;
   color: var(--muted);
@@ -503,8 +512,43 @@ tr:last-child td {
   min-height: 32px;
 }
 
-.modifier-folder .modifier-menu-btn {
+.modifier-menu-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  width: 100%;
+}
+
+.modifier-menu-row .modifier-menu-btn {
+  flex: 1 1 120px;
   margin-left: 4px;
+}
+
+.modifier-item-list {
+  max-height: 280px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.modifier-item-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  margin: 0;
+  cursor: pointer;
+}
+
+.modifier-item-row:last-child {
+  border-bottom: 0;
+}
+
+.modifier-item-row:hover {
+  background: var(--accent-soft);
 }
 
 .modifier-folder-pick {
