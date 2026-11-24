@@ -1216,12 +1216,17 @@ export function ModifierLibrary({
   const filterText = menuFilter.trim().toLowerCase();
   const discoveredFolders = [...new Set(sets.map(folderForSet))];
   const folderNames = (() => {
-    const ordered = folderOrder.filter((name) =>
-      discoveredFolders.some((folder) => folder.toLowerCase() === name.toLowerCase())
-    );
-    for (const name of discoveredFolders) {
-      if (!ordered.some((folder) => folder.toLowerCase() === name.toLowerCase())) ordered.push(name);
-    }
+    const ordered: string[] = [];
+    const seen = new Set<string>();
+    const push = (name: string) => {
+      const label = (name || "General").trim() || "General";
+      const key = label.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      ordered.push(label);
+    };
+    for (const name of folderOrder) push(name);
+    for (const name of discoveredFolders) push(name);
     return ordered;
   })();
   const knownFolders = Array.from(new Set(["General", "Pizza", "Burgers", ...folderNames]));
@@ -1241,7 +1246,12 @@ export function ModifierLibrary({
     <div className="modifier-layout">
       <aside className="modifier-menu" aria-label="modifier menus">
         <div className="modifier-menu-head">
-          <strong>Menus</strong>
+          <div>
+            <strong>Groups</strong>
+            <p className="modifier-menu-hint" style={{ margin: 0, color: "var(--muted)", fontSize: "0.8rem", fontWeight: 600 }}>
+              Loyverse folders — menus inside each group
+            </p>
+          </div>
           <button type="button" className="secondary" onClick={() => setCreating((open) => !open)}>
             {creating ? "Close" : "New"}
           </button>

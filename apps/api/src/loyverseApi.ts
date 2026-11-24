@@ -67,10 +67,13 @@ export type LoyverseItem = {
   variants?: LoyverseVariant[];
 };
 
+import { isLoyverseSectionHeaderName, loyverseFolderLabelFromHeaderName } from "./modifierFolders.js";
+
 /** Loyverse uses starred divider rows (e.g. ****** PIZZAS ******) as group headings in the modifier list. */
 export function isLoyverseSectionHeader(modifier: Pick<LoyverseModifier, "name" | "modifier_options">): boolean {
   const name = modifier.name?.trim() ?? "";
   if (!name) return false;
+  if (isLoyverseSectionHeaderName(name)) return true;
   const core = name.replace(/\*/g, "").trim();
   if (name.includes("*") && core.length >= 2) return true;
   const options = (modifier.modifier_options ?? []).filter((row) => row.name && !row.deleted_at);
@@ -82,12 +85,7 @@ export function isLoyverseSectionHeader(modifier: Pick<LoyverseModifier, "name" 
 }
 
 export function loyverseSectionFolderName(modifier: Pick<LoyverseModifier, "name">): string {
-  const cleaned = (modifier.name ?? "")
-    .replace(/^\s*\*+\s*/g, "")
-    .replace(/\s*\*+\s*$/g, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-  return cleaned || "General";
+  return loyverseFolderLabelFromHeaderName(modifier.name ?? "");
 }
 
 /** Prefer the live API field; keep the documented typo as a fallback. */

@@ -9,6 +9,8 @@ import {
   defaultModifierFolder,
   deleteModifierFolder,
   readModifierLayout,
+  removeSectionHeaderModifierGroups,
+  repairModifierLayoutFromMenuOrder,
   saveModifierLayout,
   setModifierFolder,
   sortFolders,
@@ -463,7 +465,7 @@ catalogRouter.delete("/items/:id", owned("item"), requireRole("owner", "manager"
 
 catalogRouter.get("/modifier-sets", async (req: AuthedRequest, res) => {
   const storeId = req.user!.storeId;
-  const [groups, layout] = await Promise.all([
+  let [groups, layout] = await Promise.all([
     prisma.modifierGroup.findMany({
       where: { item: { storeId, active: true } },
       include: {
@@ -474,6 +476,23 @@ catalogRouter.get("/modifier-sets", async (req: AuthedRequest, res) => {
     }),
     readModifierLayout(storeId),
   ]);
+
+  const repaired = repairModifierLayoutFromMenuOrder(layout);
+  if (repaired.changed) {
+    await saveModifierLayout(storeId, repaired.layout, { tillOrder: "none" });
+    layout = repaired.layout;
+  }
+  const headerGroupsRemoved = await removeSectionHeaderModifierGroups(storeId);
+  if (headerGroupsRemoved) {
+    groups = await prisma.modifierGroup.findMany({
+      where: { item: { storeId, active: true } },
+      include: {
+        modifiers: { where: { active: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] },
+        item: { select: { id: true, name: true } },
+      },
+      orderBy: { name: "asc" },
+    });
+  }
 
   const byName = new Map<
     string,
@@ -507,7 +526,10 @@ catalogRouter.get("/modifier-sets", async (req: AuthedRequest, res) => {
   }
 
   const rows = [...byName.values()];
-  const folderNames = sortFolders([...new Set(rows.map((row) => row.folder))], layout.folderOrder);
+  const folderNames = sortFolders(
+    [...new Set([...layout.folderOrder, ...rows.map((row) => row.folder)])],
+    layout.folderOrder
+  );
   const menuNames = sortMenus(
     rows.map((row) => row.name),
     layout.menuOrder.length ? layout.menuOrder : rows.map((row) => row.name)

@@ -11,6 +11,73 @@ export type ModifierLayout = {
   menuOrder: string[];
 };
 
+/** Loyverse divider rows in a menu list (e.g. `****** PIZZAS ******`). */
+export function isLoyverseSectionHeaderName(name: string): boolean {
+  const trimmed = name.trim();
+  if (!trimmed) return false;
+  const core = trimmed.replace(/\*/g, "").trim();
+  return trimmed.includes("*") && core.length >= 2;
+}
+
+export function loyverseFolderLabelFromHeaderName(name: string): string {
+  const cleaned = name
+    .replace(/^\s*\*+\s*/g, "")
+    .replace(/\s*\*+\s*$/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return cleaned || "General";
+}
+
+/**
+ * Rebuild folder map + folderOrder from menuOrder when Loyverse section headers
+ * are present (common after import before layout mapping shipped).
+ */
+export function repairModifierLayoutFromMenuOrder(layout: ModifierLayout): { layout: ModifierLayout; changed: boolean } {
+  const headers = layout.menuOrder.filter(isLoyverseSectionHeaderName);
+  if (!headers.length) return { layout, changed: false };
+
+  const map = { ...layout.map };
+  const folderOrder: string[] = [];
+  const menuOrder: string[] = [];
+  let currentFolder = "General";
+
+  const rememberFolder = (folder: string) => {
+    const label = folder.trim() || "General";
+    if (!folderOrder.some((entry) => entry.toLowerCase() === label.toLowerCase())) {
+      folderOrder.push(label);
+    }
+    return label;
+  };
+
+  for (const name of layout.menuOrder) {
+    if (isLoyverseSectionHeaderName(name)) {
+      currentFolder = rememberFolder(loyverseFolderLabelFromHeaderName(name));
+      continue;
+    }
+    const trimmed = name.trim();
+    if (!trimmed) continue;
+    menuOrder.push(trimmed);
+    map[trimmed.toLowerCase()] = rememberFolder(currentFolder);
+  }
+
+  return { layout: { map, folderOrder, menuOrder }, changed: true };
+}
+
+export async function removeSectionHeaderModifierGroups(storeId: string): Promise<number> {
+  const groups = await prisma.modifierGroup.findMany({
+    where: { item: { storeId } },
+    select: { id: true, name: true },
+  });
+  let removed = 0;
+  for (const group of groups) {
+    if (!isLoyverseSectionHeaderName(group.name)) continue;
+    await prisma.modifier.deleteMany({ where: { groupId: group.id } });
+    await prisma.modifierGroup.delete({ where: { id: group.id } });
+    removed += 1;
+  }
+  return removed;
+}
+
 /** Smart default so pizza left/right menus group without setup. */
 export function defaultModifierFolder(name: string): string {
   const n = name.trim().toLowerCase();
