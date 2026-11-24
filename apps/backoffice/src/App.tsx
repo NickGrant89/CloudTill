@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, getToken, setToken } from "./api";
 import { Pages, switchStore, type PageId } from "./Pages";
 import { LowStockToast } from "./ExtrasPages";
+import { watchBackOfficeTables } from "./stackTables";
 
 interface User {
   id: string;
@@ -21,10 +22,16 @@ export function App() {
   const [email, setEmail] = useState(() => new URLSearchParams(window.location.search).get("email") || "");
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
+  const mainRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     setNavOpen(false);
   }, [page]);
+
+  useEffect(() => {
+    if (!user) return;
+    return watchBackOfficeTables(mainRef.current);
+  }, [user, page]);
 
   useEffect(() => {
     if (!navOpen) return;
@@ -253,7 +260,7 @@ export function App() {
             </button>
           </div>
         </aside>
-        <main className="main">
+        <main className="main" ref={mainRef}>
           <Pages page={page} onNavigate={setPage} />
         </main>
       </div>

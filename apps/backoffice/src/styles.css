@@ -511,7 +511,7 @@ tr:last-child td {
   max-width: 14rem;
 }
 
-/* Phone: stack wide lists as cards instead of sideways tables */
+/* Phone: every list table stacks as cards (labels injected in stackTables.ts) */
 @media (max-width: 700px) {
   .table-wrap.stack-cards {
     background: transparent;
@@ -520,7 +520,8 @@ tr:last-child td {
     overflow: visible;
   }
 
-  .table-wrap.stack-cards > table.stack-on-phone {
+  .table-wrap.stack-cards > table.stack-on-phone,
+  table.stack-on-phone.stack-orphan {
     width: 100%;
     min-width: 0 !important;
     display: block;
@@ -580,6 +581,15 @@ tr:last-child td {
     padding-top: 2px;
   }
 
+  .stack-on-phone tbody td[data-label=""]::before,
+  .stack-on-phone tbody td:not([data-label])::before {
+    display: none;
+  }
+
+  .stack-on-phone tbody td[data-label=""]:not(.stack-actions):not(.stack-select):not(.stack-title) {
+    grid-template-columns: 1fr;
+  }
+
   .stack-on-phone tbody td.stack-title {
     grid-template-columns: 1fr;
     font-size: 1.05rem;
@@ -603,7 +613,7 @@ tr:last-child td {
   }
 
   .stack-on-phone tbody td.stack-actions {
-    display: flex;
+    display: flex !important;
     gap: 8px;
     flex-wrap: wrap;
     margin-top: 4px;
@@ -615,9 +625,16 @@ tr:last-child td {
     display: none;
   }
 
-  .stack-on-phone tbody td.stack-actions button {
+  .stack-on-phone tbody td.stack-actions button,
+  .stack-on-phone tbody td.stack-actions a {
     flex: 1 1 auto;
     min-height: 42px;
+  }
+
+  /* Don't force sideways scroll when cards are in use */
+  .table-wrap > table.stack-on-phone {
+    min-width: 0 !important;
+    width: 100%;
   }
 }
 
