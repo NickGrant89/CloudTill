@@ -26,6 +26,7 @@ import { textPayRouter, publicTextPayRouter } from "./routes/textpay.js";
 import { prisma } from "./db.js";
 import { backfillCompanyKeys } from "./company.js";
 import { migrateBillingEntitlements } from "./routes/billing.js";
+import { syncModifierGroupSortOrders } from "./modifierFolders.js";
 import { orderingHostMiddleware } from "./orderingHost.js";
 
 const app = express();
@@ -73,7 +74,7 @@ app.get("/api/health", async (_req, res) => {
     product: process.env.PRODUCT_NAME || "PurePOS",
     legalName: process.env.PRODUCT_LEGAL || "PurePOS UK",
     domain: process.env.PRODUCT_DOMAIN || "purepos.co.uk",
-    version: "0.10.28",
+    version: "0.10.29",
     database,
     storeCount,
     time: new Date().toISOString(),
@@ -168,6 +169,12 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 
 backfillCompanyKeys()
   .then(() => migrateBillingEntitlements())
+  .then(async () => {
+    const stores = await prisma.store.findMany({ select: { id: true } });
+    for (const store of stores) {
+      await syncModifierGroupSortOrders(store.id);
+    }
+  })
   .catch((err) => console.error("startup backfill failed", err));
 
 app.listen(PORT, HOST, () => {

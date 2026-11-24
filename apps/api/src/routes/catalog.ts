@@ -545,7 +545,7 @@ catalogRouter.patch("/modifier-sets/layout", requireRole("owner", "manager"), as
     .parse(req.body);
   const layout = await saveModifierLayout(req.user!.storeId, body);
   let synced = 0;
-  if (body.syncTillOrder || body.menuOrder || body.renameSet) {
+  if (body.syncTillOrder || body.menuOrder || body.folderOrder || body.renameSet || body.renameFolder) {
     synced = await syncModifierGroupSortOrders(req.user!.storeId, layout.menuOrder);
   }
   res.json({ ok: true, layout, syncedGroups: synced });

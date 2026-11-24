@@ -814,7 +814,7 @@ export function ModifierLibrary({
     if (!next) return;
     try {
       await saveLayout({ folderOrder: next });
-      setNotice("Group order updated. Drag groups to change till order.");
+      setNotice("Group order updated — till follows folder order (e.g. Size before Pizza).");
       await load(selected || undefined);
       onChange();
     } catch (err) {

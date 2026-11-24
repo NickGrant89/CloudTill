@@ -144,13 +144,39 @@ export function sortMenus(names: string[], menuOrder: string[]): string[] {
   });
 }
 
-/** Push ModifierGroup.sortOrder on every item to match menuOrder (till + ticket order). */
-export async function syncModifierGroupSortOrders(storeId: string, menuOrder: string[]): Promise<number> {
-  const rank = new Map(menuOrder.map((name, index) => [name.toLowerCase(), index]));
+/**
+ * Till / ticket order: folders first (General before Pizza), then menus inside each folder.
+ * menuOrder alone is not enough — Size lives under General and Pizza under Pizza.
+ */
+export function effectiveMenuRank(layout: ModifierLayout, names: string[]): Map<string, number> {
+  const folderOf = (name: string) => layout.map[name.toLowerCase()] || defaultModifierFolder(name);
+  const folders = sortFolders([...new Set(names.map(folderOf))], layout.folderOrder);
+  const folderRank = new Map(folders.map((name, index) => [name.toLowerCase(), index]));
+  const menuRank = new Map(layout.menuOrder.map((name, index) => [name.toLowerCase(), index]));
+  const ranked = [...names].sort((a, b) => {
+    const fa = folderRank.get(folderOf(a).toLowerCase()) ?? 10_000;
+    const fb = folderRank.get(folderOf(b).toLowerCase()) ?? 10_000;
+    if (fa !== fb) return fa - fb;
+    const ma = menuRank.has(a.toLowerCase()) ? menuRank.get(a.toLowerCase())! : 10_000;
+    const mb = menuRank.has(b.toLowerCase()) ? menuRank.get(b.toLowerCase())! : 10_000;
+    if (ma !== mb) return ma - mb;
+    return a.localeCompare(b, undefined, { sensitivity: "base" });
+  });
+  return new Map(ranked.map((name, index) => [name.toLowerCase(), index]));
+}
+
+/** Push ModifierGroup.sortOrder on every item to match folder + menu layout (till + ticket). */
+export async function syncModifierGroupSortOrders(storeId: string, menuOrder?: string[]): Promise<number> {
+  const layout = await readModifierLayout(storeId);
+  if (menuOrder?.length) layout.menuOrder = menuOrder;
   const groups = await prisma.modifierGroup.findMany({
     where: { item: { storeId, active: true } },
     select: { id: true, name: true, itemId: true, sortOrder: true },
   });
+  const rank = effectiveMenuRank(
+    layout,
+    [...new Set(groups.map((group) => group.name))]
+  );
   const byItem = new Map<string, typeof groups>();
   for (const group of groups) {
     const list = byItem.get(group.itemId) ?? [];
@@ -166,8 +192,8 @@ export async function syncModifierGroupSortOrders(storeId: string, menuOrder: st
       return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
     });
     for (let index = 0; index < sorted.length; index += 1) {
-      if (sorted[index].sortOrder === index) continue;
-      await prisma.modifierGroup.update({ where: { id: sorted[index].id }, data: { sortOrder: index } });
+      if (sorted[index]!.sortOrder === index) continue;
+      await prisma.modifierGroup.update({ where: { id: sorted[index]!.id }, data: { sortOrder: index } });
       updated += 1;
     }
   }
@@ -223,7 +249,7 @@ export async function saveModifierLayout(
   if (next.menuOrder) layout.menuOrder = next.menuOrder.map((v) => v.trim()).filter(Boolean);
 
   await writeLayout(storeId, layout);
-  if (next.menuOrder || next.renameSet) {
+  if (next.menuOrder || next.folderOrder || next.renameSet || next.renameFolder || next.map) {
     await syncModifierGroupSortOrders(storeId, layout.menuOrder);
   }
   return layout;

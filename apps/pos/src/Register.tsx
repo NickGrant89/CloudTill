@@ -67,8 +67,27 @@ interface TicketLine {
   modifiers: { name: string; priceCents: number; modifierId?: string; groupName?: string }[];
 }
 
-function ModifierList({ mods }: { mods: { name: string; groupName?: string }[] }) {
-  const blocks = groupModifierLines(mods);
+/** Keep sale-line modifiers in the same order as modifier groups on the item (BO drag order). */
+function sortModsByItemGroups<T extends { groupName?: string }>(mods: T[], groups: { name: string }[]): T[] {
+  if (!groups.length || mods.length < 2) return mods;
+  const rank = new Map(groups.map((group, index) => [group.name.toLowerCase(), index]));
+  return [...mods].sort((a, b) => {
+    const ra = rank.get((a.groupName || "").toLowerCase()) ?? 10_000;
+    const rb = rank.get((b.groupName || "").toLowerCase()) ?? 10_000;
+    if (ra !== rb) return ra - rb;
+    return 0;
+  });
+}
+
+function ModifierList({
+  mods,
+  groups,
+}: {
+  mods: { name: string; groupName?: string }[];
+  groups?: { name: string }[];
+}) {
+  const ordered = groups?.length ? sortModsByItemGroups(mods, groups) : mods;
+  const blocks = groupModifierLines(ordered);
   if (!blocks.length) return null;
   return (
     <ul className="mod-list">
@@ -686,13 +705,16 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
         return;
       }
     }
-    const mods = modifierItem.modifierGroups.flatMap((group) =>
-      (selectedMods[group.id] ?? []).map((option) => ({
-        modifierId: option.id,
-        name: option.name,
-        priceCents: option.priceCents,
-        groupName: group.name,
-      }))
+    const mods = sortModsByItemGroups(
+      modifierItem.modifierGroups.flatMap((group) =>
+        (selectedMods[group.id] ?? []).map((option) => ({
+          modifierId: option.id,
+          name: option.name,
+          priceCents: option.priceCents,
+          groupName: group.name,
+        }))
+      ),
+      modifierItem.modifierGroups
     );
     if (editingLineKey) {
       await saveLineModifiers(editingLineKey, mods);
@@ -1533,8 +1555,11 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
     .reduce((sum, option) => sum + option.priceCents, 0);
   const modifierTotal = (modifierItem?.variants[0]?.priceCents ?? 0) + modifierExtra;
   const modifierPreview = modifierItem
-    ? modifierItem.modifierGroups.flatMap((group) =>
-        (selectedMods[group.id] ?? []).map((option) => ({ name: option.name, groupName: group.name }))
+    ? sortModsByItemGroups(
+        modifierItem.modifierGroups.flatMap((group) =>
+          (selectedMods[group.id] ?? []).map((option) => ({ name: option.name, groupName: group.name }))
+        ),
+        modifierItem.modifierGroups
       )
     : [];
   const tillPhase: "sale" | "options" | "pay" | "done" = modifierItem
@@ -1555,6 +1580,15 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
       toneIndex: registerToneIndex(currentRegister.id, registers),
     });
     setPinnedId(currentRegister.id);
+  }
+
+  useEffect(() => {
+    if (!currentRegister || pinnedId === currentRegister.id) return;
+    pinThisIpad();
+  }, [currentRegister?.id, pinnedId]);
+
+  function groupsForLine(line: TicketLine) {
+    return items.find((entry) => entry.variants.some((variant) => variant.id === line.variantId))?.modifierGroups;
   }
 
   async function toggleFullScreen() {
@@ -1775,7 +1809,11 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
               <div>
                 <p className="step-kicker">{editingLineKey ? "Edit options" : "Step 2 · Options"}</p>
                 <strong>{modifierItem.name}</strong>
-                {modifierPreview.length > 0 ? <ModifierList mods={modifierPreview} /> : <div className="meta">Choose options</div>}
+                {modifierPreview.length > 0 ? (
+                  <ModifierList mods={modifierPreview} groups={modifierItem?.modifierGroups} />
+                ) : (
+                  <div className="meta">Choose options</div>
+                )}
               </div>
               <button type="button" className="pay-btn" onClick={() => void confirmModifiers()}>
                 {editingLineKey ? "Update" : "Add"} {money(modifierTotal)}
@@ -1794,7 +1832,6 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
               <h2>{ticket?.name ?? "New sale"}</h2>
               <div className="ticket-sub" style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
                 {ticket?.customer ? `${ticket.customer.name} · ${ticket.customer.loyaltyPoints} pts` : "Walk-in"}
-                {ticket?.registerName ? ` · ${ticket.registerName}` : ""}
                 {offline.online ? " · live sync" : ""}
               </div>
             </div>
@@ -1853,13 +1890,17 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                     {canEditOptions ? (
                       <button type="button" className="line-edit-hit" onClick={() => openLineEditor(line)}>
                         <span className="line-edit-name">{line.name}</span>
-                        {line.modifiers.length > 0 && <ModifierList mods={line.modifiers} />}
+                        {line.modifiers.length > 0 && (
+                          <ModifierList mods={line.modifiers} groups={groupsForLine(line)} />
+                        )}
                         <span className="line-edit-hint">Edit options</span>
                       </button>
                     ) : (
                       <>
                         <div style={{ fontWeight: 600 }}>{line.name}</div>
-                        {line.modifiers.length > 0 && <ModifierList mods={line.modifiers} />}
+                        {line.modifiers.length > 0 && (
+                          <ModifierList mods={line.modifiers} groups={groupsForLine(line)} />
+                        )}
                       </>
                     )}
                     <div className="qty-controls" style={{ marginTop: 6 }}>
@@ -2514,7 +2555,9 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
               {unsentLines.map(({ line, quantity }) => (
                 <li key={line.key}>
                   <strong>{quantity}×</strong> {line.name}
-                  {line.modifiers.length > 0 && <ModifierList mods={line.modifiers} />}
+                  {line.modifiers.length > 0 && (
+                    <ModifierList mods={line.modifiers} groups={groupsForLine(line)} />
+                  )}
                 </li>
               ))}
             </ul>
