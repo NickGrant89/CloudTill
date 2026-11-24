@@ -74,7 +74,7 @@ export function App() {
         stores?: { id: string; name: string }[];
       }>("/auth/login", {
         method: "POST",
-        body: JSON.stringify({ email, pin }),
+        body: JSON.stringify({ email, pin, client: "backoffice" }),
       });
       setToken(data.token);
       setUser(data.user);
@@ -101,7 +101,7 @@ export function App() {
       <div className="login">
         <form className="login-card" onSubmit={(e) => void login(e)}>
           <h1>PurePOS</h1>
-          <p>Back office · desktop management</p>
+          <p>Owners and managers · email + PIN (not the till alone)</p>
           <div className="field">
             <label htmlFor="bo-email">Email</label>
             <input

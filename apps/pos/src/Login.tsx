@@ -73,10 +73,10 @@ export function Login({ onSuccess }: Props) {
         method: "POST",
         body: JSON.stringify(
           pairing
-            ? { email: email.trim(), pin: nextPin }
+            ? { email: email.trim(), pin: nextPin, client: "pos" }
             : device
-              ? { pin: nextPin, storeId: device.storeId }
-              : { pin: nextPin }
+              ? { pin: nextPin, storeId: device.storeId, client: "pos" }
+              : { pin: nextPin, client: "pos" }
         ),
       });
       if (changing) {
@@ -127,7 +127,7 @@ export function Login({ onSuccess }: Props) {
     try {
       const data = await api<LoginResult>("/auth/login", {
         method: "POST",
-        body: JSON.stringify({ email: email.trim(), pin: pinRef.current, storeId }),
+        body: JSON.stringify({ email: email.trim(), pin: pinRef.current, storeId, client: "pos" }),
       });
       remember(data);
       setBranches(null);

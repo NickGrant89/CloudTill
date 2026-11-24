@@ -49,7 +49,6 @@ async function buildStoreBackup(storeId: string) {
         name: true,
         role: true,
         pinHash: true,
-        pinDisplay: true,
         active: true,
         createdAt: true,
       },

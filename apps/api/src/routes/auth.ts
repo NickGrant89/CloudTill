@@ -62,6 +62,8 @@ authRouter.post("/login", async (req, res) => {
       email: z.string().email().optional(),
       pin: z.string().min(4).max(8),
       storeId: z.string().optional(),
+      /** backoffice = email+PIN owners/managers only; pos = till PIN login */
+      client: z.enum(["backoffice", "pos"]).optional(),
     })
     .parse(req.body);
 
@@ -102,6 +104,12 @@ authRouter.post("/login", async (req, res) => {
   }
   if (!matched) {
     return res.status(401).json({ error: "Invalid PIN or email" });
+  }
+
+  if (body.client === "backoffice" && matched.role === "cashier") {
+    return res.status(403).json({
+      error: "Back office is for owners and managers. Cashiers sign in on the till with their own PIN.",
+    });
   }
 
   res.json(await session(matched, paired?.id ?? matched.storeId));

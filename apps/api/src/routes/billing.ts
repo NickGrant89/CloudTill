@@ -227,7 +227,7 @@ async function provisionStore(opts: {
       email: opts.email.toLowerCase(),
       role: "owner",
       pinHash: await hashPin(ownerPin),
-      pinDisplay: ownerPin,
+      pinDisplay: "",
       active: true,
     },
   });
@@ -238,7 +238,7 @@ async function provisionStore(opts: {
       email: `cashier+${slug}@purepos.demo`,
       role: "cashier",
       pinHash: await hashPin(cashierPin),
-      pinDisplay: cashierPin,
+      pinDisplay: "",
       active: true,
     },
   });

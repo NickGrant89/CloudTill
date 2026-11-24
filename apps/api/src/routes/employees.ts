@@ -2,10 +2,26 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import { owned } from "../tenant.js";
-import { hashPin, requireAuth, requireRole, type AuthedRequest } from "../auth.js";
+import { checkPin, hashPin, requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 
 export const employeesRouter = Router();
 employeesRouter.use(requireAuth);
+
+/** Till PIN must be unique among active staff at this store. */
+async function activePinTaken(storeId: string, pin: string, exceptId?: string) {
+  const employees = await prisma.employee.findMany({
+    where: {
+      storeId,
+      active: true,
+      ...(exceptId ? { id: { not: exceptId } } : {}),
+    },
+    select: { id: true, name: true, pinHash: true },
+  });
+  for (const emp of employees) {
+    if (await checkPin(pin, emp.pinHash)) return emp;
+  }
+  return null;
+}
 
 employeesRouter.get("/", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
   const employees = await prisma.employee.findMany({
@@ -19,7 +35,7 @@ employeesRouter.get("/", requireRole("owner", "manager"), async (req: AuthedRequ
       email: e.email,
       role: e.role,
       active: e.active,
-      pinDisplay: e.pinDisplay,
+      hasPin: Boolean(e.pinHash),
       createdAt: e.createdAt.toISOString(),
     }))
   );
@@ -39,13 +55,20 @@ employeesRouter.post("/", requireRole("owner", "manager"), async (req: AuthedReq
     return res.status(403).json({ error: "Managers cannot create owners" });
   }
 
+  const taken = await activePinTaken(req.user!.storeId, body.pin);
+  if (taken) {
+    return res.status(409).json({
+      error: `PIN already used by ${taken.name}. Each person on the till needs their own PIN.`,
+    });
+  }
+
   const employee = await prisma.employee.create({
     data: {
       storeId: req.user!.storeId,
       name: body.name,
-      email: body.email,
+      email: body.email.toLowerCase(),
       pinHash: await hashPin(body.pin),
-      pinDisplay: body.pin,
+      pinDisplay: "",
       role: body.role,
     },
   });
@@ -55,6 +78,7 @@ employeesRouter.post("/", requireRole("owner", "manager"), async (req: AuthedReq
     email: employee.email,
     role: employee.role,
     active: employee.active,
+    hasPin: true,
   });
 });
 
@@ -99,10 +123,20 @@ employeesRouter.patch("/:id", owned("employee"), requireRole("owner", "manager")
     }
   }
 
+  if (body.pin) {
+    const taken = await activePinTaken(req.user!.storeId, body.pin, id);
+    if (taken) {
+      return res.status(409).json({
+        error: `PIN already used by ${taken.name}. Each person on the till needs their own PIN.`,
+      });
+    }
+  }
+
   const data: Record<string, unknown> = { ...body };
+  if (body.email) data.email = body.email.toLowerCase();
   if (body.pin) {
     data.pinHash = await hashPin(body.pin);
-    data.pinDisplay = body.pin;
+    data.pinDisplay = "";
     delete data.pin;
   }
 
@@ -113,7 +147,7 @@ employeesRouter.patch("/:id", owned("employee"), requireRole("owner", "manager")
     email: employee.email,
     role: employee.role,
     active: employee.active,
-    pinDisplay: employee.pinDisplay,
+    hasPin: Boolean(employee.pinHash),
   });
 });
 

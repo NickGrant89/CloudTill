@@ -1420,9 +1420,9 @@ function CustomersPage() {
 }
 
 function EmployeesPage() {
-  type Emp = { id: string; name: string; email: string; role: string; active: boolean; pinDisplay: string };
+  type Emp = { id: string; name: string; email: string; role: string; active: boolean; hasPin?: boolean };
   const [employees, setEmployees] = useState<Emp[]>([]);
-  const [form, setForm] = useState({ name: "", email: "", pin: "3333", role: "cashier" });
+  const [form, setForm] = useState({ name: "", email: "", pin: "", role: "cashier" });
   const [editing, setEditing] = useState<Emp | null>(null);
   const [editForm, setEditForm] = useState({ name: "", email: "", pin: "", role: "cashier", active: true });
   const [msg, setMsg] = useState("");
@@ -1443,8 +1443,8 @@ function EmployeesPage() {
         method: "POST",
         body: JSON.stringify(form),
       });
-      setForm({ name: "", email: "", pin: "3333", role: "cashier" });
-      setMsg("Employee added.");
+      setForm({ name: "", email: "", pin: "", role: "cashier" });
+      setMsg("Employee added. PIN is stored hashed and is not shown again.");
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Could not add employee");
@@ -1520,7 +1520,7 @@ function EmployeesPage() {
       <div className="page-head">
         <div>
           <h2>Employees</h2>
-          <p>Add, edit, deactivate, or remove staff · PIN login</p>
+          <p>Back office uses email + PIN. The till needs a unique PIN per person.</p>
         </div>
       </div>
       {msg && <p className="panel-box" style={{ marginBottom: 12 }}>{msg}</p>}
@@ -1536,8 +1536,17 @@ function EmployeesPage() {
             <input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           </div>
           <div className="field">
-            <label>PIN</label>
-            <input required value={form.pin} onChange={(e) => setForm({ ...form, pin: e.target.value })} />
+            <label>PIN (unique on the till)</label>
+            <input
+              required
+              type="password"
+              inputMode="numeric"
+              autoComplete="new-password"
+              minLength={4}
+              maxLength={8}
+              value={form.pin}
+              onChange={(e) => setForm({ ...form, pin: e.target.value })}
+            />
           </div>
           <div className="field">
             <label>Role</label>
@@ -1570,7 +1579,16 @@ function EmployeesPage() {
             </div>
             <div className="field">
               <label>New PIN (leave blank to keep)</label>
-              <input value={editForm.pin} onChange={(e) => setEditForm({ ...editForm, pin: e.target.value })} placeholder="••••" />
+              <input
+                type="password"
+                inputMode="numeric"
+                autoComplete="new-password"
+                minLength={4}
+                maxLength={8}
+                value={editForm.pin}
+                onChange={(e) => setEditForm({ ...editForm, pin: e.target.value })}
+                placeholder="••••"
+              />
             </div>
             <div className="field">
               <label>Role</label>
@@ -1618,7 +1636,9 @@ function EmployeesPage() {
                 <td>{e.name}</td>
                 <td>{e.email}</td>
                 <td>{e.role}</td>
-                <td>{e.pinDisplay}</td>
+                <td>
+                  <span className="badge">{e.hasPin === false ? "Not set" : "Hidden"}</span>
+                </td>
                 <td>{e.active ? <span className="badge">Active</span> : <span className="badge danger">Inactive</span>}</td>
                 <td style={{ whiteSpace: "nowrap" }}>
                   <button type="button" className="secondary" onClick={() => openEdit(e)}>
