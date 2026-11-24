@@ -1002,6 +1002,67 @@ export function ModifierLibrary({
     }
   }
 
+  async function deleteSelectedSet() {
+    if (!selectedSet) return;
+    const label = prettyModifierLabel(selectedSet.name);
+    if (
+      !window.confirm(
+        `Delete “${label}” from every item that uses it? This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    setError("");
+    setNotice("");
+    try {
+      const result = await api<{ deletedGroups: number }>("/catalog/modifier-sets", {
+        method: "DELETE",
+        body: JSON.stringify({ name: selectedSet.name }),
+      });
+      setSelected("");
+      setEditSetName("");
+      setItemIds([]);
+      setEditOptions([]);
+      setNotice(`Deleted ${label} from ${result.deletedGroups} item${result.deletedGroups === 1 ? "" : "s"}.`);
+      await load();
+      onChange();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete modifier");
+    }
+  }
+
+  async function removeEditOption(index: number) {
+    if (!selectedSet) return;
+    const next = editOptions.filter((_, i) => i !== index);
+    if (!next.length) {
+      setError("A menu needs at least one option — delete the whole menu instead.");
+      return;
+    }
+    setEditOptions(next);
+    setError("");
+    setNotice("");
+    try {
+      await api("/catalog/modifier-sets", {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: selectedSet.name,
+          minSelect: selectedSet.minSelect,
+          maxSelect: selectedSet.maxSelect,
+          options: next.map((option) => ({
+            name: option.name.trim(),
+            priceCents: Math.round(Number(option.price) * 100) || 0,
+          })).filter((option) => option.name),
+        }),
+      });
+      setNotice(`Removed option from ${prettyModifierLabel(selectedSet.name)}.`);
+      await load(selectedSet.name);
+      onChange();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not remove option");
+      await load(selectedSet.name);
+    }
+  }
+
   const selectedSet = sets.find((set) => set.name === selected);
   const filterText = menuFilter.trim().toLowerCase();
   const discoveredFolders = [...new Set(sets.map(folderForSet))];
@@ -1309,9 +1370,9 @@ export function ModifierLibrary({
                     <button
                       type="button"
                       className="secondary"
-                      onClick={() => setEditOptions((rows) => rows.filter((_, i) => i !== index))}
+                      onClick={() => void removeEditOption(index)}
                     >
-                      Remove
+                      Delete option
                     </button>
                   </div>
                 </li>
@@ -1324,6 +1385,9 @@ export function ModifierLibrary({
               <button type="button" onClick={(e) => void saveOptions(e)}>
                 Save options
               </button>
+              <button type="button" className="secondary" onClick={() => void deleteSelectedSet()}>
+                Delete menu
+              </button>
             </div>
             <ItemChecklist
               items={items}
@@ -1331,7 +1395,7 @@ export function ModifierLibrary({
               onToggle={(id) => toggle(itemIds, id, setItemIds)}
               label="Items"
             />
-            <button type="submit">Save {selectedSet.name}</button>
+            <button type="submit">Save items for {prettyModifierLabel(selectedSet.name)}</button>
           </form>
         ) : (
           <p style={{ color: "var(--muted)", margin: 0 }}>

@@ -601,6 +601,32 @@ catalogRouter.post("/pizza-menu", requireRole("owner", "manager"), async (req: A
   res.status(result.created.length ? 201 : 200).json(result);
 });
 
+catalogRouter.delete("/modifier-sets", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const body = z.object({ name: z.string().min(1).max(80) }).parse(req.body);
+  const wanted = body.name.trim().toLowerCase();
+  const groups = await prisma.modifierGroup.findMany({
+    where: { item: { storeId: req.user!.storeId } },
+    select: { id: true, name: true },
+  });
+  const matching = groups.filter((group) => group.name.toLowerCase() === wanted);
+  if (!matching.length) return res.status(404).json({ error: "Modifier not found" });
+
+  const ids = matching.map((group) => group.id);
+  await prisma.modifier.deleteMany({ where: { groupId: { in: ids } } });
+  await prisma.modifierGroup.deleteMany({ where: { id: { in: ids } } });
+
+  const layout = await readModifierLayout(req.user!.storeId);
+  const nextMenuOrder = layout.menuOrder.filter((name) => name.toLowerCase() !== wanted);
+  const nextMap = { ...layout.map };
+  delete nextMap[wanted];
+  await saveModifierLayout(req.user!.storeId, {
+    menuOrder: nextMenuOrder,
+    map: nextMap,
+  });
+
+  res.json({ ok: true, deletedGroups: matching.length, name: body.name.trim() });
+});
+
 catalogRouter.patch("/modifier-sets", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
   const body = z
     .object({
