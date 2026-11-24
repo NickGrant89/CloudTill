@@ -6,6 +6,7 @@ import {
   readModifierLayout,
   saveModifierLayout,
   syncModifierGroupSortOrders,
+  syncModifierGroupSortOrdersByMenu,
 } from "./modifierFolders.js";
 
 export type LoyversePreviewRow = {
@@ -822,6 +823,40 @@ function compareLoyversePosition(a: { position?: number | null; name?: string | 
   return (a.name ?? "").localeCompare(b.name ?? "", undefined, { sensitivity: "base" });
 }
 
+/** Store-wide option order inside each Loyverse modifier menu. */
+async function applyLoyverseOptionOrders(storeId: string, catalog: LoyverseCatalog) {
+  let updated = 0;
+  for (const modifier of catalog.modifiers) {
+    const name = modifier.name?.trim();
+    if (!modifier.id || modifier.deleted_at || !name) continue;
+    const options = (modifier.modifier_options ?? [])
+      .filter((option) => option.name && !option.deleted_at)
+      .sort(compareLoyversePosition)
+      .map((option) => option.name!.trim());
+    if (!options.length) continue;
+
+    const groups = await prisma.modifierGroup.findMany({
+      where: { item: { storeId }, name },
+      include: { modifiers: true },
+    });
+    const rank = new Map(options.map((option, index) => [option.toLowerCase(), index]));
+    for (const group of groups) {
+      const sorted = [...group.modifiers].sort((a, b) => {
+        const ra = rank.has(a.name.toLowerCase()) ? rank.get(a.name.toLowerCase())! : 10_000;
+        const rb = rank.has(b.name.toLowerCase()) ? rank.get(b.name.toLowerCase())! : 10_000;
+        if (ra !== rb) return ra - rb;
+        return a.sortOrder - b.sortOrder;
+      });
+      for (let index = 0; index < sorted.length; index += 1) {
+        if (sorted[index]!.sortOrder === index) continue;
+        await prisma.modifier.update({ where: { id: sorted[index]!.id }, data: { sortOrder: index } });
+        updated += 1;
+      }
+    }
+  }
+  return updated;
+}
+
 /** Store-wide menu order from Loyverse modifier positions, then push onto every item. */
 async function applyLoyverseModifierLayout(storeId: string, catalog: LoyverseCatalog) {
   const ordered = [...catalog.modifiers]
@@ -839,6 +874,7 @@ async function applyLoyverseModifierLayout(storeId: string, catalog: LoyverseCat
   const extras = layout.menuOrder.filter((name) => !seen.has(name.toLowerCase()));
   const map = { ...layout.map };
   const folderOrder = [...layout.folderOrder];
+  const menuOrder = [...ordered, ...extras];
 
   for (const name of ordered) {
     const key = name.toLowerCase();
@@ -849,15 +885,14 @@ async function applyLoyverseModifierLayout(storeId: string, catalog: LoyverseCat
     }
   }
 
-  await saveModifierLayout(storeId, {
-    map,
-    folderOrder,
-    menuOrder: [...ordered, ...extras],
-  });
+  // Keep folders for the Modifiers page, but till/item order follows Loyverse position.
+  await saveModifierLayout(storeId, { map, folderOrder, menuOrder }, { tillOrder: "menu" });
+  await syncModifierGroupSortOrdersByMenu(storeId, menuOrder);
+  await applyLoyverseOptionOrders(storeId, catalog);
 }
 
 const API_NOTES =
-  "Pulled from the Loyverse API. Items, categories, stock, barcodes, options, and modifier choices (with their prices) are included. Customers come in the same pull. Photos and old receipts are not imported. Modifier menus and choices keep Loyverse order.";
+  "Pulled from the Loyverse API. Items, categories, stock, barcodes, options, and modifier choices (with their prices) are included. Customers come in the same pull. Photos and old receipts are not imported. Import again to sort modifier menus and choices to match Loyverse.";
 
 function apiCents(value: number | null | undefined) {
   if (value == null || !Number.isFinite(Number(value))) return null;

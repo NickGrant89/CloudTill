@@ -165,18 +165,10 @@ export function effectiveMenuRank(layout: ModifierLayout, names: string[]): Map<
   return new Map(ranked.map((name, index) => [name.toLowerCase(), index]));
 }
 
-/** Push ModifierGroup.sortOrder on every item to match folder + menu layout (till + ticket). */
-export async function syncModifierGroupSortOrders(storeId: string, menuOrder?: string[]): Promise<number> {
-  const layout = await readModifierLayout(storeId);
-  if (menuOrder?.length) layout.menuOrder = menuOrder;
-  const groups = await prisma.modifierGroup.findMany({
-    where: { item: { storeId, active: true } },
-    select: { id: true, name: true, itemId: true, sortOrder: true },
-  });
-  const rank = effectiveMenuRank(
-    layout,
-    [...new Set(groups.map((group) => group.name))]
-  );
+async function pushGroupOrders(
+  groups: { id: string; name: string; itemId: string; sortOrder: number }[],
+  rank: Map<string, number>
+) {
   const byItem = new Map<string, typeof groups>();
   for (const group of groups) {
     const list = byItem.get(group.itemId) ?? [];
@@ -200,9 +192,43 @@ export async function syncModifierGroupSortOrders(storeId: string, menuOrder?: s
   return updated;
 }
 
+/** Push ModifierGroup.sortOrder on every item to match folder + menu layout (till + ticket). */
+export async function syncModifierGroupSortOrders(storeId: string, menuOrder?: string[]): Promise<number> {
+  const layout = await readModifierLayout(storeId);
+  if (menuOrder?.length) layout.menuOrder = menuOrder;
+  const groups = await prisma.modifierGroup.findMany({
+    where: { item: { storeId, active: true } },
+    select: { id: true, name: true, itemId: true, sortOrder: true },
+  });
+  const rank = effectiveMenuRank(
+    layout,
+    [...new Set(groups.map((group) => group.name))]
+  );
+  return pushGroupOrders(groups, rank);
+}
+
+/**
+ * Till / item order from a flat menu list only (e.g. Loyverse position).
+ * Folder grouping stays for the Modifiers page; it does not reshuffle the till.
+ */
+export async function syncModifierGroupSortOrdersByMenu(storeId: string, menuOrder: string[]): Promise<number> {
+  const rank = new Map(
+    menuOrder
+      .map((name) => name.trim())
+      .filter(Boolean)
+      .map((name, index) => [name.toLowerCase(), index] as const)
+  );
+  const groups = await prisma.modifierGroup.findMany({
+    where: { item: { storeId, active: true } },
+    select: { id: true, name: true, itemId: true, sortOrder: true },
+  });
+  return pushGroupOrders(groups, rank);
+}
+
 export async function saveModifierLayout(
   storeId: string,
-  next: Partial<ModifierLayout> & { renameFolder?: { from: string; to: string }; renameSet?: { from: string; to: string } }
+  next: Partial<ModifierLayout> & { renameFolder?: { from: string; to: string }; renameSet?: { from: string; to: string } },
+  opts?: { tillOrder?: "folders" | "menu" | "none" }
 ): Promise<ModifierLayout> {
   const layout = await readModifierLayout(storeId);
 
@@ -249,8 +275,15 @@ export async function saveModifierLayout(
   if (next.menuOrder) layout.menuOrder = next.menuOrder.map((v) => v.trim()).filter(Boolean);
 
   await writeLayout(storeId, layout);
-  if (next.menuOrder || next.folderOrder || next.renameSet || next.renameFolder || next.map) {
-    await syncModifierGroupSortOrders(storeId, layout.menuOrder);
+  const shouldSync =
+    opts?.tillOrder !== "none" &&
+    Boolean(next.menuOrder || next.folderOrder || next.renameSet || next.renameFolder || next.map);
+  if (shouldSync) {
+    if (opts?.tillOrder === "menu") {
+      await syncModifierGroupSortOrdersByMenu(storeId, layout.menuOrder);
+    } else {
+      await syncModifierGroupSortOrders(storeId, layout.menuOrder);
+    }
   }
   return layout;
 }

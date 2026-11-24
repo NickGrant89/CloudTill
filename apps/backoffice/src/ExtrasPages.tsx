@@ -322,7 +322,7 @@ const IMPORT_KINDS: { id: ImportKind; label: string; blurb: string }[] = [
     id: "loyverse",
     label: "Loyverse",
     blurb:
-      "Paste a Loyverse access token (Back Office → Access tokens — tick Items, Categories, Modifiers, Customers, Inventory), then Pull. Review the list, then Import. The token is used once and not saved.",
+      "Paste a Loyverse access token (Back Office → Access tokens — tick Items, Categories, Modifiers, Customers, Inventory), then Pull and Import. That also sorts modifier menus and choices to match Loyverse. The token is used once and not saved.",
   },
   { id: "items", label: "Items", blurb: "Name, group, SKU, price, stock" },
   { id: "customers", label: "Customers", blurb: "Name, email, phone, credit, loyalty" },
