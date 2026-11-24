@@ -27,10 +27,27 @@ async function storeDayBounds(storeId: string, rawDay: unknown) {
 
 /** Open tickets board (POS + kitchen-adjacent) */
 extrasRouter.get("/tickets-board", async (req: AuthedRequest, res) => {
+  const storeId = req.user!.storeId;
+  // Stale empty placeholders only — do not void the till's current empty sale
+  const cutoff = new Date(Date.now() - 30 * 60 * 1000);
+  const stale = await prisma.ticket.findMany({
+    where: { storeId, status: "open", lines: { none: {} }, updatedAt: { lt: cutoff } },
+    select: { id: true },
+  });
+  if (stale.length) {
+    await prisma.ticket.updateMany({
+      where: { id: { in: stale.map((row) => row.id) } },
+      data: { status: "voided" },
+    });
+  }
+
   const tickets = await prisma.ticket.findMany({
     where: {
-      storeId: req.user!.storeId,
-      status: { in: ["open", "held"] },
+      storeId,
+      OR: [
+        { status: "held" },
+        { status: "open", lines: { some: {} } },
+      ],
     },
     include: { lines: true, customer: true, register: true },
     orderBy: { updatedAt: "desc" },

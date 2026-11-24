@@ -84,13 +84,63 @@ export async function serializeTicket(ticketId: string) {
   };
 }
 
+/** Void empty open tickets that have sat unused — keep recent ones for the active till. */
+async function voidStaleEmptyOpenTickets(storeId: string, keepId?: string | null) {
+  const cutoff = new Date(Date.now() - 30 * 60 * 1000);
+  const empties = await prisma.ticket.findMany({
+    where: {
+      storeId,
+      status: "open",
+      lines: { none: {} },
+      updatedAt: { lt: cutoff },
+      ...(keepId ? { NOT: { id: keepId } } : {}),
+    },
+    select: { id: true },
+  });
+  if (!empties.length) return 0;
+  await prisma.ticket.updateMany({
+    where: { id: { in: empties.map((row) => row.id) } },
+    data: { status: "voided" },
+  });
+  return empties.length;
+}
+
+/** On one till, only one empty open ticket is needed — void the rest. */
+async function voidExtraEmptyOnRegister(storeId: string, registerId: string, keepId: string) {
+  const extras = await prisma.ticket.findMany({
+    where: {
+      storeId,
+      registerId,
+      status: "open",
+      lines: { none: {} },
+      NOT: { id: keepId },
+    },
+    select: { id: true },
+  });
+  if (!extras.length) return;
+  await prisma.ticket.updateMany({
+    where: { id: { in: extras.map((row) => row.id) } },
+    data: { status: "voided" },
+  });
+}
+
 posRouter.get("/tickets", async (req: AuthedRequest, res) => {
   const status = typeof req.query.status === "string" ? req.query.status : undefined;
+  const storeId = req.user!.storeId;
+  if (status === "open" || !status) {
+    await voidStaleEmptyOpenTickets(storeId);
+  }
   const tickets = await prisma.ticket.findMany({
-    where: {
-      storeId: req.user!.storeId,
-      status: status ? status : { in: ["open", "held"] },
-    },
+    where:
+      status === "held"
+        ? { storeId, status: "held" }
+        : status === "open"
+          ? // Hide empty placeholders from Tickets · N and the open rail
+            { storeId, status: "open", lines: { some: {} } }
+          : {
+              storeId,
+              OR: [{ status: "held" }, { status: "open", lines: { some: {} } }],
+            },
     orderBy: { updatedAt: "desc" },
   });
   const result = [];
@@ -107,9 +157,36 @@ posRouter.post("/tickets", async (req: AuthedRequest, res) => {
     .parse(req.body);
   if (await rejectForeign(res, "register", [body.registerId], req.user!.storeId)) return;
 
+  const storeId = req.user!.storeId;
+  // Reuse an empty open ticket on this till instead of creating another Sale · 0 lines
+  const empty = await prisma.ticket.findFirst({
+    where: {
+      storeId,
+      registerId: body.registerId,
+      status: "open",
+      lines: { none: {} },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+  if (empty) {
+    await voidExtraEmptyOnRegister(storeId, body.registerId, empty.id);
+    const name = body.name?.trim();
+    if (name && name !== empty.name) {
+      await prisma.ticket.update({
+        where: { id: empty.id },
+        data: { name, updatedAt: new Date() },
+      });
+    } else {
+      await prisma.ticket.update({ where: { id: empty.id }, data: { updatedAt: new Date() } });
+    }
+    return res.json(await serializeTicket(empty.id));
+  }
+
+  await voidStaleEmptyOpenTickets(storeId);
+
   const ticket = await prisma.ticket.create({
     data: {
-      storeId: req.user!.storeId,
+      storeId,
       registerId: body.registerId,
       employeeId: req.user!.sub,
       name: body.name ?? `Ticket ${nanoid(4)}`,

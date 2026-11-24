@@ -1198,38 +1198,15 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
     setTextPayMsg("");
     setTextPayLink(null);
     setCallerMatches([]);
-    try {
-      const t = ticketRef.current ?? (await ensureTicket());
-      const label =
-        textPayName.trim()
-          ? `Phone · ${textPayName.trim()}`
-          : t.name.startsWith("Phone")
-            ? t.name
-            : "Phone order";
-      let phone = textPayPhone;
-      let name = textPayName;
-      if (!isLocalTicket(t) && offline.online) {
-        const updated = await api<Ticket>(`/pos/tickets/${t.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ name: label, note: "Phone order" }),
-        });
-        setCurrentTicket(updated);
-        phone = phone || updated.customer?.phone || "";
-        name = name || updated.customer?.name || "";
-        setTextPayPhone(phone);
-        setTextPayName(name);
-      } else {
-        phone = phone || t.customer?.phone || "";
-        name = name || t.customer?.name || "";
-        setTextPayPhone(phone);
-        setTextPayName(name);
-      }
-      if (phone) void lookupCallerId(phone);
-      setMobilePane("ticket");
-      setModal({ type: "phoneOrder" });
-    } catch (e) {
-      fail("Phone order", e);
+    // Don't create an empty Sale ticket just for opening the sheet — that filled Tickets with 0-line junk.
+    const t = ticketRef.current;
+    if (t) {
+      setTextPayPhone(textPayPhone || t.customer?.phone || "");
+      setTextPayName(textPayName || t.customer?.name || "");
+      if (t.customer?.phone || textPayPhone) void lookupCallerId(t.customer?.phone || textPayPhone);
     }
+    setMobilePane("ticket");
+    setModal({ type: "phoneOrder" });
   }
 
   async function sendTextToPay() {
