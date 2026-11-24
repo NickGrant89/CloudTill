@@ -1850,42 +1850,43 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
             </button>
           </div>
 
-          <div className="open-tickets-rail" aria-label="Open tickets across tills">
-            <div className="open-tickets-label">
-              <span>Open tills{offline.online ? " · live" : ""}</span>
-              <button type="button" className="linkish" onClick={() => void refreshOpenTickets()}>
-                Refresh
-              </button>
-            </div>
-            {openTickets.length === 0 ? (
-              <p className="open-tickets-empty">No open tickets on any till — start a sale anytime.</p>
-            ) : (
-              <div className="open-tickets-chips">
-                {openTickets.map((t) => {
-                  const active = ticket?.id === t.id;
-                  return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      className={`open-ticket-chip${active ? " active" : ""}`}
-                      onClick={() => {
-                        if (active) return;
-                        void adoptTicket(t.id);
-                      }}
-                    >
-                      <strong>{t.name}</strong>
-                      <span>
-                        {t.registerName || "Till"} · {t.lines.length} item{t.lines.length === 1 ? "" : "s"} ·{" "}
-                        {money(t.totalCents)}
-                      </span>
-                    </button>
-                  );
-                })}
+          <div className="ticket-body">
+            <div className="open-tickets-rail" aria-label="Open tickets across tills">
+              <div className="open-tickets-label">
+                <span>Open tills{offline.online ? " · live" : ""}</span>
+                <button type="button" className="linkish" onClick={() => void refreshOpenTickets()}>
+                  Refresh
+                </button>
               </div>
-            )}
-          </div>
+              {openTickets.length === 0 ? (
+                <p className="open-tickets-empty">No open tickets on any till — start a sale anytime.</p>
+              ) : (
+                <div className="open-tickets-chips">
+                  {openTickets.map((t) => {
+                    const active = ticket?.id === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        className={`open-ticket-chip${active ? " active" : ""}`}
+                        onClick={() => {
+                          if (active) return;
+                          void adoptTicket(t.id);
+                        }}
+                      >
+                        <strong>{t.name}</strong>
+                        <span>
+                          {t.registerName || "Till"} · {t.lines.length} item{t.lines.length === 1 ? "" : "s"} ·{" "}
+                          {money(t.totalCents)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
-          <div className="ticket-lines">
+            <div className="ticket-lines">
             {(ticket?.lines ?? []).map((line) => {
               const modSum = line.modifiers.reduce((s, m) => s + m.priceCents, 0);
               const lineTotal = Math.round((line.unitPriceCents + modSum) * line.quantity) - line.discountCents;
@@ -1934,6 +1935,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                   : "No open orders — tap an item to start a new sale."}
               </p>
             )}
+            </div>
           </div>
 
           <div className="totals">
