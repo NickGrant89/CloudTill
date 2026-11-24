@@ -191,10 +191,13 @@ employeesRouter.post("/devices/heartbeat", async (req: AuthedRequest, res) => {
     registerId = registers[0]!.id;
   }
 
+  const incomingLabel = body.label?.trim();
+  const registerNames = new Set(registers.map((r) => r.name.trim().toLowerCase()));
+  const existingLooksLikeTill =
+    !!existing?.label && registerNames.has(existing.label.trim().toLowerCase());
   const label =
-    body.label?.trim() ||
-    existing?.label ||
-    (registerId ? registers.find((r) => r.id === registerId)?.name : null) ||
+    incomingLabel ||
+    (!existingLooksLikeTill ? existing?.label : null) ||
     "Till device";
 
   const now = new Date();
@@ -211,7 +214,8 @@ employeesRouter.post("/devices/heartbeat", async (req: AuthedRequest, res) => {
       lastSeenAt: now,
     },
     update: {
-      label,
+      // Refresh label when client sends one (fixes till-name pollution); otherwise keep BO edit
+      ...(incomingLabel || existingLooksLikeTill ? { label } : {}),
       registerId,
       lastEmployeeId: req.user!.sub,
       lastEmployeeName: req.user!.name,
@@ -227,7 +231,7 @@ employeesRouter.post("/devices/heartbeat", async (req: AuthedRequest, res) => {
       data: {
         lastSeenAt: now,
         lastEmployeeName: req.user!.name,
-        lastDeviceLabel: label,
+        lastDeviceLabel: device.label,
       },
     });
     registers = await prisma.register.findMany({ where: { storeId }, orderBy: { name: "asc" } });

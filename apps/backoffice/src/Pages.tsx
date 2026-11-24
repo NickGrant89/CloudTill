@@ -1409,6 +1409,17 @@ type RegisterRow = {
   online?: boolean;
 };
 
+type OpenTicketRow = {
+  id: string;
+  name: string;
+  status: string;
+  registerName: string;
+  customerName: string | null;
+  lineCount: number;
+  lines: { name: string; quantity: number }[];
+  updatedAt: string;
+};
+
 function formatSeenAt(iso: string | null | undefined) {
   if (!iso) return "Never";
   const t = new Date(iso).getTime();
@@ -1429,6 +1440,7 @@ function StoresPage() {
   const [stores, setStores] = useState<{ id: string; name: string; address: string | null; registers: { name: string }[] }[]>([]);
   const [registers, setRegisters] = useState<RegisterRow[]>([]);
   const [devices, setDevices] = useState<TillDeviceRow[]>([]);
+  const [openTickets, setOpenTickets] = useState<OpenTicketRow[]>([]);
   const [regName, setRegName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
@@ -1444,13 +1456,14 @@ function StoresPage() {
   const kitchenUrl = `${window.location.origin}/pos/kitchen`;
 
   async function load() {
-    const [sett, all, me, billing, regs, devs] = await Promise.all([
+    const [sett, all, me, billing, regs, devs, board] = await Promise.all([
       api<NonNullable<typeof settings>>("/settings"),
       api<typeof stores>("/auth/stores"),
       api<{ user: { role: string } }>("/auth/me"),
       api<{ features: string[] }>("/billing").catch(() => ({ features: [] as string[] })),
       api<RegisterRow[]>("/employees/registers"),
       api<TillDeviceRow[]>("/employees/devices").catch(() => [] as TillDeviceRow[]),
+      api<OpenTicketRow[]>("/extras/tickets-board").catch(() => [] as OpenTicketRow[]),
     ]);
     setSettings(sett);
     setStores(all);
@@ -1458,6 +1471,7 @@ function StoresPage() {
     setHasBranches(billing.features.includes("multi_store"));
     setRegisters(Array.isArray(regs) ? regs : []);
     setDevices(Array.isArray(devs) ? devs : []);
+    setOpenTickets(Array.isArray(board) ? board : []);
   }
 
   async function addBranch(e: React.FormEvent) {
@@ -1547,19 +1561,23 @@ function StoresPage() {
           `• ${d.label}${d.online ? " [online]" : ""} — ${d.registerName ?? "unpinned"} — ${d.lastEmployeeName ?? "—"} — ${formatSeenAt(d.lastSeenAt)}${d.supportNote ? ` — note: ${d.supportNote}` : ""}`
       ),
     ];
-    void navigator.clipboard?.writeText(lines.join("\n")).then(() => setTillMsg("Support pack copied — paste into a ticket or chat"));
+    void navigator.clipboard?.writeText(lines.join("\n")).then(() => setTillMsg("Status pack copied — paste into a ticket or chat"));
   }
 
   useEffect(() => {
     if (!(role === "owner" || role === "manager")) return;
-    const timer = window.setInterval(() => {
+    const refreshLive = () => {
       void api<TillDeviceRow[]>("/employees/devices")
         .then((devs) => setDevices(Array.isArray(devs) ? devs : []))
         .catch(() => undefined);
       void api<RegisterRow[]>("/employees/registers")
         .then((regs) => setRegisters(Array.isArray(regs) ? regs : []))
         .catch(() => undefined);
-    }, 30_000);
+      void api<OpenTicketRow[]>("/extras/tickets-board")
+        .then((board) => setOpenTickets(Array.isArray(board) ? board : []))
+        .catch(() => undefined);
+    };
+    const timer = window.setInterval(refreshLive, 15_000);
     return () => window.clearInterval(timer);
   }, [role]);
 
@@ -1568,22 +1586,68 @@ function StoresPage() {
       <div className="page-head">
         <div>
           <h2>Stores & tills</h2>
-          <p>Branches, till registers, live devices, and setup help</p>
+          <p>Live open tickets, devices, and till registers</p>
         </div>
       </div>
 
       <div className="panel-box" style={{ marginBottom: 16 }}>
-        <h3 style={{ marginTop: 0 }}>Till support</h3>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 8 }}>
+          <h3 style={{ margin: 0, flex: "1 1 auto" }}>Open tickets</h3>
+          <button type="button" className="secondary" onClick={() => void load()}>
+            Refresh
+          </button>
+        </div>
         <p style={{ color: "var(--muted)", marginTop: 0 }}>
-          When staff open the till and enter their PIN, that phone or iPad <strong>registers itself here
-          automatically</strong>. You see who is signed in, which till they are on, and whether the device is online.
+          Live sales across tills — same board the till app uses. Updates about every 15 seconds.
         </p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+        {openTickets.length === 0 ? (
+          <p style={{ color: "var(--muted)", marginBottom: 12 }}>No open or held tickets right now.</p>
+        ) : (
+          <ul style={{ listStyle: "none", padding: 0, margin: "0 0 12px" }}>
+            {openTickets.map((ticket) => {
+              const preview = ticket.lines
+                .slice(0, 3)
+                .map((line) => `${line.quantity}× ${line.name}`)
+                .join(", ");
+              const extra = ticket.lineCount > 3 ? ` +${ticket.lineCount - 3} more` : "";
+              return (
+                <li
+                  key={ticket.id}
+                  style={{
+                    marginBottom: 10,
+                    paddingBottom: 10,
+                    borderBottom: "1px solid var(--line)",
+                  }}
+                >
+                  <strong>
+                    {ticket.name || "Sale"}
+                    {ticket.status === "held" ? " · held" : ""}
+                  </strong>
+                  <div style={{ color: "var(--muted)", fontSize: "0.9rem", marginTop: 2 }}>
+                    {ticket.registerName}
+                    {ticket.customerName ? ` · ${ticket.customerName}` : ""}
+                    {" · "}
+                    {ticket.lineCount} line{ticket.lineCount === 1 ? "" : "s"}
+                    {" · "}
+                    {formatSeenAt(ticket.updatedAt)}
+                  </div>
+                  {(preview || extra) && (
+                    <div style={{ fontSize: "0.9rem", marginTop: 4 }}>
+                      {preview}
+                      {extra}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           <a className="secondary" href={tillUrl} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none", padding: "8px 12px", borderRadius: 10 }}>
-            Open till app
+            Open till
           </a>
           <a className="secondary" href={kitchenUrl} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none", padding: "8px 12px", borderRadius: 10 }}>
-            Open kitchen screen
+            Kitchen
           </a>
           <button
             type="button"
@@ -1593,35 +1657,9 @@ function StoresPage() {
             Copy till link
           </button>
           <button type="button" className="secondary" onClick={copySupportPack}>
-            Copy support pack
+            Copy status pack
           </button>
         </div>
-        <ol style={{ margin: "0 0 8px", paddingLeft: 18, lineHeight: 1.5, color: "var(--muted)" }}>
-          <li>
-            Open <strong>{tillUrl}</strong> on the device. First time: <strong>Use my business</strong> (owner email +
-            PIN). After that staff only need their PIN.
-          </li>
-          <li>
-            The device appears under <strong>Devices signed in</strong> below as soon as they log in — no manual add
-            step.
-          </li>
-          <li>
-            If you have more than one till, pick it then tap <strong>Use this iPad as…</strong>. A store with no tills
-            yet gets <strong>Front Counter</strong> automatically.
-          </li>
-          <li>
-            <strong>Lock</strong> is the staff PIN. <strong>Change till</strong> on the lock screen (owner/manager PIN)
-            moves the device to another register.
-          </li>
-          <li>
-            Stuck? Copy the support pack, check the device is online here after a PIN login, and confirm they are on
-            this store (not demo).
-          </li>
-        </ol>
-        <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>
-          A kiosk is just another till register pinned on a customer-facing iPad — same app, same live tickets. Kitchen
-          screen: {kitchenUrl}
-        </p>
         {tillMsg && <p style={{ marginBottom: 0 }}>{tillMsg}</p>}
       </div>
 
@@ -1629,8 +1667,8 @@ function StoresPage() {
         <div className="panel-box" style={{ marginBottom: 16 }}>
           <h3 style={{ marginTop: 0 }}>Devices signed in</h3>
           <p style={{ color: "var(--muted)", marginTop: 0 }}>
-            Live from till login. Online means a heartbeat in the last 3 minutes. Refresh happens about every 30
-            seconds while you keep this page open.
+            Every phone or iPad that opens the till. Online = heartbeat in the last 3 minutes. This list is separate
+            from <strong>Tills</strong> below (named slots like Front Counter).
           </p>
           {devices.length === 0 ? (
             <p style={{ color: "var(--muted)" }}>
@@ -1728,20 +1766,26 @@ function StoresPage() {
 
       <div className="panel-box" style={{ marginBottom: 16 }}>
         <h3 style={{ marginTop: 0 }}>Tills on {settings?.store.name ?? "this store"}</h3>
+        <p style={{ color: "var(--muted)", marginTop: 0 }}>
+          Tills are named slots (Front Counter, Patio…). Phones and iPads appear under the till they are pinned to —
+          add another till below if the phone should be its own station.
+        </p>
         {registers.length === 0 && (
           <p style={{ color: "var(--muted)" }}>
             No tills yet — the first till login creates Front Counter, or add one below.
           </p>
         )}
         <ul style={{ listStyle: "none", padding: 0, margin: "0 0 12px" }}>
-          {registers.map((reg) => (
+          {registers.map((reg) => {
+            const onTill = devices.filter((dev) => dev.registerId === reg.id);
+            return (
             <li
               key={reg.id}
               style={{
                 display: "flex",
                 flexWrap: "wrap",
                 gap: 8,
-                alignItems: "center",
+                alignItems: "flex-start",
                 marginBottom: 10,
                 paddingBottom: 10,
                 borderBottom: "1px solid var(--line)",
@@ -1777,6 +1821,7 @@ function StoresPage() {
                       width: 10,
                       height: 10,
                       borderRadius: "50%",
+                      marginTop: 6,
                       background: reg.online ? "#2F6F4E" : "#9aa3ad",
                       flex: "0 0 auto",
                     }}
@@ -1785,9 +1830,34 @@ function StoresPage() {
                     <strong>{reg.name}</strong>
                     <div style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: 2 }}>
                       {reg.lastSeenAt
-                        ? `${formatSeenAt(reg.lastSeenAt)}${reg.lastEmployeeName ? ` · ${reg.lastEmployeeName}` : ""}${reg.lastDeviceLabel ? ` · ${reg.lastDeviceLabel}` : ""}`
+                        ? `${formatSeenAt(reg.lastSeenAt)}${reg.lastEmployeeName ? ` · ${reg.lastEmployeeName}` : ""}`
                         : "No device signed in yet"}
                     </div>
+                    {onTill.length > 0 ? (
+                      <div style={{ fontSize: "0.9rem", marginTop: 6 }}>
+                        {onTill.map((dev) => (
+                          <span key={dev.id} style={{ display: "inline-block", marginRight: 12, marginBottom: 4 }}>
+                            <span
+                              title={dev.online ? "Online" : "Offline"}
+                              style={{
+                                display: "inline-block",
+                                width: 8,
+                                height: 8,
+                                borderRadius: "50%",
+                                marginRight: 6,
+                                background: dev.online ? "#2F6F4E" : "#9aa3ad",
+                              }}
+                            />
+                            {dev.label}
+                            {!dev.online ? ` · ${formatSeenAt(dev.lastSeenAt)}` : " · online"}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: 4 }}>
+                        No phones or iPads pinned here yet
+                      </div>
+                    )}
                   </div>
                   {(role === "owner" || role === "manager") && (
                     <button
@@ -1804,7 +1874,8 @@ function StoresPage() {
                 </>
               )}
             </li>
-          ))}
+            );
+          })}
         </ul>
         {(role === "owner" || role === "manager") && (
           <form onSubmit={(e) => void addRegister(e)}>

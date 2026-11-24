@@ -61,18 +61,29 @@ export type HeartbeatResult = {
 export async function sendTillHeartbeat(
   api: <T>(path: string, options?: RequestInit) => Promise<T>,
   registerId?: string | null,
-  registerName?: string | null
+  _registerName?: string | null
 ): Promise<HeartbeatResult | null> {
   try {
-    const tillName = registerName?.trim();
-    if (tillName) setDeviceLabel(tillName);
+    // Keep hardware label (iPad / iPhone) — till name lives on registerId, not device.label
+    const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+    let label = getDeviceLabel();
+    try {
+      const saved = localStorage.getItem(DEVICE_LABEL_KEY)?.trim();
+      // Drop accidental till-name labels from 0.10.32 so Devices stay iPad/iPhone
+      if (saved && !/^(iPad|iPhone|Android|Mac|Windows|Linux|Till device)/i.test(saved)) {
+        label = guessLabelFromUa(ua);
+        setDeviceLabel(label);
+      }
+    } catch {
+      // ignore
+    }
     return await api<HeartbeatResult>("/employees/devices/heartbeat", {
       method: "POST",
       body: JSON.stringify({
         deviceKey: getOrCreateDeviceKey(),
-        label: tillName || getDeviceLabel(),
+        label,
         registerId: registerId || undefined,
-        userAgent: typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 400) : undefined,
+        userAgent: ua ? ua.slice(0, 400) : undefined,
       }),
     });
   } catch {
