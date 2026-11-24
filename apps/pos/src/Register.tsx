@@ -221,7 +221,10 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
   const [query, setQuery] = useState("");
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [paymentTypes, setPaymentTypes] = useState<PaymentType[]>([]);
-  const [settings, setSettings] = useState<{ receipt: { header: string; footer: string }; tipPresetsPercent: number[] } | null>(null);
+  const [settings, setSettings] = useState<{
+    receipt: { header: string; footer: string; printCustomer?: boolean };
+    tipPresetsPercent: number[];
+  } | null>(null);
   const [shift, setShift] = useState<{ id: string; openingFloatCents: number } | null>(null);
   const [modal, setModal] = useState<Modal>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -331,7 +334,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
       api<Item[]>("/catalog/items"),
       api<PaymentType[]>("/pos/payment-types"),
       api<{
-        receipt: { header: string; footer: string };
+        receipt: { header: string; footer: string; printCustomer?: boolean };
         tipPresetsPercent: number[];
         taxes?: { rateBps: number; enabled: boolean; inclusive: boolean }[];
       }>("/settings"),
@@ -1386,34 +1389,44 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
           const blocks = groupModifierLines(ticket.lines[index]?.modifiers ?? []);
           const modLines = blocks.flatMap((block) => [
             ...(block.groupName ? [`  ${block.groupName}`] : []),
-            ...block.names.map((name) => `  + ${name}`),
+            ...block.names.map((name) => `    + ${name}`),
           ]);
           return [head, ...modLines].join("\n");
         })
         .join("\n");
       const pays = s.payments.map((p) => `${p.paymentTypeName}`.padEnd(28) + money(p.amountCents)).join("\n");
-      const text = [
-        settings?.receipt.header ?? store.name,
-        "--------------------------------",
-        `Receipt ${s.receiptNumber}`,
-        `Cashier: ${s.employeeName}`,
-        s.customerName ? `Customer: ${s.customerName}` : null,
-        "--------------------------------",
-        lines,
-        "--------------------------------",
-        `Subtotal`.padEnd(28) + money(s.subtotalCents),
-        s.discountCents ? `Discount`.padEnd(28) + money(-s.discountCents) : null,
-        `Tax`.padEnd(28) + money(s.taxCents),
-        s.tipCents ? `Tip`.padEnd(28) + money(s.tipCents) : null,
-        `TOTAL`.padEnd(28) + money(s.totalCents),
-        pays,
-        result.changeCents > 0 ? `Change`.padEnd(28) + money(result.changeCents) : null,
-        result.drawerOpened ? "[Drawer opened]" : null,
-        "--------------------------------",
-        settings?.receipt.footer ?? "Thank you!",
-      ]
-        .filter(Boolean)
-        .join("\n");
+      const printCustomer = settings?.receipt.printCustomer !== false;
+      const text = printCustomer
+        ? [
+            settings?.receipt.header ?? store.name,
+            "--------------------------------",
+            `Receipt ${s.receiptNumber}`,
+            `Cashier: ${s.employeeName}`,
+            s.customerName ? `Customer: ${s.customerName}` : null,
+            "--------------------------------",
+            lines,
+            "--------------------------------",
+            `Subtotal`.padEnd(28) + money(s.subtotalCents),
+            s.discountCents ? `Discount`.padEnd(28) + money(-s.discountCents) : null,
+            `Tax`.padEnd(28) + money(s.taxCents),
+            s.tipCents ? `Tip`.padEnd(28) + money(s.tipCents) : null,
+            `TOTAL`.padEnd(28) + money(s.totalCents),
+            pays,
+            result.changeCents > 0 ? `Change`.padEnd(28) + money(result.changeCents) : null,
+            result.drawerOpened ? "[Drawer opened]" : null,
+            "--------------------------------",
+            settings?.receipt.footer ?? "Thank you!",
+          ]
+            .filter(Boolean)
+            .join("\n")
+        : [
+            `Paid · ${s.receiptNumber}`,
+            `TOTAL`.padEnd(28) + money(s.totalCents),
+            result.changeCents > 0 ? `Change`.padEnd(28) + money(result.changeCents) : null,
+            "Customer receipt off — reprint from Receipts if needed.",
+          ]
+            .filter(Boolean)
+            .join("\n");
       const kitchenText = result.kitchenTicket?.preview;
       setCurrentTicket(null);
       setMobilePane("items");
@@ -1424,10 +1437,12 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
         saleId: s.id,
         kitchenText,
       });
-      void api("/printers/print-receipt", {
-        method: "POST",
-        body: JSON.stringify({ saleId: s.id, openDrawer: result.drawerOpened }),
-      }).catch(() => undefined);
+      if (printCustomer) {
+        void api("/printers/print-receipt", {
+          method: "POST",
+          body: JSON.stringify({ saleId: s.id, openDrawer: result.drawerOpened }),
+        }).catch(() => undefined);
+      }
       void loadCatalog();
     } catch (e) {
       setModal({ type: "message", title: "Payment failed", body: e instanceof Error ? e.message : "Error" });

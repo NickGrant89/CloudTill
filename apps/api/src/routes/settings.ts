@@ -36,6 +36,8 @@ settingsRouter.get("/", async (req: AuthedRequest, res) => {
       footer: map["receipt.footer"] ?? "Thank you!",
       showLogo: map["receipt.showLogo"] !== "false",
       showTaxBreakdown: map["receipt.showTaxBreakdown"] !== "false",
+      /** When false, till skips auto customer receipt after pay (reprint still available). */
+      printCustomer: map["receipt.printCustomer"] !== "false",
     },
     tipPresetsPercent: JSON.parse(map["tips.presets"] ?? "[10,15,20]"),
     taxes,
@@ -85,6 +87,7 @@ settingsRouter.patch("/receipt", requireRole("owner", "manager"), async (req: Au
       header: z.string().optional(),
       footer: z.string().optional(),
       showTaxBreakdown: z.boolean().optional(),
+      printCustomer: z.boolean().optional(),
     })
     .parse(req.body);
 
@@ -117,6 +120,19 @@ settingsRouter.patch("/receipt", requireRole("owner", "manager"), async (req: Au
           value: String(body.showTaxBreakdown),
         },
         update: { value: String(body.showTaxBreakdown) },
+      })
+    );
+  }
+  if (body.printCustomer !== undefined) {
+    upserts.push(
+      prisma.setting.upsert({
+        where: { storeId_key: { storeId: req.user!.storeId, key: "receipt.printCustomer" } },
+        create: {
+          storeId: req.user!.storeId,
+          key: "receipt.printCustomer",
+          value: String(body.printCustomer),
+        },
+        update: { value: String(body.printCustomer) },
       })
     );
   }

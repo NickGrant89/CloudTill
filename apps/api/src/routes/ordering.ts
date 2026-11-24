@@ -348,7 +348,7 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
       let extra = "";
       try {
         const lines = receiptModifierLines(JSON.parse(l.modifiersJson || "[]") as { name?: string; groupName?: string }[]);
-        extra = lines.length ? `\n${lines.map((line) => `  ${line}`).join("\n")}` : "";
+        extra = lines.length ? `\n${lines.join("\n")}` : "";
       } catch {
         extra = "";
       }

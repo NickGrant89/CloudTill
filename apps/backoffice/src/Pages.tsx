@@ -2373,7 +2373,7 @@ function SettingsPage() {
   const [settings, setSettings] = useState<{
     store: StoreDetails;
     orderingHost: string;
-    receipt: { header: string; footer: string; showTaxBreakdown: boolean };
+    receipt: { header: string; footer: string; showTaxBreakdown: boolean; printCustomer: boolean };
     taxes: { id: string; name: string; rateBps: number; enabled: boolean }[];
     paymentTypes: { id: string; name: string; type: string; enabled: boolean; opensDrawer: boolean }[];
   } | null>(null);
@@ -2386,7 +2386,7 @@ function SettingsPage() {
     plan: { name: string; monthlyGbp: number; highlights: string[]; features: string[] };
   } | null>(null);
   const [billingMsg, setBillingMsg] = useState("");
-  const [receipt, setReceipt] = useState({ header: "", footer: "" });
+  const [receipt, setReceipt] = useState({ header: "", footer: "", printCustomer: true });
   const [taxForm, setTaxForm] = useState({ name: "VAT", rate: "20" });
   const [ptForm, setPtForm] = useState({ name: "", type: "other" });
   const [pilotMsg, setPilotMsg] = useState("");
@@ -2415,7 +2415,11 @@ function SettingsPage() {
     setBilling(b);
     setTextPayStatus(tp);
     setTextPayRecent(Array.isArray(links) ? links.slice(0, 8) : []);
-    setReceipt({ header: s.receipt.header, footer: s.receipt.footer });
+    setReceipt({
+      header: s.receipt.header,
+      footer: s.receipt.footer,
+      printCustomer: s.receipt.printCustomer !== false,
+    });
   }
 
   useEffect(() => {
@@ -2767,6 +2771,18 @@ function SettingsPage() {
           <label>Footer</label>
           <input value={receipt.footer} onChange={(e) => setReceipt({ ...receipt, footer: e.target.value })} />
         </div>
+        <label style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 14 }}>
+          <input
+            type="checkbox"
+            checked={receipt.printCustomer}
+            onChange={(e) => setReceipt({ ...receipt, printCustomer: e.target.checked })}
+          />
+          Show and print customer receipt after payment
+        </label>
+        <p style={{ color: "var(--muted)", marginTop: 0, fontSize: "0.9rem" }}>
+          Turn off to skip the customer receipt on the till. Kitchen tickets still print. You can reprint a sale from
+          Receipts anytime.
+        </p>
         <button type="submit">Save receipt</button>
       </form>
 
