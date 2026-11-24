@@ -265,7 +265,12 @@ button.danger {
 table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 520px;
+  min-width: 0;
+}
+
+/* Wide multi-column lists: scroll inside .table-wrap on narrow screens */
+.table-wrap.wide > table {
+  min-width: 560px;
 }
 
 th,
@@ -385,13 +390,117 @@ tr:last-child td {
 
 .grid-2 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+}
+
+.grid-2 > * {
+  min-width: 0;
 }
 
 @media (max-width: 900px) {
   .grid-2 {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Reports — fit phone / iPad without sideways overflow */
+.reports-page {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.reports-cards {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.reports-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+.reports-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin-bottom: 0;
+  overflow: hidden;
+}
+
+.reports-empty {
+  margin: 0;
+  color: var(--muted);
+}
+
+.reports-table-wrap {
+  border: none;
+  border-radius: 10px;
+  max-height: min(42vh, 380px);
+  flex: 1 1 auto;
+  min-height: 0;
+  background: transparent;
+}
+
+.reports-table {
+  min-width: 0 !important;
+  table-layout: fixed;
+}
+
+.reports-table th,
+.reports-table td {
+  padding: 10px 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reports-table th:last-child,
+.reports-table td:last-child,
+.reports-table th:nth-child(2),
+.reports-table td:nth-child(2) {
+  width: 5.5rem;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.reports-table th:first-child,
+.reports-table td:first-child {
+  width: auto;
+}
+
+@media (max-width: 1100px) {
+  .reports-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .reports-table-wrap {
+    max-height: min(48vh, 420px);
+  }
+}
+
+@media (max-width: 700px) {
+  .reports-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .reports-cards .stat {
+    padding: 12px;
+  }
+
+  .reports-cards .value {
+    font-size: 1.2rem;
+  }
+
+  .reports-table th,
+  .reports-table td {
+    padding: 8px 10px;
+    font-size: 0.88rem;
+  }
+
+  .reports-table-wrap {
+    max-height: min(55vh, 360px);
   }
 }
 

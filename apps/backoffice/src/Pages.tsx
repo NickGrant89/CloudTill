@@ -2477,14 +2477,14 @@ function ReportsPage() {
   }, []);
 
   return (
-    <div>
+    <div className="reports-page">
       <div className="page-head">
         <div>
           <h2>Reports</h2>
-          <p>Sales, by item / category / employee, payments, taxes, shifts</p>
+          <p>Sales, by item / category / employee, payments, taxes</p>
         </div>
       </div>
-      <div className="cards">
+      <div className="cards reports-cards">
         <div className="stat">
           <div className="label">Gross</div>
           <div className="value">{money(Number(summary?.grossSalesCents ?? 0))}</div>
@@ -2503,7 +2503,7 @@ function ReportsPage() {
         </div>
       </div>
 
-      <div className="grid-2">
+      <div className="reports-grid">
         <ReportTable title="By item" rows={byItem.map((r) => [r.name, String(r.qty), money(r.salesCents)])} headers={["Item", "Qty", "Sales"]} />
         <ReportTable title="By category" rows={byCat.map((r) => [r.name, String(r.qty), money(r.salesCents)])} headers={["Category", "Qty", "Sales"]} />
         <ReportTable title="By employee" rows={byEmp.map((r) => [r.name, String(r.receipts), money(r.salesCents)])} headers={["Employee", "Receipts", "Sales"]} />
@@ -2515,28 +2515,34 @@ function ReportsPage() {
 
 function ReportTable({ title, headers, rows }: { title: string; headers: string[]; rows: string[][] }) {
   return (
-    <div className="panel-box">
+    <div className="panel-box reports-panel">
       <h3>{title}</h3>
-      <div className="table-wrap" style={{ border: "none" }}>
-        <table>
-          <thead>
-            <tr>
-              {headers.map((h) => (
-                <th key={h}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={i}>
-                {r.map((c, j) => (
-                  <td key={j}>{c}</td>
+      {rows.length === 0 ? (
+        <p className="reports-empty">Nothing yet.</p>
+      ) : (
+        <div className="table-wrap reports-table-wrap">
+          <table className="reports-table">
+            <thead>
+              <tr>
+                {headers.map((h) => (
+                  <th key={h}>{h}</th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i}>
+                  {r.map((c, j) => (
+                    <td key={j} title={c}>
+                      {c}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
