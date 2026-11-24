@@ -2,6 +2,10 @@ import {
   applyModifierFreeSelect,
   groupModifierLines,
   isConsolidatedPizzaItem,
+  isPizzaCyoToppingGroup,
+  pizzaSizeInchesFromSelection,
+  pizzaSizedToppingPriceCents,
+  tillPizzaModGroupLabel,
   visiblePizzaModifierGroups,
 } from "@cloudtill/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -51,17 +55,34 @@ function priceSelectedModifiers(item: Item, selectedMods: Record<string, Modifie
     name: group.name,
     freeSelect: group.freeSelect ?? 0,
   }));
+  const sizeInches = isConsolidatedPizzaItem(item.name)
+    ? pizzaSizeInchesFromSelection(item.modifierGroups, selectedMods)
+    : null;
   const listPriceByModifierId = new Map(
-    item.modifierGroups.flatMap((group) => group.modifiers.map((mod) => [mod.id, mod.priceCents] as const))
+    item.modifierGroups.flatMap((group) =>
+      group.modifiers.map((mod) => {
+        let list = mod.priceCents;
+        if (list <= 0 && sizeInches && isPizzaCyoToppingGroup(group.name)) {
+          list = pizzaSizedToppingPriceCents(sizeInches);
+        }
+        return [mod.id, list] as const;
+      })
+    )
   );
   const raw = item.modifierGroups.flatMap((group) =>
-    (selectedMods[group.id] ?? []).map((option) => ({
-      modifierId: option.id,
-      name: option.name,
-      priceCents: option.priceCents,
-      groupId: group.id,
-      groupName: group.name,
-    }))
+    (selectedMods[group.id] ?? []).map((option) => {
+      let priceCents = option.priceCents;
+      if (priceCents <= 0 && sizeInches && isPizzaCyoToppingGroup(group.name)) {
+        priceCents = pizzaSizedToppingPriceCents(sizeInches);
+      }
+      return {
+        modifierId: option.id,
+        name: option.name,
+        priceCents,
+        groupId: group.id,
+        groupName: group.name,
+      };
+    })
   );
   return applyModifierFreeSelect(raw, listPriceByModifierId, groupRules);
 }
@@ -1782,7 +1803,9 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                   className={`chip ${activeModGroup?.id === group.id ? "active" : ""}`}
                   onClick={() => setModifierGroupId(group.id)}
                 >
-                  {group.name.replace(/^\d+\s*(?:”|")\s*/g, "").replace(/^(\d+)\s*(?:”|")\s*/g, "") || group.name}
+                  {isConsolidatedPizzaItem(modifierItem.name)
+                    ? tillPizzaModGroupLabel(group.name)
+                    : group.name.replace(/^(\d+)\s*(?:”|")\s*/gi, "").trim() || group.name}
                   {group.minSelect > 0 ? " *" : ""}
                   {(group.freeSelect ?? 0) > 0 ? ` · ${group.freeSelect} free` : ""}
                 </button>
@@ -1841,13 +1864,21 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                     <span className="name">{option.name}</span>
                     <span className="price">
                       {(() => {
-                        if (!option.priceCents) return "Included";
+                        const sizeInches =
+                          modifierItem && isConsolidatedPizzaItem(modifierItem.name)
+                            ? pizzaSizeInchesFromSelection(modifierItem.modifierGroups, selectedMods)
+                            : null;
+                        let listPrice = option.priceCents;
+                        if (listPrice <= 0 && sizeInches && isPizzaCyoToppingGroup(activeModGroup.name)) {
+                          listPrice = pizzaSizedToppingPriceCents(sizeInches);
+                        }
+                        if (!listPrice) return "Included";
                         if (selected) {
                           const charged = chargedByModifierId.get(option.id);
                           if (charged === 0) return "Included";
                           if (charged !== undefined) return `+${money(charged)}`;
                         }
-                        return `+${money(option.priceCents)}`;
+                        return `+${money(listPrice)}`;
                       })()}
                     </span>
                   </button>

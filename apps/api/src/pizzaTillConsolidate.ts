@@ -210,6 +210,112 @@ async function buildConsolidatedItem(storeId: string, categoryId: string, spec: 
   return { name: spec.name, itemId: item.id, created: true };
 }
 
+type TillLayoutRule = {
+  order: string[];
+  drop: (name: string) => boolean;
+  freeSelect?: Record<string, number>;
+};
+
+const TILL_LAYOUT: Record<string, TillLayoutRule> = {
+  "Pizza — Half & half (CYO)": {
+    order: ["Size", "Pizza Base", "Pizza Sauce", "Pizza Sauce 2", "Right CYO Half & Half", "Left CYO Half & Half"],
+    drop: (name) => /extras/i.test(name) || /extra toppings/i.test(name) || /remove/i.test(name),
+    freeSelect: { "Right CYO Half & Half": 4, "Left CYO Half & Half": 4 },
+  },
+  "Pizza — Create your own": {
+    order: ["Size", "Pizza Base", "Pizza Sauce", "Create Your Own (4 x Free Toppings)"],
+    drop: (name) => /extra toppings/i.test(name),
+    freeSelect: { "Create Your Own (4 x Free Toppings)": 4 },
+  },
+  "Pizza — Single": {
+    order: ["Size", "Pizza Base", "Pizza Sauce", "Pizza Options", "Remove Toppings"],
+    drop: (name) => /extra toppings/i.test(name),
+  },
+  "Pizza — Half & half": {
+    order: ["Size", "Pizza Base", "Pizza Sauce", "Right Half & Half Pizza", "Pizza Sauce 2", "Left Half & Half"],
+    drop: (name) => {
+      const n = name.toLowerCase();
+      if (n.includes("extra toppings") && !n.includes("half")) return true;
+      return false;
+    },
+  },
+};
+
+function sortRank(groupName: string, order: string[]): number {
+  const lower = groupName.toLowerCase();
+  for (let i = 0; i < order.length; i++) {
+    const key = order[i]!.toLowerCase();
+    if (lower === key || lower.startsWith(key)) return i;
+  }
+  if (/half & half extras/i.test(groupName)) {
+    const inch = inchSizeInName(groupName) ?? 99;
+    const side = /left/i.test(groupName) ? 0.2 : 0.1;
+    return 20 + inch / 100 + side;
+  }
+  if (/remove/i.test(groupName)) return 40;
+  return 100;
+}
+
+async function applyMenuFreeSelect(storeId: string, menuName: string, freeSelect: number) {
+  await prisma.modifierGroup.updateMany({
+    where: { item: { storeId }, name: menuName },
+    data: { freeSelect },
+  });
+}
+
+/** Strip redundant extra-topping tabs, fix order, set free topping counts on consolidated pizza items. */
+export async function repairPizzaTillLayout(storeId: string) {
+  const itemNames = Object.keys(TILL_LAYOUT);
+  const changed: { item: string; removed: string[]; order: string[] }[] = [];
+
+  for (const itemName of itemNames) {
+    const rule = TILL_LAYOUT[itemName]!;
+    const item = await prisma.item.findFirst({
+      where: { storeId, name: itemName, active: true },
+      include: {
+        modifierGroups: {
+          include: { modifiers: true },
+          orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+        },
+      },
+    });
+    if (!item) continue;
+
+    const removed: string[] = [];
+    for (const group of item.modifierGroups) {
+      if (!rule.drop(group.name)) continue;
+      await prisma.modifier.deleteMany({ where: { groupId: group.id } });
+      await prisma.modifierGroup.delete({ where: { id: group.id } });
+      removed.push(group.name);
+    }
+
+    if (rule.freeSelect) {
+      for (const [menuName, freeSelect] of Object.entries(rule.freeSelect)) {
+        await applyMenuFreeSelect(storeId, menuName, freeSelect);
+      }
+    }
+
+    const fresh = await prisma.modifierGroup.findMany({
+      where: { itemId: item.id },
+      orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+    });
+    const sorted = [...fresh].sort((a, b) => sortRank(a.name, rule.order) - sortRank(b.name, rule.order));
+    for (let index = 0; index < sorted.length; index += 1) {
+      const group = sorted[index]!;
+      if (group.sortOrder === index) continue;
+      await prisma.modifierGroup.update({ where: { id: group.id }, data: { sortOrder: index } });
+    }
+
+    changed.push({ item: itemName, removed, order: sorted.map((g) => g.name) });
+  }
+
+  return {
+    repaired: changed.length,
+    items: changed,
+    message: "Pizza till order updated — CYO uses free priced options; extra topping tabs removed where duplicated.",
+  };
+}
+
 export async function consolidatePizzaTill(storeId: string) {
   const category = await ensurePizzaCategory(storeId);
   const items = [];
@@ -233,11 +339,13 @@ export async function consolidatePizzaTill(storeId: string) {
   for (const row of CONSOLIDATED) map[row.name.toLowerCase()] = "PIZZAS OPTIONS";
   map[SIZE_GROUP.toLowerCase()] = "PIZZAS OPTIONS";
   await saveModifierLayout(storeId, { map, folderOrder: layout.folderOrder, menuOrder: layout.menuOrder }, { tillOrder: "none" });
+  const repair = await repairPizzaTillLayout(storeId);
 
   return {
     category: category.name,
     items,
     hidden: [...new Set(hidden)],
+    repair,
     message: `Till shows ${CONSOLIDATED.length} pizza buttons (pick size first). Hid ${hidden.length} legacy tiles. Deals unchanged.`,
   };
 }

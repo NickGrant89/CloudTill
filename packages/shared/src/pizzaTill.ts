@@ -37,3 +37,31 @@ export function visiblePizzaModifierGroups<
     return sizeInches !== null;
   });
 }
+
+export function isPizzaCyoToppingGroup(groupName: string): boolean {
+  const n = groupName.trim().toLowerCase();
+  return n.includes("cyo half & half") || n.includes("create your own (4 x free");
+}
+
+/** G&A Loyverse extra-topping pence by size when CYO options are listed at £0. */
+export function pizzaSizedToppingPriceCents(sizeInches: number): number {
+  if (sizeInches === 9) return 80;
+  if (sizeInches === 16) return 100;
+  return 90;
+}
+
+export function tillPizzaModGroupLabel(groupName: string): string {
+  const n = groupName.trim();
+  const lower = n.toLowerCase();
+  if (lower === "size") return "Size";
+  if (lower === "pizza base") return "Base";
+  if (lower === "pizza sauce") return "Sauce (left)";
+  if (lower === "pizza sauce 2") return "Sauce (right)";
+  if (lower.startsWith("right cyo")) return "Right toppings";
+  if (lower.startsWith("left cyo")) return "Left toppings";
+  if (lower.startsWith("right half & half pizza")) return "Right pizza";
+  if (lower.startsWith("left half & half")) return "Left pizza";
+  if (lower.includes("create your own")) return "Toppings";
+  const stripped = n.replace(/^(\d+)\s*(?:”|")\s*/i, "").trim();
+  return stripped || n;
+}
