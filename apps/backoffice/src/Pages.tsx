@@ -890,7 +890,7 @@ function ModifiersPage() {
       <div className="page-head">
         <div>
           <h2>Modifiers</h2>
-          <p>Drag to reorder groups, menus and options. Rename groups on the left. Search when assigning lots of items.</p>
+          <p>Pick a menu on the left to edit options and items. Search to find one quickly.</p>
         </div>
       </div>
       {error && <p className="error">{error}</p>}

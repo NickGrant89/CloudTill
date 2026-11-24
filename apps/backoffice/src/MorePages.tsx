@@ -317,6 +317,16 @@ function folderForSet(set: ModifierSet): string {
   return (set.folder || "General").trim() || "General";
 }
 
+/** Strip Loyverse-style ****** decoration so long menu names fit the list. */
+function prettyModifierLabel(name: string) {
+  const cleaned = name
+    .replace(/^\s*\*+\s*/g, "")
+    .replace(/\s*\*+\s*$/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return cleaned || name.trim() || "Untitled";
+}
+
 type ModifierSetsResponse = {
   sets: ModifierSet[];
   folderOrder: string[];
@@ -664,6 +674,7 @@ export function ModifierLibrary({
   const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
   const [renameFolderValue, setRenameFolderValue] = useState("");
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
+  const [menuFilter, setMenuFilter] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -673,7 +684,9 @@ export function ModifierLibrary({
     setFolderOrder(next.folderOrder);
     setMenuOrder(next.menuOrder);
     const nameToKeep = selectName ?? selected;
-    const match = next.sets.find((set) => set.name === nameToKeep);
+    const match =
+      next.sets.find((set) => set.name === nameToKeep) ??
+      (!nameToKeep && next.sets[0] ? next.sets[0] : undefined);
     if (match) {
       setSelected(match.name);
       setEditSetName(match.name);
@@ -990,6 +1003,7 @@ export function ModifierLibrary({
   }
 
   const selectedSet = sets.find((set) => set.name === selected);
+  const filterText = menuFilter.trim().toLowerCase();
   const discoveredFolders = [...new Set(sets.map(folderForSet))];
   const folderNames = (() => {
     const ordered = folderOrder.filter((name) =>
@@ -1001,6 +1015,17 @@ export function ModifierLibrary({
     return ordered;
   })();
   const knownFolders = Array.from(new Set(["General", "Pizza", "Burgers", ...folderNames]));
+  const visibleFolders = folderNames
+    .map((folder) => {
+      const rows = menusInFolder(folder).filter((setName) => {
+        if (!filterText) return true;
+        const set = sets.find((entry) => entry.name === setName);
+        const hay = `${folder} ${setName} ${prettyModifierLabel(setName)} ${set?.options.map((o) => o.name).join(" ") ?? ""}`.toLowerCase();
+        return hay.includes(filterText);
+      });
+      return { folder, rows };
+    })
+    .filter((entry) => entry.rows.length > 0 || (!filterText && menusInFolder(entry.folder).length === 0));
 
   return (
     <div className="modifier-layout">
@@ -1011,14 +1036,23 @@ export function ModifierLibrary({
             {creating ? "Close" : "New"}
           </button>
         </div>
-        <p className="modifier-menu-empty" style={{ marginTop: 0 }}>
-          Drag ⋮⋮ to reorder groups and menus. Rename keeps the group name clear.
-        </p>
-        {sets.length === 0 && <p className="modifier-menu-empty">No modifiers yet</p>}
+        <div className="field modifier-menu-search">
+          <label htmlFor="modifier-menu-filter" className="sr-only">
+            Search menus
+          </label>
+          <input
+            id="modifier-menu-filter"
+            type="search"
+            placeholder="Search menus…"
+            value={menuFilter}
+            onChange={(e) => setMenuFilter(e.target.value)}
+          />
+        </div>
+        {sets.length === 0 && <p className="modifier-menu-empty">No modifiers yet — tap New, or pull from Loyverse on Import.</p>}
         <div data-drag-group="folders" className="modifier-folder-list">
-          {folderNames.map((folder, folderIndex) => {
-            const rows = menusInFolder(folder);
-            const collapsed = Boolean(collapsedFolders[folder]);
+          {visibleFolders.map(({ folder, rows }, folderIndex) => {
+            const collapsed = Boolean(collapsedFolders[folder]) && !filterText;
+            const fullRows = menusInFolder(folder);
             return (
               <div key={folder} className="modifier-folder" data-drag-index={folderIndex}>
                 <div className="modifier-folder-bar">
@@ -1039,9 +1073,9 @@ export function ModifierLibrary({
                     </>
                   ) : (
                     <>
-                      {folderNames.length > 1 && (
+                      {folderNames.length > 1 && !filterText && (
                         <DragGrip
-                          index={folderIndex}
+                          index={folderNames.indexOf(folder)}
                           listLength={folderNames.length}
                           group="folders"
                           label={folder}
@@ -1053,15 +1087,14 @@ export function ModifierLibrary({
                         className="modifier-folder-head"
                         onClick={() => setCollapsedFolders((prev) => ({ ...prev, [folder]: !prev[folder] }))}
                       >
-                        <span>
-                          {collapsed ? "▸" : "▾"} {folder}
+                        <span className="modifier-folder-title">
+                          {collapsed ? "▸" : "▾"} {prettyModifierLabel(folder)}
                         </span>
-                        <span className="modifier-menu-meta">{rows.length}</span>
+                        <span className="modifier-menu-meta">{fullRows.length}</span>
                       </button>
                       <button
                         type="button"
-                        className="secondary"
-                        style={{ minHeight: 32 }}
+                        className="linkish modifier-folder-rename"
                         onClick={() => {
                           setRenamingFolder(folder);
                           setRenameFolderValue(folder);
@@ -1077,12 +1110,13 @@ export function ModifierLibrary({
                     {rows.map((setName, menuIndex) => {
                       const set = sets.find((entry) => entry.name === setName);
                       if (!set) return null;
+                      const label = prettyModifierLabel(set.name);
                       return (
                         <div key={set.name} className="modifier-menu-row" data-drag-index={menuIndex}>
-                          {rows.length > 1 && (
+                          {fullRows.length > 1 && !filterText && (
                             <DragGrip
-                              index={menuIndex}
-                              listLength={rows.length}
+                              index={fullRows.indexOf(setName)}
+                              listLength={fullRows.length}
                               group={`menus:${folder}`}
                               label={set.name}
                               onDrop={(from, to) => void reorderMenus(folder, from, to)}
@@ -1091,13 +1125,16 @@ export function ModifierLibrary({
                           <button
                             type="button"
                             className={`modifier-menu-btn${selected === set.name ? " active" : ""}`}
+                            title={set.name !== label ? set.name : undefined}
                             onClick={() => {
                               setCreating(false);
                               chooseSet(set.name);
                             }}
                           >
-                            <span>{set.name}</span>
-                            <span className="modifier-menu-meta">{set.assignments.length}</span>
+                            <span className="modifier-menu-label">{label}</span>
+                            <span className="modifier-menu-meta">
+                              {set.options.length} opt · {set.assignments.length} item{set.assignments.length === 1 ? "" : "s"}
+                            </span>
                           </button>
                         </div>
                       );
@@ -1298,7 +1335,7 @@ export function ModifierLibrary({
           </form>
         ) : (
           <p style={{ color: "var(--muted)", margin: 0 }}>
-            Select a modifier from the left menu, or create a new one.
+            Pick a menu on the left, or tap New to create one.
           </p>
         )}
       </div>
