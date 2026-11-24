@@ -293,16 +293,20 @@ button.danger {
   -webkit-overflow-scrolling: touch;
 }
 
+/*
+  Never squash multi-column lists on a phone. Table keeps natural column
+  widths and the wrap scrolls sideways instead of stacking letters.
+*/
+.table-wrap > table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 0;
-}
-
-/* Wide multi-column lists: scroll inside .table-wrap on narrow screens */
-.table-wrap.wide > table,
-.table-wrap > table:has(th:nth-child(5)) {
-  min-width: 520px;
 }
 
 th,
@@ -311,7 +315,9 @@ td {
   padding: 12px 14px;
   border-bottom: 1px solid var(--line);
   font-size: 0.95rem;
-  word-break: break-word;
+  white-space: nowrap;
+  word-break: normal;
+  overflow-wrap: normal;
 }
 
 td .secondary,
@@ -485,6 +491,7 @@ tr:last-child td {
 }
 
 .reports-table {
+  width: 100% !important;
   min-width: 0 !important;
   table-layout: fixed;
 }
@@ -495,6 +502,13 @@ tr:last-child td {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.items-table th:nth-child(2),
+.items-table td:nth-child(2) {
+  white-space: normal;
+  min-width: 10rem;
+  max-width: 14rem;
 }
 
 .reports-table th:last-child,
@@ -1143,6 +1157,10 @@ tr:last-child td {
   td {
     padding: 8px 10px;
     font-size: 0.86rem;
+  }
+
+  .table-wrap > table:not(.reports-table) {
+    min-width: 720px;
   }
 
   .toolbar {

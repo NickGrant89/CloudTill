@@ -779,7 +779,7 @@ function CatalogPage() {
       </form>
 
       <div className="table-wrap">
-        <table>
+        <table className="items-table">
           <thead>
             <tr>
               <th>
