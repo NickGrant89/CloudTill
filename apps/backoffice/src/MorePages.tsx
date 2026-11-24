@@ -663,6 +663,8 @@ export function ModifierLibrary({
   const [pickMany, setPickMany] = useState(false);
   const [freeIncluded, setFreeIncluded] = useState(0);
   const [editFreeIncluded, setEditFreeIncluded] = useState(0);
+  const [editRequired, setEditRequired] = useState(false);
+  const [editPickMany, setEditPickMany] = useState(false);
   const [options, setOptions] = useState([
     { name: "", price: "0.00" },
     { name: "", price: "0.00" },
@@ -696,6 +698,8 @@ export function ModifierLibrary({
       setItemIds(match.assignments.map((assignment) => assignment.itemId));
       setEditOptions(match.options.map((option) => ({ name: option.name, price: (option.priceCents / 100).toFixed(2) })));
       setEditFreeIncluded(match.freeSelect ?? 0);
+      setEditRequired(match.minSelect > 0);
+      setEditPickMany(match.maxSelect > 1);
       setEditFolder(folderForSet(match));
       setCustomFolder("");
       setAddingFolder(false);
@@ -798,6 +802,8 @@ export function ModifierLibrary({
       set ? set.options.map((option) => ({ name: option.name, price: (option.priceCents / 100).toFixed(2) })) : []
     );
     setEditFreeIncluded(set?.freeSelect ?? 0);
+    setEditRequired((set?.minSelect ?? 0) > 0);
+    setEditPickMany((set?.maxSelect ?? 1) > 1);
     setEditFolder(set ? folderForSet(set) : "General");
     setCustomFolder("");
     setAddingFolder(false);
@@ -943,8 +949,8 @@ export function ModifierLibrary({
         method: "PATCH",
         body: JSON.stringify({
           name: selectedSet.name,
-          minSelect: selectedSet.minSelect,
-          maxSelect: selectedSet.maxSelect,
+          minSelect: editRequired ? 1 : 0,
+          maxSelect: editPickMany ? Math.max(cleaned.length, 1) : 1,
           freeSelect: Math.max(0, Math.floor(editFreeIncluded)),
           options: cleaned,
         }),
@@ -1311,10 +1317,25 @@ export function ModifierLibrary({
                 </button>
               </div>
             </div>
-            <p style={{ color: "var(--muted)", marginTop: 0 }}>
-              {selectedSet.minSelect > 0 ? "Required" : "Optional"} · {selectedSet.maxSelect > 1 ? "pick many" : "pick one"}
-              {editFreeIncluded > 0 ? ` · ${editFreeIncluded} priced option${editFreeIncluded === 1 ? "" : "s"} free` : ""}
-            </p>
+            <div className="field">
+              <label>How it works</label>
+              <div style={{ display: "flex", gap: 16, minHeight: 42, alignItems: "center", flexWrap: "wrap" }}>
+                <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input type="checkbox" checked={editRequired} onChange={(e) => setEditRequired(e.target.checked)} />
+                  Required
+                </label>
+                <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input type="checkbox" checked={editPickMany} onChange={(e) => setEditPickMany(e.target.checked)} />
+                  Allow more than one
+                </label>
+              </div>
+              <p style={{ margin: "6px 0 0", color: "var(--muted)", fontSize: "0.88rem" }}>
+                Saved with Save options below.
+                {editFreeIncluded > 0
+                  ? ` · ${editFreeIncluded} priced option${editFreeIncluded === 1 ? "" : "s"} free`
+                  : ""}
+              </p>
+            </div>
             <div className="field" style={{ maxWidth: 280 }}>
               <label htmlFor="modifier-edit-free">Free priced options</label>
               <input
