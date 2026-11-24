@@ -305,6 +305,16 @@ type PreviewResult = {
   valid: number;
   errors: number;
   rows: PreviewRow[];
+  pulled?: {
+    stores: number;
+    categories: number;
+    items: number;
+    variants: number;
+    modifiers: number;
+    customers: number;
+    inventory: number;
+    warnings: string[];
+  };
 };
 
 const IMPORT_KINDS: { id: ImportKind; label: string; blurb: string }[] = [
@@ -312,7 +322,7 @@ const IMPORT_KINDS: { id: ImportKind; label: string; blurb: string }[] = [
     id: "loyverse",
     label: "Loyverse",
     blurb:
-      "Pull the catalogue with a Loyverse access token, or paste an item or customer CSV. The token is used once and not saved. A CSV has no modifier prices.",
+      "Paste a Loyverse access token (Back Office → Access tokens — tick Items, Categories, Modifiers, Customers, Inventory), then Pull. Review the list, then Import. The token is used once and not saved.",
   },
   { id: "items", label: "Items", blurb: "Name, group, SKU, price, stock" },
   { id: "customers", label: "Customers", blurb: "Name, email, phone, credit, loyalty" },
@@ -320,7 +330,7 @@ const IMPORT_KINDS: { id: ImportKind; label: string; blurb: string }[] = [
 ];
 
 export function ImportPage() {
-  const [kind, setKind] = useState<ImportKind>("items");
+  const [kind, setKind] = useState<ImportKind>("loyverse");
   const [csv, setCsv] = useState("");
   const [loyverseToken, setLoyverseToken] = useState("");
   const [pulled, setPulled] = useState(false);
@@ -363,15 +373,22 @@ export function ImportPage() {
     try {
       const result = await api<PreviewResult>("/import/loyverse/preview", {
         method: "POST",
-        body: JSON.stringify({ token: loyverseToken }),
+        body: JSON.stringify({ token: loyverseToken.trim() }),
       });
       setPreview(result);
       setPulled(true);
-      setMessage(
-        result.errors
-          ? `${result.valid} ready · ${result.errors} row error(s) to fix`
-          : `${result.valid} row(s) ready to import`
-      );
+      const pulledBits = result.pulled
+        ? `Loyverse sent ${result.pulled.items} item(s), ${result.pulled.variants} variant(s), ${result.pulled.categories} categor${result.pulled.categories === 1 ? "y" : "ies"}, ${result.pulled.modifiers} modifier(s), ${result.pulled.customers} customer(s). `
+        : "";
+      if (!result.valid) {
+        setMessage(`${pulledBits}Nothing mapped into PurePOS — check the preview notes.`);
+      } else if (result.errors) {
+        setMessage(
+          `${pulledBits}${result.valid} ready to import · ${result.errors} row(s) will be skipped. Tap Import below.`
+        );
+      } else {
+        setMessage(`${pulledBits}${result.valid} row(s) ready — tap Import below.`);
+      }
     } catch (e) {
       setPreview(null);
       setPulled(false);
@@ -416,7 +433,8 @@ export function ImportPage() {
   }
 
   async function runApply() {
-    if (!preview || preview.errors > 0) return;
+    if (!preview || preview.valid < 1) return;
+    if (!pulled && preview.errors > 0) return;
     setBusy(true);
     setError("");
     try {
@@ -426,9 +444,10 @@ export function ImportPage() {
         categoriesCreated?: number;
         modifiersLinked?: number;
         componentsLinked?: number;
+        skippedErrors?: number;
       }>(pulled ? "/import/loyverse/apply" : "/import/apply", {
         method: "POST",
-        body: JSON.stringify(pulled ? { token: loyverseToken } : { kind, csv }),
+        body: JSON.stringify(pulled ? { token: loyverseToken.trim() } : { kind, csv }),
       });
       const bits = [
         result.created != null ? `${result.created} created` : null,
@@ -436,8 +455,13 @@ export function ImportPage() {
         result.categoriesCreated ? `${result.categoriesCreated} categories created` : null,
         result.modifiersLinked ? `${result.modifiersLinked} modifiers linked` : null,
         result.componentsLinked ? `${result.componentsLinked} components linked` : null,
+        result.skippedErrors ? `${result.skippedErrors} row(s) skipped` : null,
       ].filter(Boolean);
-      setMessage(`Imported · ${bits.join(" · ")}`);
+      setMessage(
+        bits.length
+          ? `Imported · ${bits.join(" · ")}. Open Items to check the catalogue.`
+          : "Import finished but nothing changed — rows may already match what you have."
+      );
       setPreview(null);
       if (pulled) {
         setLoyverseToken("");
@@ -498,51 +522,111 @@ export function ImportPage() {
             />
             <div className="toolbar" style={{ marginTop: 8 }}>
               <button type="button" disabled={busy || loyverseToken.trim().length < 20} onClick={() => void runPull()}>
-                {busy ? "Working…" : "Pull from Loyverse"}
+                {busy ? "Working…" : "1. Pull from Loyverse"}
+              </button>
+              <button
+                type="button"
+                disabled={busy || !pulled || !preview || preview.valid < 1}
+                onClick={() => void runApply()}
+              >
+                {busy
+                  ? "Working…"
+                  : pulled && preview?.valid
+                    ? `2. Import ${preview.valid} rows`
+                    : "2. Import"}
               </button>
             </div>
           </div>
         )}
-        <div className="toolbar" style={{ marginBottom: 12 }}>
-          <button type="button" className="secondary" onClick={downloadTemplate}>
-            Download template
-          </button>
-          <label className="btn-file">
-            Choose CSV
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              hidden
-              onChange={(e) => void onFile(e.target.files?.[0] ?? null)}
-            />
-          </label>
-        </div>
-        <div className="field">
-          <label>{kind === "loyverse" ? "Or paste a CSV" : "CSV"}</label>
-          <textarea
-            rows={10}
-            value={csv}
-            placeholder="Paste CSV or choose a file…"
-            onChange={(e) => {
-              setCsv(e.target.value);
-              setPreview(null);
-              setPulled(false);
-            }}
-            style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "0.85rem" }}
-          />
-        </div>
-        <div className="toolbar">
-          <button type="button" disabled={busy || !csv.trim()} onClick={() => void runPreview()}>
-            {busy ? "Working…" : "Validate & preview"}
-          </button>
-          <button
-            type="button"
-            disabled={busy || !preview || preview.errors > 0}
-            onClick={() => void runApply()}
-          >
-            Import {preview && !preview.errors ? preview.valid : ""} rows
-          </button>
-        </div>
+        {kind !== "loyverse" && (
+          <>
+            <div className="toolbar" style={{ marginBottom: 12 }}>
+              <button type="button" className="secondary" onClick={downloadTemplate}>
+                Download template
+              </button>
+              <label className="btn-file">
+                Choose CSV
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  hidden
+                  onChange={(e) => void onFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
+            </div>
+            <div className="field">
+              <label>CSV</label>
+              <textarea
+                rows={10}
+                value={csv}
+                placeholder="Paste CSV or choose a file…"
+                onChange={(e) => {
+                  setCsv(e.target.value);
+                  setPreview(null);
+                  setPulled(false);
+                }}
+                style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "0.85rem" }}
+              />
+            </div>
+            <div className="toolbar">
+              <button type="button" disabled={busy || !csv.trim()} onClick={() => void runPreview()}>
+                {busy ? "Working…" : "Validate & preview"}
+              </button>
+              <button
+                type="button"
+                disabled={busy || !preview || preview.valid < 1 || preview.errors > 0}
+                onClick={() => void runApply()}
+              >
+                Import {preview && !preview.errors ? preview.valid : ""} rows
+              </button>
+            </div>
+          </>
+        )}
+        {kind === "loyverse" && (
+          <details style={{ marginTop: 8 }}>
+            <summary style={{ cursor: "pointer", color: "var(--muted)" }}>Or use a Loyverse CSV export instead</summary>
+            <div className="toolbar" style={{ margin: "12px 0" }}>
+              <button type="button" className="secondary" onClick={downloadTemplate}>
+                Download example
+              </button>
+              <label className="btn-file">
+                Choose CSV
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  hidden
+                  onChange={(e) => void onFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
+            </div>
+            <div className="field">
+              <label>CSV</label>
+              <textarea
+                rows={6}
+                value={csv}
+                placeholder="Paste a Loyverse Item list or Customers export…"
+                onChange={(e) => {
+                  setCsv(e.target.value);
+                  setPreview(null);
+                  setPulled(false);
+                }}
+                style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "0.85rem" }}
+              />
+            </div>
+            <div className="toolbar">
+              <button type="button" disabled={busy || !csv.trim()} onClick={() => void runPreview()}>
+                {busy ? "Working…" : "Validate CSV"}
+              </button>
+              <button
+                type="button"
+                disabled={busy || pulled || !preview || preview.valid < 1 || preview.errors > 0}
+                onClick={() => void runApply()}
+              >
+                Import CSV rows
+              </button>
+            </div>
+          </details>
+        )}
         {message && <p className="badge" style={{ marginTop: 12 }}>{message}</p>}
         {error && <p className="error" style={{ marginTop: 12 }}>{error}</p>}
         {preview && <p style={{ marginTop: 10, color: "var(--muted)", fontSize: "0.88rem" }}>{preview.notes}</p>}

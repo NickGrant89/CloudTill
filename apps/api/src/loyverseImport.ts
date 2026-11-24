@@ -1,6 +1,6 @@
 import { prisma } from "./db.js";
 import { parseNumber, parsePoundsToCents } from "./csv.js";
-import type { LoyverseCatalog, LoyverseVariant } from "./loyverseApi.js";
+import { itemModifierIds, type LoyverseCatalog, type LoyverseVariant } from "./loyverseApi.js";
 
 export type LoyversePreviewRow = {
   line: number;
@@ -339,7 +339,15 @@ async function previewItemGroups(storeId: string, groups: Map<string, ItemDraft[
       if (isBase && row.modifierFlags.length) {
         issues.push({
           level: "warning",
-          message: `${row.modifierFlags.map((name) => `“${name}”`).join(", ")} will be linked. Loyverse does not include the choices or their prices.`,
+          message: `${row.modifierFlags.map((name) => `“${name}”`).join(", ")} will be linked. Loyverse CSV does not include the choices or their prices — use Pull from Loyverse for full modifiers.`,
+        });
+      }
+      if (isBase && row.attachedGroups.length) {
+        issues.push({
+          level: "warning",
+          message: `Modifiers with choices: ${row.attachedGroups
+            .map((group) => `${group.name} (${group.options.length})`)
+            .join(", ")}`,
         });
       }
       if (isBase && row.taxes.length) {
@@ -819,7 +827,7 @@ function groupsFromCatalog(catalog: LoyverseCatalog) {
     const key = item.handle?.trim() || item.id || `item-${line}`;
     const attachedGroups: OptionGroup[] = [];
     const missingModifiers: string[] = [];
-    for (const modifierId of item.modifiers_ids ?? []) {
+    for (const modifierId of itemModifierIds(item)) {
       const modifier = modifiers.get(modifierId);
       if (!modifier?.name) {
         missingModifiers.push(modifierId);
@@ -827,8 +835,17 @@ function groupsFromCatalog(catalog: LoyverseCatalog) {
       }
       const options = (modifier.modifier_options ?? [])
         .filter((option) => option.name && !option.deleted_at)
+        .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0))
         .map((option) => ({ name: option.name!.trim(), priceCents: apiCents(option.price) ?? 0 }));
-      if (options.length) attachedGroups.push({ name: modifier.name.trim(), minSelect: 0, options });
+      if (options.length) {
+        attachedGroups.push({
+          name: modifier.name.trim(),
+          minSelect: 0,
+          options,
+        });
+      } else {
+        missingModifiers.push(modifier.name.trim() || modifierId);
+      }
     }
     const list: ItemDraft[] = [];
     for (const variant of variants) {
