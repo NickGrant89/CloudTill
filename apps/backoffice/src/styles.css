@@ -511,6 +511,116 @@ tr:last-child td {
   max-width: 14rem;
 }
 
+/* Phone: stack wide lists as cards instead of sideways tables */
+@media (max-width: 700px) {
+  .table-wrap.stack-cards {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    overflow: visible;
+  }
+
+  .table-wrap.stack-cards > table.stack-on-phone {
+    width: 100%;
+    min-width: 0 !important;
+    display: block;
+  }
+
+  .stack-on-phone thead {
+    display: none;
+  }
+
+  .stack-on-phone tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .stack-on-phone tbody tr {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+  }
+
+  .stack-on-phone tbody tr.stack-empty {
+    display: block;
+  }
+
+  .stack-on-phone tbody tr.stack-empty td {
+    display: block;
+    border: none;
+    padding: 8px 0;
+    white-space: normal;
+  }
+
+  .stack-on-phone tbody td {
+    display: grid;
+    grid-template-columns: minmax(5.5rem, 34%) minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+    padding: 0;
+    border: none;
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: anywhere;
+    font-size: 0.95rem;
+  }
+
+  .stack-on-phone tbody td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    padding-top: 2px;
+  }
+
+  .stack-on-phone tbody td.stack-title {
+    grid-template-columns: 1fr;
+    font-size: 1.05rem;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 2px;
+  }
+
+  .stack-on-phone tbody td.stack-title::before {
+    display: none;
+  }
+
+  .stack-on-phone tbody td.stack-select {
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    order: -1;
+  }
+
+  .stack-on-phone tbody td.stack-select::before {
+    content: "Select";
+  }
+
+  .stack-on-phone tbody td.stack-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+  }
+
+  .stack-on-phone tbody td.stack-actions::before {
+    display: none;
+  }
+
+  .stack-on-phone tbody td.stack-actions button {
+    flex: 1 1 auto;
+    min-height: 42px;
+  }
+}
+
 .reports-table th:last-child,
 .reports-table td:last-child,
 .reports-table th:nth-child(2),
@@ -1159,7 +1269,7 @@ tr:last-child td {
     font-size: 0.86rem;
   }
 
-  .table-wrap > table:not(.reports-table) {
+  .table-wrap > table:not(.reports-table):not(.stack-on-phone) {
     min-width: 720px;
   }
 

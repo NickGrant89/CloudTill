@@ -778,8 +778,8 @@ function CatalogPage() {
         {assignMsg && <p style={{ color: "var(--muted)" }}>{assignMsg}</p>}
       </form>
 
-      <div className="table-wrap">
-        <table className="items-table">
+      <div className="table-wrap stack-cards">
+        <table className="items-table stack-on-phone">
           <thead>
             <tr>
               <th>
@@ -803,7 +803,7 @@ function CatalogPage() {
           </thead>
           <tbody>
             {filtered.length === 0 && (
-              <tr>
+              <tr className="stack-empty">
                 <td colSpan={10} style={{ color: "var(--muted)" }}>
                   No items in this group — add an item or choose another group.
                 </td>
@@ -814,7 +814,7 @@ function CatalogPage() {
               const elsewhere = presenceByItem[item.id] ?? [];
               return (
                 <tr key={item.id}>
-                  <td>
+                  <td data-label="Select" className="stack-select">
                     <input
                       type="checkbox"
                       checked={selectedIds.includes(item.id)}
@@ -822,30 +822,30 @@ function CatalogPage() {
                       aria-label={`Select ${item.name}`}
                     />
                   </td>
-                  <td>
+                  <td data-label="Item" className="stack-title">
                     <strong>{item.name}</strong>
                     {item.isComposite && <span className="badge" style={{ marginLeft: 8 }}>Kit</span>}
                   </td>
-                  <td>
+                  <td data-label="Group">
                     <span className="badge">{groupName(item.categoryId)}</span>
                   </td>
-                  <td style={{ color: "var(--muted)", fontSize: "0.88rem" }}>
+                  <td data-label="Also on" style={{ color: "var(--muted)", fontSize: "0.88rem" }}>
                     {elsewhere.length
                       ? elsewhere.map((s) => s.name).join(", ")
                       : "This store only"}
                   </td>
-                  <td>{v?.sku}</td>
-                  <td>{v?.barcode ?? "—"}</td>
-                  <td>{money(v?.priceCents ?? 0)}</td>
-                  <td>
+                  <td data-label="SKU">{v?.sku}</td>
+                  <td data-label="Barcode">{v?.barcode ?? "—"}</td>
+                  <td data-label="Price">{money(v?.priceCents ?? 0)}</td>
+                  <td data-label="Stock">
                     {v?.trackStock ? v.stockQty : <span className="badge">Not tracked</span>}
                   </td>
-                  <td>
+                  <td data-label="Modifiers">
                     {item.modifierGroups.length
                       ? item.modifierGroups.map((g) => g.name).join(", ")
                       : "—"}
                   </td>
-                  <td style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <td data-label="" className="stack-actions" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <button type="button" className="secondary" onClick={() => openEdit(item)}>
                       Edit
                     </button>
