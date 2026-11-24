@@ -309,6 +309,7 @@ interface ModifierSet {
   folder?: string;
   minSelect: number;
   maxSelect: number;
+  freeSelect: number;
   options: { name: string; priceCents: number }[];
   assignments: { groupId: string; itemId: string; itemName: string }[];
 }
@@ -660,6 +661,8 @@ export function ModifierLibrary({
   const [name, setName] = useState("");
   const [required, setRequired] = useState(true);
   const [pickMany, setPickMany] = useState(false);
+  const [freeIncluded, setFreeIncluded] = useState(0);
+  const [editFreeIncluded, setEditFreeIncluded] = useState(0);
   const [options, setOptions] = useState([
     { name: "", price: "0.00" },
     { name: "", price: "0.00" },
@@ -692,6 +695,7 @@ export function ModifierLibrary({
       setEditSetName(match.name);
       setItemIds(match.assignments.map((assignment) => assignment.itemId));
       setEditOptions(match.options.map((option) => ({ name: option.name, price: (option.priceCents / 100).toFixed(2) })));
+      setEditFreeIncluded(match.freeSelect ?? 0);
       setEditFolder(folderForSet(match));
       setCustomFolder("");
       setAddingFolder(false);
@@ -758,6 +762,7 @@ export function ModifierLibrary({
           name: name.trim(),
           minSelect: required ? 1 : 0,
           maxSelect: pickMany ? Math.max(cleaned.length, 1) : 1,
+          freeSelect: Math.max(0, Math.floor(freeIncluded)),
           options: cleaned,
           itemIds: createItemIds,
         }),
@@ -792,6 +797,7 @@ export function ModifierLibrary({
     setEditOptions(
       set ? set.options.map((option) => ({ name: option.name, price: (option.priceCents / 100).toFixed(2) })) : []
     );
+    setEditFreeIncluded(set?.freeSelect ?? 0);
     setEditFolder(set ? folderForSet(set) : "General");
     setCustomFolder("");
     setAddingFolder(false);
@@ -939,6 +945,7 @@ export function ModifierLibrary({
           name: selectedSet.name,
           minSelect: selectedSet.minSelect,
           maxSelect: selectedSet.maxSelect,
+          freeSelect: Math.max(0, Math.floor(editFreeIncluded)),
           options: cleaned,
         }),
       });
@@ -975,6 +982,7 @@ export function ModifierLibrary({
             name: set.name,
             minSelect: set.minSelect,
             maxSelect: set.maxSelect,
+            freeSelect: set.freeSelect ?? 0,
             options: set.options,
             itemIds: toAdd,
           }),
@@ -1048,6 +1056,7 @@ export function ModifierLibrary({
           name: selectedSet.name,
           minSelect: selectedSet.minSelect,
           maxSelect: selectedSet.maxSelect,
+          freeSelect: selectedSet.freeSelect ?? 0,
           options: next.map((option) => ({
             name: option.name.trim(),
             priceCents: Math.round(Number(option.price) * 100) || 0,
@@ -1222,7 +1231,7 @@ export function ModifierLibrary({
               </div>
               <div className="field">
                 <label>How it works</label>
-                <div style={{ display: "flex", gap: 16, minHeight: 42, alignItems: "center" }}>
+                <div style={{ display: "flex", gap: 16, minHeight: 42, alignItems: "center", flexWrap: "wrap" }}>
                   <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} />
                     Required
@@ -1233,6 +1242,21 @@ export function ModifierLibrary({
                   </label>
                 </div>
               </div>
+            </div>
+            <div className="field" style={{ maxWidth: 280 }}>
+              <label htmlFor="modifier-free-included">Free priced options</label>
+              <input
+                id="modifier-free-included"
+                type="number"
+                min={0}
+                max={99}
+                value={freeIncluded}
+                onChange={(e) => setFreeIncluded(Math.max(0, Number(e.target.value) || 0))}
+              />
+              <p style={{ margin: "6px 0 0", color: "var(--muted)", fontSize: "0.88rem" }}>
+                How many toppings with a price stay included at £0 (extras charge their menu price). Use 0 if every priced
+                option should be charged.
+              </p>
             </div>
             <div className="field">
               <label>Options</label>
@@ -1289,7 +1313,22 @@ export function ModifierLibrary({
             </div>
             <p style={{ color: "var(--muted)", marginTop: 0 }}>
               {selectedSet.minSelect > 0 ? "Required" : "Optional"} · {selectedSet.maxSelect > 1 ? "pick many" : "pick one"}
+              {editFreeIncluded > 0 ? ` · ${editFreeIncluded} priced option${editFreeIncluded === 1 ? "" : "s"} free` : ""}
             </p>
+            <div className="field" style={{ maxWidth: 280 }}>
+              <label htmlFor="modifier-edit-free">Free priced options</label>
+              <input
+                id="modifier-edit-free"
+                type="number"
+                min={0}
+                max={99}
+                value={editFreeIncluded}
+                onChange={(e) => setEditFreeIncluded(Math.max(0, Number(e.target.value) || 0))}
+              />
+              <p style={{ margin: "6px 0 0", color: "var(--muted)", fontSize: "0.88rem" }}>
+                Saved with Save options below. Cheapest included picks are waived first when staff choose more than this.
+              </p>
+            </div>
             <div className="field">
               <label htmlFor="modifier-folder">Group</label>
               <div className="modifier-folder-pick">

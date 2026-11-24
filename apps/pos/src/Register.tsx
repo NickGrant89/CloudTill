@@ -1,4 +1,4 @@
-import { groupModifierLines } from "@cloudtill/shared";
+import { applyModifierFreeSelect, groupModifierLines } from "@cloudtill/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, getToken, loadCatalogSnapshot, money, OfflineError, saveCatalogSnapshot } from "./api";
 import type { SessionRegister, SessionStore, SessionUser } from "./App";
@@ -36,7 +36,29 @@ interface ModGroup {
   name: string;
   minSelect: number;
   maxSelect: number;
+  freeSelect: number;
   modifiers: Modifier[];
+}
+
+function priceSelectedModifiers(item: Item, selectedMods: Record<string, Modifier[]>) {
+  const groupRules = item.modifierGroups.map((group) => ({
+    id: group.id,
+    name: group.name,
+    freeSelect: group.freeSelect ?? 0,
+  }));
+  const listPriceByModifierId = new Map(
+    item.modifierGroups.flatMap((group) => group.modifiers.map((mod) => [mod.id, mod.priceCents] as const))
+  );
+  const raw = item.modifierGroups.flatMap((group) =>
+    (selectedMods[group.id] ?? []).map((option) => ({
+      modifierId: option.id,
+      name: option.name,
+      priceCents: option.priceCents,
+      groupId: group.id,
+      groupName: group.name,
+    }))
+  );
+  return applyModifierFreeSelect(raw, listPriceByModifierId, groupRules);
 }
 
 interface Item {
@@ -709,14 +731,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
       }
     }
     const mods = sortModsByItemGroups(
-      modifierItem.modifierGroups.flatMap((group) =>
-        (selectedMods[group.id] ?? []).map((option) => ({
-          modifierId: option.id,
-          name: option.name,
-          priceCents: option.priceCents,
-          groupName: group.name,
-        }))
-      ),
+      priceSelectedModifiers(modifierItem, selectedMods).map(({ groupId: _g, ...mod }) => mod),
       modifierItem.modifierGroups
     );
     if (editingLineKey) {
@@ -1542,9 +1557,11 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
   const visibleItems = showFavorites && favorites.length ? favorites : filtered;
   const activeModGroup =
     modifierItem?.modifierGroups.find((group) => group.id === modifierGroupId) ?? modifierItem?.modifierGroups[0];
-  const modifierExtra = Object.values(selectedMods)
-    .flat()
-    .reduce((sum, option) => sum + option.priceCents, 0);
+  const pricedSelection = modifierItem ? priceSelectedModifiers(modifierItem, selectedMods) : [];
+  const chargedByModifierId = new Map(
+    pricedSelection.flatMap((row) => (row.modifierId ? [[row.modifierId, row.priceCents] as const] : []))
+  );
+  const modifierExtra = pricedSelection.reduce((sum, option) => sum + option.priceCents, 0);
   const modifierTotal = (modifierItem?.variants[0]?.priceCents ?? 0) + modifierExtra;
   const modifierPreview = modifierItem
     ? sortModsByItemGroups(
@@ -1736,6 +1753,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                 >
                   {group.name}
                   {group.minSelect > 0 ? " *" : ""}
+                  {(group.freeSelect ?? 0) > 0 ? ` · ${group.freeSelect} free` : ""}
                 </button>
               ))
             ) : (
@@ -1790,7 +1808,17 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                     onClick={() => chooseModifier(activeModGroup, option)}
                   >
                     <span className="name">{option.name}</span>
-                    <span className="price">{option.priceCents ? `+${money(option.priceCents)}` : "Included"}</span>
+                    <span className="price">
+                      {(() => {
+                        if (!option.priceCents) return "Included";
+                        if (selected) {
+                          const charged = chargedByModifierId.get(option.id);
+                          if (charged === 0) return "Included";
+                          if (charged !== undefined) return `+${money(charged)}`;
+                        }
+                        return `+${money(option.priceCents)}`;
+                      })()}
+                    </span>
                   </button>
                 );
               })

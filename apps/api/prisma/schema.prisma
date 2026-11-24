@@ -169,12 +169,13 @@ model KitComponent {
 }
 
 model ModifierGroup {
-  id        String @id @default(cuid())
-  itemId    String
-  name      String
-  minSelect Int    @default(0)
-  maxSelect Int    @default(1)
-  sortOrder Int    @default(0)
+  id         String @id @default(cuid())
+  itemId     String
+  name       String
+  minSelect  Int    @default(0)
+  maxSelect  Int    @default(1)
+  freeSelect Int    @default(0)
+  sortOrder  Int    @default(0)
 
   item      Item       @relation(fields: [itemId], references: [id], onDelete: Cascade)
   modifiers Modifier[]

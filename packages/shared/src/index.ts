@@ -1,6 +1,7 @@
 /** Shared PurePOS domain types & constants (repo may still be named CloudTill). */
 
 export * from "./brand.js";
+export * from "./modifierPricing.js";
 
 export const ROLES = ["owner", "manager", "cashier"] as const;
 export type Role = (typeof ROLES)[number];
@@ -67,6 +68,8 @@ export interface ModifierGroupDto {
   name: string;
   minSelect: number;
   maxSelect: number;
+  /** Priced options included at £0 before extras are charged (per group). */
+  freeSelect: number;
   modifiers: ModifierDto[];
 }
 

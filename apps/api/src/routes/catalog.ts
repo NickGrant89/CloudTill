@@ -119,6 +119,7 @@ catalogRouter.post("/items", requireRole("owner", "manager"), async (req: Authed
             name: z.string(),
             minSelect: z.number().optional(),
             maxSelect: z.number().optional(),
+            freeSelect: z.number().int().min(0).optional(),
             options: z.array(z.object({ name: z.string(), priceCents: z.number().int() })),
           })
         )
@@ -167,6 +168,7 @@ catalogRouter.post("/items", requireRole("owner", "manager"), async (req: Authed
           name: g.name,
           minSelect: g.minSelect ?? 0,
           maxSelect: g.maxSelect ?? 1,
+          freeSelect: g.freeSelect ?? 0,
           sortOrder: index,
           modifiers: {
             create: g.options.map((o, optionIndex) => ({
@@ -479,6 +481,7 @@ catalogRouter.get("/modifier-sets", async (req: AuthedRequest, res) => {
       folder: string;
       minSelect: number;
       maxSelect: number;
+      freeSelect: number;
       options: { name: string; priceCents: number }[];
       assignments: { groupId: string; itemId: string; itemName: string }[];
     }
@@ -493,6 +496,7 @@ catalogRouter.get("/modifier-sets", async (req: AuthedRequest, res) => {
         folder: layout.map[group.name.toLowerCase()] || defaultModifierFolder(group.name),
         minSelect: group.minSelect,
         maxSelect: group.maxSelect,
+        freeSelect: group.freeSelect,
         options: group.modifiers.map((modifier) => ({ name: modifier.name, priceCents: modifier.priceCents })),
         assignments: [assignment],
       });
@@ -557,6 +561,7 @@ catalogRouter.post("/modifier-sets", requireRole("owner", "manager"), async (req
       name: z.string().min(1),
       minSelect: z.number().int().min(0).default(0),
       maxSelect: z.number().int().min(1).default(1),
+      freeSelect: z.number().int().min(0).default(0),
       options: z.array(z.object({ name: z.string().min(1), priceCents: z.number().int() })).min(1),
       itemIds: z.array(z.string()).min(1),
     })
@@ -581,6 +586,7 @@ catalogRouter.post("/modifier-sets", requireRole("owner", "manager"), async (req
         name: body.name.trim(),
         minSelect: Math.min(body.minSelect, body.maxSelect),
         maxSelect: body.maxSelect,
+        freeSelect: body.freeSelect,
         modifiers: {
           create: body.options.map((option, index) => ({
             name: option.name.trim(),
@@ -633,6 +639,7 @@ catalogRouter.patch("/modifier-sets", requireRole("owner", "manager"), async (re
       name: z.string().min(1).max(80),
       minSelect: z.number().int().min(0).optional(),
       maxSelect: z.number().int().min(1).optional(),
+      freeSelect: z.number().int().min(0).optional(),
       options: z
         .array(
           z.object({
@@ -654,12 +661,13 @@ catalogRouter.patch("/modifier-sets", requireRole("owner", "manager"), async (re
   if (!matching.length) return res.status(404).json({ error: "modifier not found" });
 
   for (const group of matching) {
-    if (body.minSelect !== undefined || body.maxSelect !== undefined) {
+    if (body.minSelect !== undefined || body.maxSelect !== undefined || body.freeSelect !== undefined) {
       await prisma.modifierGroup.update({
         where: { id: group.id },
         data: {
           ...(body.minSelect !== undefined ? { minSelect: Math.min(body.minSelect, body.maxSelect ?? group.maxSelect) } : {}),
           ...(body.maxSelect !== undefined ? { maxSelect: body.maxSelect } : {}),
+          ...(body.freeSelect !== undefined ? { freeSelect: body.freeSelect } : {}),
         },
       });
     }
@@ -751,6 +759,7 @@ catalogRouter.post("/items/:id/modifier-groups", owned("item"), requireRole("own
       name: z.string().min(1),
       minSelect: z.number().int().optional(),
       maxSelect: z.number().int().optional(),
+      freeSelect: z.number().int().min(0).optional(),
       modifiers: z
         .array(z.object({ name: z.string(), priceCents: z.number().int().default(0) }))
         .optional(),
@@ -762,6 +771,7 @@ catalogRouter.post("/items/:id/modifier-groups", owned("item"), requireRole("own
       name: body.name,
       minSelect: body.minSelect ?? 0,
       maxSelect: body.maxSelect ?? 1,
+      freeSelect: body.freeSelect ?? 0,
       sortOrder: await prisma.modifierGroup.count({ where: { itemId: String(req.params.id) } }),
       modifiers: body.modifiers?.length
         ? {
@@ -780,6 +790,7 @@ catalogRouter.patch("/modifier-groups/:id", owned("modifierGroup"), requireRole(
       name: z.string().optional(),
       minSelect: z.number().int().optional(),
       maxSelect: z.number().int().optional(),
+      freeSelect: z.number().int().min(0).optional(),
     })
     .parse(req.body);
   const group = await prisma.modifierGroup.update({

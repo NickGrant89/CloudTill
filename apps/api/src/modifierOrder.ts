@@ -1,3 +1,4 @@
+import { applyModifierFreeSelect } from "@cloudtill/shared";
 import { prisma } from "./db.js";
 
 export type IncomingModifier = {
@@ -14,12 +15,12 @@ export async function orderStoredModifiers(mods: IncomingModifier[]) {
   const rows = ids.length
     ? await prisma.modifier.findMany({
         where: { id: { in: ids } },
-        include: { group: { select: { id: true, name: true, sortOrder: true } } },
+        include: { group: { select: { id: true, name: true, sortOrder: true, freeSelect: true } } },
       })
     : [];
   const byId = new Map(rows.map((row) => [row.id, row]));
 
-  return mods
+  const ordered = mods
     .map((mod, index) => ({ mod, index }))
     .sort((a, b) => {
       const left = byId.get(a.mod.modifierId || a.mod.id || "");
@@ -39,7 +40,17 @@ export async function orderStoredModifiers(mods: IncomingModifier[]) {
         ...(row ? { modifierId: row.id } : mod.modifierId ? { modifierId: mod.modifierId } : {}),
         name: row?.name ?? mod.name,
         priceCents: row?.priceCents ?? mod.priceCents,
+        ...(row?.group.id ? { groupId: row.group.id } : {}),
         ...(groupName ? { groupName } : {}),
       };
     });
+
+  const listPriceByModifierId = new Map(rows.map((row) => [row.id, row.priceCents]));
+  const groupRules = [...new Map(rows.map((row) => [row.group.id, row.group])).values()].map((g) => ({
+    id: g.id,
+    name: g.name,
+    freeSelect: g.freeSelect ?? 0,
+  }));
+
+  return applyModifierFreeSelect(ordered, listPriceByModifierId, groupRules);
 }
