@@ -274,13 +274,18 @@ select:focus-visible {
   min-height: 0;
 }
 
-/* Sale column: header + open tickets stay fixed; only line items scroll */
+/* Sale column: header/totals/actions fixed; ticket-body fills middle and scrolls lines only */
 .ticket-panel > .ticket-head,
-.ticket-panel > .open-tickets-rail,
+.ticket-panel > .ticket-body,
 .ticket-panel > .totals,
 .ticket-panel > .actions {
   flex: 0 0 auto;
   flex-shrink: 0;
+}
+
+.ticket-panel > .ticket-body {
+  flex: 1 1 0;
+  min-height: 0;
 }
 
 .ticket-body {
