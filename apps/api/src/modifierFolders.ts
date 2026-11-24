@@ -84,6 +84,44 @@ export async function folderForModifierSet(storeId: string, name: string): Promi
   return layout.map[name.trim().toLowerCase()] || defaultModifierFolder(name);
 }
 
+/**
+ * Remove a modifier group (folder). Menus in it are moved to `moveTo`
+ * (or General) so the modifiers stay on their items.
+ */
+export async function deleteModifierFolder(
+  storeId: string,
+  folderName: string,
+  moveTo?: string
+): Promise<{ moved: number; target: string }> {
+  const from = folderName.trim();
+  if (!from) throw new Error("Group name is required.");
+  const layout = await readModifierLayout(storeId);
+  const groups = await prisma.modifierGroup.findMany({
+    where: { item: { storeId } },
+    select: { name: true },
+  });
+  const names = [...new Set(groups.map((group) => group.name.trim()).filter(Boolean))];
+  const folderOf = (name: string) => layout.map[name.toLowerCase()] || defaultModifierFolder(name);
+  const folders = sortFolders([...new Set(names.map(folderOf))], layout.folderOrder);
+  const others = folders.filter((name) => name.toLowerCase() !== from.toLowerCase());
+  const target = (moveTo?.trim() || (from.toLowerCase() === "general" ? others[0] : "General") || "").trim();
+  if (!target || target.toLowerCase() === from.toLowerCase()) {
+    throw new Error("Move the menus to another group before deleting this one.");
+  }
+  let moved = 0;
+  for (const name of names) {
+    if (folderOf(name).toLowerCase() !== from.toLowerCase()) continue;
+    layout.map[name.toLowerCase()] = target;
+    moved += 1;
+  }
+  layout.folderOrder = layout.folderOrder.filter((name) => name.toLowerCase() !== from.toLowerCase());
+  if (!layout.folderOrder.some((name) => name.toLowerCase() === target.toLowerCase())) {
+    layout.folderOrder.push(target);
+  }
+  await writeLayout(storeId, layout);
+  return { moved, target };
+}
+
 export async function setModifierFolder(storeId: string, name: string, folder: string): Promise<string> {
   const layout = await readModifierLayout(storeId);
   const cleaned = folder.trim() || "General";

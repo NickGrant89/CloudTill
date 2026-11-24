@@ -7,6 +7,7 @@ import { companyStoreIds, sameCompany } from "../company.js";
 import { ensurePizzaMenu } from "../pizzaMenu.js";
 import {
   defaultModifierFolder,
+  deleteModifierFolder,
   readModifierLayout,
   saveModifierLayout,
   setModifierFolder,
@@ -544,9 +545,29 @@ catalogRouter.patch("/modifier-sets/layout", requireRole("owner", "manager"), as
       menuOrder: z.array(z.string().min(1).max(80)).max(80).optional(),
       renameFolder: z.object({ from: z.string().min(1).max(40), to: z.string().min(1).max(40) }).optional(),
       renameSet: z.object({ from: z.string().min(1).max(80), to: z.string().min(1).max(80) }).optional(),
+      deleteFolder: z
+        .object({
+          name: z.string().min(1).max(40),
+          moveTo: z.string().min(1).max(40).optional(),
+        })
+        .optional(),
       syncTillOrder: z.boolean().optional(),
     })
     .parse(req.body);
+  if (body.deleteFolder) {
+    try {
+      const removed = await deleteModifierFolder(
+        req.user!.storeId,
+        body.deleteFolder.name,
+        body.deleteFolder.moveTo
+      );
+      const synced = body.syncTillOrder ? await syncModifierGroupSortOrders(req.user!.storeId) : 0;
+      return res.json({ ok: true, ...removed, syncedGroups: synced });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not delete group";
+      return res.status(400).json({ error: message });
+    }
+  }
   const layout = await saveModifierLayout(req.user!.storeId, body);
   let synced = 0;
   if (body.syncTillOrder || body.menuOrder || body.folderOrder || body.renameSet || body.renameFolder) {

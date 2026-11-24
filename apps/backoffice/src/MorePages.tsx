@@ -408,9 +408,12 @@ export function ModifierEditor({
       name: string;
       minSelect: number;
       maxSelect: number;
+      freeSelect?: number;
       modifiers: { id: string; name: string; priceCents: number; active: boolean }[];
     }[]
   >([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [groupDraft, setGroupDraft] = useState({ name: "", required: false, pickMany: false, freeSelect: 0 });
   const [sets, setSets] = useState<ModifierSet[]>([]);
   const [picked, setPicked] = useState("");
   const [ready, setReady] = useState(false);
@@ -515,6 +518,56 @@ export function ModifierEditor({
     }
   }
 
+  function startGroupEdit(group: (typeof groups)[number]) {
+    setEditingId(group.id);
+    setGroupDraft({
+      name: group.name,
+      required: group.minSelect > 0,
+      pickMany: group.maxSelect > 1,
+      freeSelect: group.freeSelect ?? 0,
+    });
+    setError("");
+  }
+
+  async function saveGroupEdit(group: (typeof groups)[number]) {
+    const name = groupDraft.name.trim();
+    if (!name) {
+      setError("Group name is required.");
+      return;
+    }
+    const optionCount = group.modifiers.filter((modifier) => modifier.active).length;
+    const maxSelect = groupDraft.pickMany ? Math.max(optionCount, 1) : 1;
+    const minSelect = groupDraft.required ? Math.min(1, maxSelect) : 0;
+    setError("");
+    try {
+      await api(`/catalog/modifier-groups/${group.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name,
+          minSelect,
+          maxSelect,
+          freeSelect: Math.max(0, Math.floor(groupDraft.freeSelect)),
+        }),
+      });
+      setEditingId(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save group");
+    }
+  }
+
+  async function deleteGroup(group: (typeof groups)[number]) {
+    if (!window.confirm(`Delete “${group.name}” from ${itemName}? It stays on any other items that use it.`)) return;
+    setError("");
+    try {
+      await api(`/catalog/modifier-groups/${group.id}`, { method: "DELETE" });
+      if (editingId === group.id) setEditingId(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete group");
+    }
+  }
+
   async function removeOption(id: string) {
     setError("");
     try {
@@ -553,7 +606,9 @@ export function ModifierEditor({
       <div className="page-head" style={{ marginBottom: 12 }}>
         <div>
           <h3 style={{ margin: 0 }}>Modifiers · {itemName}</h3>
-          <p style={{ margin: "6px 0 0", color: "var(--muted)" }}>Change names and prices here. Saving an option only updates this item.</p>
+          <p style={{ margin: "6px 0 0", color: "var(--muted)" }}>
+            Edit or delete a group here. That only changes {itemName}. Option names and prices are per item too.
+          </p>
         </div>
         <button type="button" className="secondary" onClick={onClose}>
           Close
@@ -565,26 +620,76 @@ export function ModifierEditor({
         const active = g.modifiers.filter((m) => m.active);
         return (
         <div key={g.id} style={{ marginBottom: 18 }}>
-          <strong>{g.name}</strong>{" "}
-          <span style={{ color: "var(--muted)" }}>
-            {g.minSelect > 0 ? "Required" : "Optional"} · {g.maxSelect > 1 ? "pick many" : "pick one"}
-          </span>
-          <button type="button" className="secondary" style={{ marginLeft: 8, minHeight: 32 }} disabled={groupIndex === 0} onClick={() => void moveGroups(groupIndex, -1)}>
-            Up
-          </button>
-          <button type="button" className="secondary" style={{ marginLeft: 6, minHeight: 32 }} disabled={groupIndex === groups.length - 1} onClick={() => void moveGroups(groupIndex, 1)}>
-            Down
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            style={{ marginLeft: 8, minHeight: 32 }}
-            onClick={() =>
-              void api(`/catalog/modifier-groups/${g.id}`, { method: "DELETE" }).then(load)
-            }
-          >
-            Remove
-          </button>
+          {editingId === g.id ? (
+            <div className="field" style={{ marginBottom: 10 }}>
+              <label htmlFor={`group-name-${g.id}`}>Group name</label>
+              <input
+                id={`group-name-${g.id}`}
+                value={groupDraft.name}
+                onChange={(e) => setGroupDraft((draft) => ({ ...draft, name: e.target.value }))}
+              />
+              <div style={{ display: "flex", gap: 16, minHeight: 42, alignItems: "center", flexWrap: "wrap" }}>
+                <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input
+                    type="checkbox"
+                    checked={groupDraft.required}
+                    onChange={(e) => setGroupDraft((draft) => ({ ...draft, required: e.target.checked }))}
+                  />
+                  Required
+                </label>
+                <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input
+                    type="checkbox"
+                    checked={groupDraft.pickMany}
+                    onChange={(e) => setGroupDraft((draft) => ({ ...draft, pickMany: e.target.checked }))}
+                  />
+                  Allow more than one
+                </label>
+              </div>
+              <label htmlFor={`group-free-${g.id}`}>Free priced options</label>
+              <input
+                id={`group-free-${g.id}`}
+                type="number"
+                min={0}
+                max={99}
+                style={{ maxWidth: 120 }}
+                value={groupDraft.freeSelect}
+                onChange={(e) =>
+                  setGroupDraft((draft) => ({ ...draft, freeSelect: Math.max(0, Number(e.target.value) || 0) }))
+                }
+              />
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <button type="button" onClick={() => void saveGroupEdit(g)}>
+                  Save group
+                </button>
+                <button type="button" className="secondary" onClick={() => setEditingId(null)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <strong>{g.name}</strong>{" "}
+              <span style={{ color: "var(--muted)" }}>
+                {g.minSelect > 0 ? "Required" : "Optional"} · {g.maxSelect > 1 ? "pick many" : "pick one"}
+                {(g.freeSelect ?? 0) > 0
+                  ? ` · ${g.freeSelect} priced option${g.freeSelect === 1 ? "" : "s"} free`
+                  : ""}
+              </span>
+              <button type="button" className="secondary" style={{ marginLeft: 8, minHeight: 32 }} disabled={groupIndex === 0} onClick={() => void moveGroups(groupIndex, -1)}>
+                Up
+              </button>
+              <button type="button" className="secondary" style={{ marginLeft: 6, minHeight: 32 }} disabled={groupIndex === groups.length - 1} onClick={() => void moveGroups(groupIndex, 1)}>
+                Down
+              </button>
+              <button type="button" className="secondary" style={{ marginLeft: 8, minHeight: 32 }} onClick={() => startGroupEdit(g)}>
+                Edit
+              </button>
+              <button type="button" className="secondary" style={{ marginLeft: 6, minHeight: 32 }} onClick={() => void deleteGroup(g)}>
+                Delete
+              </button>
+            </>
+          )}
           <ul style={{ listStyle: "none", padding: 0, margin: "10px 0 0" }}>
             {active.map((m, optionIndex) => (
                 <li key={m.id} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 8 }}>
@@ -826,6 +931,7 @@ export function ModifierLibrary({
     menuOrder?: string[];
     renameFolder?: { from: string; to: string };
     renameSet?: { from: string; to: string };
+    deleteFolder?: { name: string; moveTo?: string };
   }) {
     setError("");
     await api("/catalog/modifier-sets/layout", {
@@ -868,6 +974,34 @@ export function ModifierLibrary({
       onChange();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not reorder menus");
+    }
+  }
+
+  async function deleteFolder(folder: string) {
+    const others = folderNames.filter((name) => name.toLowerCase() !== folder.toLowerCase());
+    const target =
+      folder.toLowerCase() === "general" ? others[0] : (others.find((name) => name.toLowerCase() === "general") ?? "General");
+    if (!target) {
+      setError("Move the menus to another group before deleting this one.");
+      return;
+    }
+    const count = menusInFolder(folder).length;
+    const label = prettyModifierLabel(folder);
+    const targetLabel = prettyModifierLabel(target);
+    if (
+      !window.confirm(
+        `Delete group “${label}”? ${count} menu${count === 1 ? "" : "s"} move to ${targetLabel}. The modifiers stay on their items.`
+      )
+    ) {
+      return;
+    }
+    try {
+      await saveLayout({ deleteFolder: { name: folder, moveTo: target } });
+      setNotice(`Deleted ${label}. Menus moved to ${targetLabel}.`);
+      await load(selected || undefined);
+      onChange();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete group");
     }
   }
 
@@ -1178,6 +1312,11 @@ export function ModifierLibrary({
                       >
                         Rename
                       </button>
+                      {folderNames.length > 1 && (
+                        <button type="button" className="linkish modifier-folder-rename" onClick={() => void deleteFolder(folder)}>
+                          Delete
+                        </button>
+                      )}
                     </>
                   )}
                 </div>
@@ -1386,7 +1525,7 @@ export function ModifierLibrary({
                 )}
               </div>
               <p style={{ margin: "6px 0 0", color: "var(--muted)", fontSize: "0.88rem" }}>
-                Group is the folder on the left. Rename it there, or move this menu into another group.
+                Group is the folder on the left. Rename or delete it there. Deleting a group moves its menus to General and keeps the modifiers.
               </p>
             </div>
             <p style={{ marginTop: 0 }}>
