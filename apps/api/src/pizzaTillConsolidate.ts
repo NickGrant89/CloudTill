@@ -244,8 +244,7 @@ const TILL_LAYOUT: Record<string, TillLayoutRule> = {
 function sortRank(groupName: string, order: string[]): number {
   const lower = groupName.toLowerCase();
   for (let i = 0; i < order.length; i++) {
-    const key = order[i]!.toLowerCase();
-    if (lower === key || lower.startsWith(key)) return i;
+    if (lower === order[i]!.toLowerCase()) return i;
   }
   if (/half & half extras/i.test(groupName)) {
     const inch = inchSizeInName(groupName) ?? 99;
