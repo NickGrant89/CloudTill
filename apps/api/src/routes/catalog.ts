@@ -5,7 +5,7 @@ import { owned, rejectForeign } from "../tenant.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 import { companyStoreIds, sameCompany } from "../company.js";
 import { ensurePizzaMenu } from "../pizzaMenu.js";
-import { consolidatePizzaTill, repairPizzaTillLayout } from "../pizzaTillConsolidate.js";
+import { cleanupPizzaModifierLibrary, consolidatePizzaTill, repairPizzaTillLayout } from "../pizzaTillConsolidate.js";
 import {
   defaultModifierFolder,
   deleteModifierFolder,
@@ -658,6 +658,11 @@ catalogRouter.post("/pizza-consolidate", requireRole("owner", "manager"), async 
 
 catalogRouter.post("/pizza-till-repair", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
   const result = await repairPizzaTillLayout(req.user!.storeId);
+  res.json({ ok: true, ...result });
+});
+
+catalogRouter.post("/pizza-modifier-cleanup", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const result = await cleanupPizzaModifierLibrary(req.user!.storeId);
   res.json({ ok: true, ...result });
 });
 

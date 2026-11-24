@@ -263,6 +263,76 @@ async function applyMenuFreeSelect(storeId: string, menuName: string, freeSelect
 }
 
 /** Strip redundant extra-topping tabs, fix order, set free topping counts on consolidated pizza items. */
+const LEGACY_TEMPLATE_ITEMS = ["Create your own", "Single pizza", "Half and half", "Half and half pizza option", "Half and half create your own"];
+
+/** Remove modifier menus that only belonged to hidden legacy pizza tiles and tidy BO layout. */
+export async function cleanupPizzaModifierLibrary(storeId: string) {
+  const deactivated: string[] = [];
+  for (const name of LEGACY_TEMPLATE_ITEMS) {
+    for (const variant of nameVariants(name)) {
+      const row = await prisma.item.findFirst({ where: { storeId, name: variant, active: true } });
+      if (!row) continue;
+      await prisma.item.update({ where: { id: row.id }, data: { active: false } });
+      deactivated.push(row.name);
+      break;
+    }
+  }
+
+  const inactive = await prisma.item.findMany({
+    where: { storeId, active: false },
+    select: { id: true, name: true },
+  });
+  for (const item of inactive) {
+    await prisma.modifier.deleteMany({ where: { group: { itemId: item.id } } });
+    await prisma.modifierGroup.deleteMany({ where: { itemId: item.id } });
+  }
+
+  const activeGroupNames = new Set(
+    (
+      await prisma.modifierGroup.findMany({
+        where: { item: { storeId, active: true } },
+        select: { name: true },
+      })
+    ).map((row) => row.name.toLowerCase())
+  );
+
+  const layout = await readModifierLayout(storeId);
+  const nextMenuOrder = layout.menuOrder.filter((name) => activeGroupNames.has(name.toLowerCase()));
+  const nextMap: Record<string, string> = {};
+  for (const [key, folder] of Object.entries(layout.map)) {
+    if (activeGroupNames.has(key.toLowerCase())) nextMap[key] = folder;
+  }
+  const folderSet = new Set(Object.values(nextMap));
+  const nextFolderOrder = layout.folderOrder.filter((f) => folderSet.has(f));
+
+  const redundantTemplates = ["pizza", "toppings", "left half", "right half", "left sauce", "right sauce", "left toppings", "right toppings", "extra options"];
+  const deletedMenus: string[] = [];
+  for (const name of redundantTemplates) {
+    if (activeGroupNames.has(name)) continue;
+    const leftovers = (
+      await prisma.modifierGroup.findMany({ where: { item: { storeId } }, select: { id: true, name: true } })
+    ).filter((group) => group.name.toLowerCase() === name);
+    if (!leftovers.length) continue;
+    await prisma.modifier.deleteMany({ where: { groupId: { in: leftovers.map((g) => g.id) } } });
+    await prisma.modifierGroup.deleteMany({ where: { id: { in: leftovers.map((g) => g.id) } } });
+    deletedMenus.push(name);
+  }
+
+  await saveModifierLayout(
+    storeId,
+    { map: nextMap, folderOrder: nextFolderOrder.length ? nextFolderOrder : layout.folderOrder, menuOrder: nextMenuOrder },
+    { tillOrder: "none" }
+  );
+
+  return {
+    deactivated,
+    strippedInactiveItems: inactive.length,
+    deletedMenus,
+    menusInLibrary: activeGroupNames.size,
+    message: "Modifier library trimmed — legacy pizza templates removed from hidden items and layout.",
+  };
+}
+
 export async function repairPizzaTillLayout(storeId: string) {
   const itemNames = Object.keys(TILL_LAYOUT);
   const changed: { item: string; removed: string[]; order: string[] }[] = [];
