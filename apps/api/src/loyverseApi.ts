@@ -22,6 +22,8 @@ export type LoyverseModifierOption = {
 export type LoyverseModifier = {
   id?: string;
   name?: string;
+  /** Display order in Loyverse; used when attaching modifiers to items. */
+  position?: number | null;
   deleted_at?: string | null;
   modifier_options?: LoyverseModifierOption[];
 };

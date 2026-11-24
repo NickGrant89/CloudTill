@@ -194,7 +194,7 @@ importRouter.post("/loyverse/apply", async (req: AuthedRequest, res) => {
       rows: blockers.slice(0, 25),
     });
   }
-  const result = await applyLoyverseAccount(req.user!.storeId, ready);
+  const result = await applyLoyverseAccount(req.user!.storeId, ready, catalog);
   res.json({
     kind: "loyverse",
     detected: "api",

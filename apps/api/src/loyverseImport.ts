@@ -1,6 +1,12 @@
 import { prisma } from "./db.js";
 import { parseNumber, parsePoundsToCents } from "./csv.js";
-import { itemModifierIds, type LoyverseCatalog, type LoyverseVariant } from "./loyverseApi.js";
+import { itemModifierIds, type LoyverseCatalog, type LoyverseModifier, type LoyverseVariant } from "./loyverseApi.js";
+import {
+  defaultModifierFolder,
+  readModifierLayout,
+  saveModifierLayout,
+  syncModifierGroupSortOrders,
+} from "./modifierFolders.js";
 
 export type LoyversePreviewRow = {
   line: number;
@@ -673,63 +679,7 @@ async function applyItems(storeId: string, rows: LoyversePreviewRow[]) {
       });
     }
 
-    const groups = await prisma.modifierGroup.findMany({
-      where: { itemId },
-      include: { modifiers: true },
-    });
-    const byName = new Map(groups.map((group) => [group.name.toLowerCase(), group]));
-    let nextGroup = groups.length;
-
-    for (const flag of data.modifierFlags) {
-      if (byName.has(flag.toLowerCase())) continue;
-      const createdGroup = await prisma.modifierGroup.create({
-        data: { itemId, name: flag, minSelect: 0, maxSelect: 1, sortOrder: nextGroup++ },
-        include: { modifiers: true },
-      });
-      byName.set(flag.toLowerCase(), createdGroup);
-      modifiersLinked += 1;
-    }
-
-    for (const group of data.optionGroups) {
-      let existing = byName.get(group.name.toLowerCase());
-      if (!existing) {
-        existing = await prisma.modifierGroup.create({
-          data: {
-            itemId,
-            name: group.name,
-            minSelect: group.minSelect ?? 1,
-            maxSelect: 1,
-            sortOrder: nextGroup++,
-            modifiers: {
-              create: group.options.map((option, index) => ({
-                name: option.name,
-                priceCents: option.priceCents,
-                sortOrder: index,
-              })),
-            },
-          },
-          include: { modifiers: true },
-        });
-        byName.set(group.name.toLowerCase(), existing);
-        modifiersLinked += group.options.length;
-        continue;
-      }
-      let nextOption = existing.modifiers.reduce((max, modifier) => Math.max(max, modifier.sortOrder), -1) + 1;
-      for (const option of group.options) {
-        const found = existing.modifiers.find((modifier) => modifier.name.toLowerCase() === option.name.toLowerCase());
-        if (found) {
-          if (found.priceCents !== option.priceCents) {
-            await prisma.modifier.update({ where: { id: found.id }, data: { priceCents: option.priceCents } });
-          }
-        } else {
-          const created = await prisma.modifier.create({
-            data: { groupId: existing.id, name: option.name, priceCents: option.priceCents, sortOrder: nextOption++ },
-          });
-          existing.modifiers.push(created);
-          modifiersLinked += 1;
-        }
-      }
-    }
+    modifiersLinked += await syncItemModifierGroups(itemId, data.modifierFlags, data.optionGroups);
 
     if (data.components.length) pendingComponents.push({ itemId, components: data.components });
   }
@@ -754,11 +704,160 @@ async function applyItems(storeId: string, rows: LoyversePreviewRow[]) {
     }
   }
 
+  // Layout sync for API imports happens in applyLoyverseAccount; CSV still needs a pass.
+  await syncModifierGroupSortOrders(storeId);
+
   return { created, updated, categoriesCreated, modifiersLinked, componentsLinked };
 }
 
+/** Create/update groups and options so Loyverse order (and prices) stick on every import. */
+async function syncItemModifierGroups(itemId: string, flags: string[], optionGroups: OptionGroup[]) {
+  const groups = await prisma.modifierGroup.findMany({
+    where: { itemId },
+    include: { modifiers: true },
+  });
+  const byName = new Map(groups.map((group) => [group.name.toLowerCase(), group]));
+  let linked = 0;
+  let orderIndex = 0;
+
+  for (const group of optionGroups) {
+    const key = group.name.toLowerCase();
+    let existing = byName.get(key);
+    if (!existing) {
+      existing = await prisma.modifierGroup.create({
+        data: {
+          itemId,
+          name: group.name,
+          minSelect: group.minSelect ?? 1,
+          maxSelect: 1,
+          sortOrder: orderIndex,
+          modifiers: {
+            create: group.options.map((option, index) => ({
+              name: option.name,
+              priceCents: option.priceCents,
+              sortOrder: index,
+            })),
+          },
+        },
+        include: { modifiers: true },
+      });
+      byName.set(key, existing);
+      linked += group.options.length;
+      orderIndex += 1;
+      continue;
+    }
+
+    if (existing.sortOrder !== orderIndex) {
+      await prisma.modifierGroup.update({ where: { id: existing.id }, data: { sortOrder: orderIndex } });
+      existing.sortOrder = orderIndex;
+    }
+
+    const seen = new Set<string>();
+    for (let index = 0; index < group.options.length; index += 1) {
+      const option = group.options[index]!;
+      const optionKey = option.name.toLowerCase();
+      seen.add(optionKey);
+      const found = existing.modifiers.find((modifier) => modifier.name.toLowerCase() === optionKey);
+      if (found) {
+        const patch: { priceCents?: number; sortOrder?: number; active?: boolean } = {};
+        if (found.priceCents !== option.priceCents) patch.priceCents = option.priceCents;
+        if (found.sortOrder !== index) patch.sortOrder = index;
+        if (!found.active) patch.active = true;
+        if (Object.keys(patch).length) {
+          await prisma.modifier.update({ where: { id: found.id }, data: patch });
+          Object.assign(found, patch);
+        }
+      } else {
+        const created = await prisma.modifier.create({
+          data: {
+            groupId: existing.id,
+            name: option.name,
+            priceCents: option.priceCents,
+            sortOrder: index,
+          },
+        });
+        existing.modifiers.push(created);
+        linked += 1;
+      }
+    }
+
+    let trailing = group.options.length;
+    for (const modifier of existing.modifiers) {
+      if (seen.has(modifier.name.toLowerCase())) continue;
+      if (modifier.sortOrder !== trailing) {
+        await prisma.modifier.update({ where: { id: modifier.id }, data: { sortOrder: trailing } });
+        modifier.sortOrder = trailing;
+      }
+      trailing += 1;
+    }
+
+    orderIndex += 1;
+  }
+
+  for (const flag of flags) {
+    const key = flag.toLowerCase();
+    if (optionGroups.some((group) => group.name.toLowerCase() === key)) continue;
+    const existing = byName.get(key);
+    if (!existing) {
+      const createdGroup = await prisma.modifierGroup.create({
+        data: { itemId, name: flag, minSelect: 0, maxSelect: 1, sortOrder: orderIndex },
+        include: { modifiers: true },
+      });
+      byName.set(key, createdGroup);
+      linked += 1;
+    } else if (existing.sortOrder !== orderIndex) {
+      await prisma.modifierGroup.update({ where: { id: existing.id }, data: { sortOrder: orderIndex } });
+      existing.sortOrder = orderIndex;
+    }
+    orderIndex += 1;
+  }
+
+  return linked;
+}
+
+function compareLoyversePosition(a: { position?: number | null; name?: string | null }, b: { position?: number | null; name?: string | null }) {
+  const pa = Number(a.position ?? 0);
+  const pb = Number(b.position ?? 0);
+  if (pa !== pb) return pa - pb;
+  return (a.name ?? "").localeCompare(b.name ?? "", undefined, { sensitivity: "base" });
+}
+
+/** Store-wide menu order from Loyverse modifier positions, then push onto every item. */
+async function applyLoyverseModifierLayout(storeId: string, catalog: LoyverseCatalog) {
+  const ordered = [...catalog.modifiers]
+    .filter((modifier): modifier is LoyverseModifier & { name: string } => Boolean(modifier.id && !modifier.deleted_at && modifier.name?.trim()))
+    .sort(compareLoyversePosition)
+    .map((modifier) => modifier.name.trim());
+
+  if (!ordered.length) {
+    await syncModifierGroupSortOrders(storeId);
+    return;
+  }
+
+  const layout = await readModifierLayout(storeId);
+  const seen = new Set(ordered.map((name) => name.toLowerCase()));
+  const extras = layout.menuOrder.filter((name) => !seen.has(name.toLowerCase()));
+  const map = { ...layout.map };
+  const folderOrder = [...layout.folderOrder];
+
+  for (const name of ordered) {
+    const key = name.toLowerCase();
+    const folder = map[key] || defaultModifierFolder(name);
+    map[key] = folder;
+    if (!folderOrder.some((entry) => entry.toLowerCase() === folder.toLowerCase())) {
+      folderOrder.push(folder);
+    }
+  }
+
+  await saveModifierLayout(storeId, {
+    map,
+    folderOrder,
+    menuOrder: [...ordered, ...extras],
+  });
+}
+
 const API_NOTES =
-  "Pulled from the Loyverse API. Items, categories, stock, barcodes, options, and modifier choices (with their prices) are included. Customers come in the same pull. Photos and old receipts are not imported.";
+  "Pulled from the Loyverse API. Items, categories, stock, barcodes, options, and modifier choices (with their prices) are included. Customers come in the same pull. Photos and old receipts are not imported. Modifier menus and choices keep Loyverse order.";
 
 function apiCents(value: number | null | undefined) {
   if (value == null || !Number.isFinite(Number(value))) return null;
@@ -827,15 +926,22 @@ function groupsFromCatalog(catalog: LoyverseCatalog) {
     const key = item.handle?.trim() || item.id || `item-${line}`;
     const attachedGroups: OptionGroup[] = [];
     const missingModifiers: string[] = [];
-    for (const modifierId of itemModifierIds(item)) {
-      const modifier = modifiers.get(modifierId);
+    const linkedModifiers = itemModifierIds(item)
+      .map((modifierId) => ({ modifierId, modifier: modifiers.get(modifierId) }))
+      .sort((a, b) => {
+        if (a.modifier && b.modifier) return compareLoyversePosition(a.modifier, b.modifier);
+        if (a.modifier) return -1;
+        if (b.modifier) return 1;
+        return a.modifierId.localeCompare(b.modifierId);
+      });
+    for (const { modifierId, modifier } of linkedModifiers) {
       if (!modifier?.name) {
         missingModifiers.push(modifierId);
         continue;
       }
       const options = (modifier.modifier_options ?? [])
         .filter((option) => option.name && !option.deleted_at)
-        .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0))
+        .sort(compareLoyversePosition)
         .map((option) => ({ name: option.name!.trim(), priceCents: apiCents(option.price) ?? 0 }));
       if (options.length) {
         attachedGroups.push({
@@ -949,11 +1055,12 @@ export async function previewLoyverseAccount(storeId: string, catalog: LoyverseC
   };
 }
 
-export async function applyLoyverseAccount(storeId: string, rows: LoyversePreviewRow[]) {
+export async function applyLoyverseAccount(storeId: string, rows: LoyversePreviewRow[], catalog?: LoyverseCatalog) {
   const items = rows.filter((row) => row.data.role === "base" || row.data.role === "option");
   const customers = rows.filter((row) => row.data.role === "customer");
   const itemResult = await applyLoyverse(storeId, items, "items");
   const customerResult = await applyLoyverse(storeId, customers, "customers");
+  if (catalog) await applyLoyverseModifierLayout(storeId, catalog);
   return {
     created: itemResult.created + customerResult.created,
     updated: itemResult.updated + customerResult.updated,
