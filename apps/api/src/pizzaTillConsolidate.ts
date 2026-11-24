@@ -37,6 +37,9 @@ const LEGACY_HIDE = [
   '9" Create Your Own Single Pizza',
   '12" Create Your Own Single Pizza',
   '16" Create Your Own Single Pizza',
+  '9” Create Your Own Single Pizza',
+  '12” Create Your Own Single Pizza',
+  '16” Create Your Own Single Pizza',
 ];
 
 type ItemWithGroups = Awaited<ReturnType<typeof loadItem>>;
