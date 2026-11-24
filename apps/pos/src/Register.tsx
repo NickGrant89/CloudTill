@@ -1579,6 +1579,20 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
     pinThisIpad();
   }, [currentRegister?.id, pinnedId]);
 
+  useEffect(() => {
+    if (!currentRegister) {
+      document.title = "PurePOS";
+      return;
+    }
+    document.title = `${currentRegister.name} · PurePOS`;
+    writePinnedTill({
+      storeId: store.id,
+      registerId: currentRegister.id,
+      registerName: currentRegister.name,
+      toneIndex: registerToneIndex(currentRegister.id, registers),
+    });
+  }, [currentRegister?.id, currentRegister?.name, store.id, registers]);
+
   function groupsForLine(line: TicketLine) {
     return items.find((entry) => entry.variants.some((variant) => variant.id === line.variantId))?.modifierGroups;
   }
@@ -1599,17 +1613,20 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
     <div className={`app-shell till-${tillPhase}`}>
       <div className="toolbar-dark">
         <div className="toolbar-identity">
-          <strong className="store-name">{store.name}</strong>
-          <span className="who">{user.name}</span>
-          {currentRegister && (
+          {currentRegister ? (
             <span
-              className="register-badge"
+              className="register-badge register-title"
               data-register-name={currentRegister.name}
+              title="Till name from Back office → Stores & tills"
               style={{ background: registerTone(currentRegister.id, registers).bg, color: registerTone(currentRegister.id, registers).ink }}
             >
               {currentRegister.name}
             </span>
+          ) : (
+            <strong className="store-name">{store.name}</strong>
           )}
+          <span className="who">{currentRegister ? store.name : user.name}</span>
+          {currentRegister && <span className="who who-staff">{user.name}</span>}
           <button type="button" className="lock-btn" onClick={onLogout}>
             Lock
           </button>
@@ -1823,6 +1840,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
             <div>
               <h2>{ticket?.name ?? "New sale"}</h2>
               <div className="ticket-sub" style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
+                {currentRegister ? `${currentRegister.name} · ` : ""}
                 {ticket?.customer ? `${ticket.customer.name} · ${ticket.customer.loyaltyPoints} pts` : "Walk-in"}
                 {offline.online ? " · live sync" : ""}
               </div>

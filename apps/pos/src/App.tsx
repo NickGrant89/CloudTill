@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, getToken, setToken } from "./api";
 import { Login } from "./Login";
 import { Register } from "./Register";
@@ -49,7 +49,8 @@ export function App() {
         const resolved = resolveRegisterId(data.store.id, regs);
         setRegisterId(resolved);
         if (!KITCHEN_MODE) {
-          const beat = await sendTillHeartbeat(api, resolved || null);
+          const regName = regs.find((register) => register.id === resolved)?.name ?? null;
+          const beat = await sendTillHeartbeat(api, resolved || null, regName);
           if (beat?.registers?.length) {
             regs = beat.registers;
             setRegisters(regs);
@@ -65,13 +66,19 @@ export function App() {
       .finally(() => setLoading(false));
   }, []);
 
+  const registersRef = useRef(registers);
+  registersRef.current = registers;
+
   useEffect(() => {
     if (KITCHEN_MODE || !user || !store || !registerId) return;
-    void sendTillHeartbeat(api, registerId).then((beat) => {
+    const beatName = () => registersRef.current.find((register) => register.id === registerId)?.name ?? null;
+    void sendTillHeartbeat(api, registerId, beatName()).then((beat) => {
       if (beat?.registers?.length) setRegisters(beat.registers);
     });
     const timer = window.setInterval(() => {
-      void sendTillHeartbeat(api, registerId);
+      void sendTillHeartbeat(api, registerId, beatName()).then((beat) => {
+        if (beat?.registers?.length) setRegisters(beat.registers);
+      });
     }, 60_000);
     return () => window.clearInterval(timer);
   }, [user, store, registerId]);
@@ -97,7 +104,8 @@ export function App() {
           setRegisters(data.registers);
           const resolved = resolveRegisterId(data.store.id, data.registers);
           setRegisterId(resolved);
-          void sendTillHeartbeat(api, resolved || null).then((beat) => {
+          const regName = data.registers.find((register) => register.id === resolved)?.name ?? null;
+          void sendTillHeartbeat(api, resolved || null, regName).then((beat) => {
             if (beat?.registers?.length) {
               setRegisters(beat.registers);
               if (beat.registerId) setRegisterId(beat.registerId);

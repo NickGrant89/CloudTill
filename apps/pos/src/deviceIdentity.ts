@@ -60,14 +60,17 @@ export type HeartbeatResult = {
 /** Tell back office this device is signed in (and optionally which till it is). */
 export async function sendTillHeartbeat(
   api: <T>(path: string, options?: RequestInit) => Promise<T>,
-  registerId?: string | null
+  registerId?: string | null,
+  registerName?: string | null
 ): Promise<HeartbeatResult | null> {
   try {
+    const tillName = registerName?.trim();
+    if (tillName) setDeviceLabel(tillName);
     return await api<HeartbeatResult>("/employees/devices/heartbeat", {
       method: "POST",
       body: JSON.stringify({
         deviceKey: getOrCreateDeviceKey(),
-        label: getDeviceLabel(),
+        label: tillName || getDeviceLabel(),
         registerId: registerId || undefined,
         userAgent: typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 400) : undefined,
       }),

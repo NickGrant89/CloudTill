@@ -1007,6 +1007,15 @@ select:focus-visible {
   text-overflow: ellipsis;
 }
 
+.register-badge.register-title {
+  max-width: min(42vw, 280px);
+  font-size: 1.05rem;
+}
+
+.toolbar-identity .who-staff {
+  opacity: 0.75;
+}
+
 .pin-till-btn {
   flex: 0 0 auto;
   background: #f4f0e8 !important;
@@ -1192,6 +1201,11 @@ select:focus-visible {
     min-height: 36px;
     padding: 0 12px;
     font-size: 0.92rem;
+  }
+
+  .register-badge.register-title {
+    max-width: min(48vw, 200px);
+    font-size: 0.98rem;
   }
 
   .toolbar-identity.is-choosing .register-badge {
@@ -1497,10 +1511,16 @@ select:focus-visible {
 
   .register-badge {
     flex: 0 1 auto;
-    max-width: 128px;
+    max-width: 148px;
     min-height: 36px;
     padding: 0 10px;
     font-size: 0.82rem;
+  }
+
+  .register-badge.register-title {
+    max-width: min(55vw, 168px);
+    font-size: 0.9rem;
+    font-weight: 800;
   }
 
   .lock-btn {
