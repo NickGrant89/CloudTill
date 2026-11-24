@@ -1,6 +1,13 @@
 import { prisma } from "./db.js";
 import { parseNumber, parsePoundsToCents } from "./csv.js";
-import { itemModifierIds, type LoyverseCatalog, type LoyverseModifier, type LoyverseVariant } from "./loyverseApi.js";
+import {
+  isLoyverseSectionHeader,
+  itemModifierIds,
+  loyverseSectionFolderName,
+  type LoyverseCatalog,
+  type LoyverseModifier,
+  type LoyverseVariant,
+} from "./loyverseApi.js";
 import {
   defaultModifierFolder,
   readModifierLayout,
@@ -912,38 +919,76 @@ async function applyLoyverseOptionOrders(storeId: string, catalog: LoyverseCatal
   return updated;
 }
 
+/** Remove divider-only modifier groups Loyverse attaches to items (e.g. ****** PIZZAS ******). */
+async function removeLoyverseSectionGroupsFromStore(storeId: string, catalog: LoyverseCatalog) {
+  const headerNames = new Set(
+    catalog.modifiers
+      .filter((modifier) => modifier.name && isLoyverseSectionHeader(modifier))
+      .map((modifier) => modifier.name!.trim().toLowerCase())
+  );
+  if (!headerNames.size) return 0;
+  const groups = await prisma.modifierGroup.findMany({
+    where: { item: { storeId } },
+    select: { id: true, name: true },
+  });
+  let removed = 0;
+  for (const group of groups) {
+    if (!headerNames.has(group.name.toLowerCase())) continue;
+    await prisma.modifier.deleteMany({ where: { groupId: group.id } });
+    await prisma.modifierGroup.delete({ where: { id: group.id } });
+    removed += 1;
+  }
+  return removed;
+}
+
 /** Store-wide menu order from Loyverse modifier positions, then push onto every item. */
 async function applyLoyverseModifierLayout(storeId: string, catalog: LoyverseCatalog) {
-  const ordered = [...catalog.modifiers]
+  const orderedModifiers = [...catalog.modifiers]
     .filter((modifier): modifier is LoyverseModifier & { name: string } => Boolean(modifier.id && !modifier.deleted_at && modifier.name?.trim()))
-    .sort(compareLoyversePosition)
-    .map((modifier) => modifier.name.trim());
+    .sort(compareLoyversePosition);
 
-  if (!ordered.length) {
+  if (!orderedModifiers.length) {
     await syncModifierGroupSortOrders(storeId);
     return;
   }
 
   const layout = await readModifierLayout(storeId);
-  const seen = new Set(ordered.map((name) => name.toLowerCase()));
-  const extras = layout.menuOrder.filter((name) => !seen.has(name.toLowerCase()));
   const map = { ...layout.map };
-  const folderOrder = [...layout.folderOrder];
-  const menuOrder = [...ordered, ...extras];
+  const folderOrder: string[] = [];
+  const menuOrder: string[] = [];
+  let currentFolder = "General";
 
-  for (const name of ordered) {
-    const key = name.toLowerCase();
-    const folder = map[key] || defaultModifierFolder(name);
-    map[key] = folder;
-    if (!folderOrder.some((entry) => entry.toLowerCase() === folder.toLowerCase())) {
-      folderOrder.push(folder);
+  const rememberFolder = (folder: string) => {
+    const label = folder.trim() || "General";
+    if (!folderOrder.some((entry) => entry.toLowerCase() === label.toLowerCase())) {
+      folderOrder.push(label);
     }
+    return label;
+  };
+
+  for (const modifier of orderedModifiers) {
+    if (isLoyverseSectionHeader(modifier)) {
+      currentFolder = rememberFolder(loyverseSectionFolderName(modifier));
+      continue;
+    }
+    const name = modifier.name.trim();
+    menuOrder.push(name);
+    map[name.toLowerCase()] = rememberFolder(currentFolder);
   }
 
-  // Keep folders for the Modifiers page, but till/item order follows Loyverse position.
+  const seen = new Set(menuOrder.map((name) => name.toLowerCase()));
+  const extras = layout.menuOrder.filter((name) => !seen.has(name.toLowerCase()));
+  for (const name of extras) {
+    menuOrder.push(name);
+    const key = name.toLowerCase();
+    if (!map[key]) map[key] = defaultModifierFolder(name);
+    rememberFolder(map[key]);
+  }
+
   await saveModifierLayout(storeId, { map, folderOrder, menuOrder }, { tillOrder: "menu" });
   await syncModifierGroupSortOrdersByMenu(storeId, menuOrder);
   await applyLoyverseOptionOrders(storeId, catalog);
+  await removeLoyverseSectionGroupsFromStore(storeId, catalog);
 }
 
 const API_NOTES =
@@ -1029,6 +1074,7 @@ function groupsFromCatalog(catalog: LoyverseCatalog) {
         missingModifiers.push(modifierId);
         continue;
       }
+      if (isLoyverseSectionHeader(modifier)) continue;
       const options = (modifier.modifier_options ?? [])
         .filter((option) => option.name && !option.deleted_at)
         .sort(compareLoyversePosition)

@@ -67,6 +67,29 @@ export type LoyverseItem = {
   variants?: LoyverseVariant[];
 };
 
+/** Loyverse uses starred divider rows (e.g. ****** PIZZAS ******) as group headings in the modifier list. */
+export function isLoyverseSectionHeader(modifier: Pick<LoyverseModifier, "name" | "modifier_options">): boolean {
+  const name = modifier.name?.trim() ?? "";
+  if (!name) return false;
+  const core = name.replace(/\*/g, "").trim();
+  if (name.includes("*") && core.length >= 2) return true;
+  const options = (modifier.modifier_options ?? []).filter((row) => row.name && !row.deleted_at);
+  if (options.length === 1 && (options[0]!.price ?? 0) === 0) {
+    const label = options[0]!.name!.trim();
+    if (label && core.toLowerCase() === label.toLowerCase()) return true;
+  }
+  return false;
+}
+
+export function loyverseSectionFolderName(modifier: Pick<LoyverseModifier, "name">): string {
+  const cleaned = (modifier.name ?? "")
+    .replace(/^\s*\*+\s*/g, "")
+    .replace(/\s*\*+\s*$/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return cleaned || "General";
+}
+
 /** Prefer the live API field; keep the documented typo as a fallback. */
 export function itemModifierIds(item: Pick<LoyverseItem, "modifier_ids" | "modifiers_ids">) {
   const ids = item.modifier_ids ?? item.modifiers_ids ?? [];
