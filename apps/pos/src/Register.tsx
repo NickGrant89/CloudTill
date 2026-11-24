@@ -150,6 +150,7 @@ type Modal =
   | null
   | { type: "pay" }
   | { type: "phoneOrder" }
+  | { type: "more" }
   | { type: "held" }
   | { type: "customers" }
   | { type: "discount" }
@@ -1619,23 +1620,26 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
           </button>
         ) : null}
         <div className={`toolbar-actions${tillPhase === "options" || tillPhase === "pay" || tillPhase === "done" ? " is-quiet" : ""}`}>
-        <button type="button" onClick={() => void openTicketsBoard()}>
+        <button type="button" className="toolbar-keep" onClick={() => void openTicketsBoard()}>
           Tickets{openTickets.length ? ` · ${openTickets.length}` : ""}
         </button>
-        <button type="button" onClick={() => void openRecentSales()}>
+        <button type="button" className="toolbar-desk" onClick={() => void openRecentSales()}>
           Receipts
         </button>
-        <button type="button" onClick={() => void openKitchenBoard()}>
+        <button type="button" className="toolbar-desk" onClick={() => void openKitchenBoard()}>
           Kitchen
         </button>
-        <button type="button" className={clockedIn ? "is-live" : ""} onClick={() => void toggleClock()}>
+        <button type="button" className={`toolbar-desk${clockedIn ? " is-live" : ""}`} onClick={() => void toggleClock()}>
           {clockedIn ? "Clock out" : "Clock in"}
         </button>
-        <button type="button" className={shift ? "is-live" : ""} onClick={() => setModal({ type: "shift" })}>
+        <button type="button" className={`toolbar-desk${shift ? " is-live" : ""}`} onClick={() => setModal({ type: "shift" })}>
           {shift ? "Close shift" : "Open shift"}
         </button>
-        <button type="button" onClick={() => void openDrawer()}>
+        <button type="button" className="toolbar-desk" onClick={() => void openDrawer()}>
           Drawer
+        </button>
+        <button type="button" className="toolbar-phone-more" onClick={() => setModal({ type: "more" })}>
+          More
         </button>
         </div>
       </div>
@@ -1915,14 +1919,15 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
             <button type="button" onClick={() => void openHeld()}>
               Recall
             </button>
-            <button type="button" onClick={() => void openRecentSales()}>
+            <button type="button" className="action-secondary" onClick={() => void openRecentSales()}>
               Receipts
             </button>
-            <button type="button" disabled={!hasLines} onClick={() => ticket && setModal({ type: "discount" })}>
+            <button type="button" className="action-secondary" disabled={!hasLines} onClick={() => ticket && setModal({ type: "discount" })}>
               Discount
             </button>
             <button
               type="button"
+              className="action-secondary"
               disabled={!hasLines}
               onClick={() =>
                 void api<{ suggestions: { label: string; tipCents: number; percent: number | null }[] }>(
@@ -1943,7 +1948,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
             <button type="button" onClick={() => void openCustomers()}>
               Customer
             </button>
-            <button type="button" disabled={!ticket} onClick={() => void openPhoneOrder()}>
+            <button type="button" className="action-secondary" disabled={!ticket} onClick={() => void openPhoneOrder()}>
               Phone order
             </button>
             <button type="button" disabled={!unsentCount || !offline.online} onClick={openKitchenSend}>
@@ -1972,6 +1977,99 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
           Charge{lineCount > 0 ? ` ${money(ticket?.totalCents ?? 0)}` : ""}
         </button>
       </div>
+
+      {modal?.type === "more" && (
+        <div className="modal-backdrop till-overlay" onClick={() => setModal(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <p className="step-kicker">Till</p>
+            <h3>More</h3>
+            <div className="more-sheet">
+              <button
+                type="button"
+                onClick={() => {
+                  setModal(null);
+                  void openRecentSales();
+                }}
+              >
+                Receipts
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setModal(null);
+                  void openKitchenBoard();
+                }}
+              >
+                Kitchen
+              </button>
+              <button
+                type="button"
+                className={clockedIn ? "is-live" : ""}
+                onClick={() => {
+                  setModal(null);
+                  void toggleClock();
+                }}
+              >
+                {clockedIn ? "Clock out" : "Clock in"}
+              </button>
+              <button
+                type="button"
+                className={shift ? "is-live" : ""}
+                onClick={() => setModal({ type: "shift" })}
+              >
+                {shift ? "Close shift" : "Open shift"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setModal(null);
+                  void openDrawer();
+                }}
+              >
+                Drawer
+              </button>
+              <button
+                type="button"
+                disabled={!ticket}
+                onClick={() => void openPhoneOrder()}
+              >
+                Phone order
+              </button>
+              <button
+                type="button"
+                disabled={!hasLines}
+                onClick={() => {
+                  setModal(null);
+                  if (ticket) setModal({ type: "discount" });
+                }}
+              >
+                Discount
+              </button>
+              <button
+                type="button"
+                disabled={!hasLines}
+                onClick={() => {
+                  void api<{ suggestions: { label: string; tipCents: number; percent: number | null }[] }>(
+                    `/extras/tip-suggestions?subtotalCents=${ticket?.subtotalCents ?? 0}`
+                  )
+                    .then((r) => {
+                      setTipSuggestions(r.suggestions);
+                      setModal({ type: "tip" });
+                    })
+                    .catch((error) => fail("Tip", error));
+                }}
+              >
+                Tip
+              </button>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn ghost" onClick={() => setModal(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {modal?.type === "phoneOrder" && (
         <div className="modal-backdrop till-overlay" onClick={() => setModal(null)}>
