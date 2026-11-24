@@ -1163,24 +1163,34 @@ function InventoryPage() {
 }
 
 function CustomersPage() {
-  const [customers, setCustomers] = useState<
-    {
-      id: string;
-      name: string;
-      email: string | null;
-      phone: string | null;
-      loyaltyPoints: number;
-      storeCreditCents: number;
-      totalSpentCents: number;
-      visitCount: number;
-    }[]
-  >([]);
+  type Cust = {
+    id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    note?: string | null;
+    loyaltyPoints: number;
+    storeCreditCents: number;
+    totalSpentCents: number;
+    visitCount: number;
+  };
+  const [customers, setCustomers] = useState<Cust[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<{
     name: string;
     sales: { receiptNumber: string; totalCents: number; createdAt: string; status: string }[];
   } | null>(null);
   const [form, setForm] = useState({ name: "", email: "", phone: "", storeCreditCents: "0" });
+  const [editing, setEditing] = useState<Cust | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    note: "",
+    loyaltyPoints: "0",
+    storeCreditCents: "0",
+  });
+  const [msg, setMsg] = useState("");
 
   async function load() {
     setCustomers(await api("/customers"));
@@ -1197,17 +1207,79 @@ function CustomersPage() {
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
-    await api("/customers", {
-      method: "POST",
-      body: JSON.stringify({
-        name: form.name,
-        email: form.email || undefined,
-        phone: form.phone || undefined,
-        storeCreditCents: Math.round(parseFloat(form.storeCreditCents || "0") * 100),
-      }),
+    setMsg("");
+    try {
+      await api("/customers", {
+        method: "POST",
+        body: JSON.stringify({
+          name: form.name,
+          email: form.email || undefined,
+          phone: form.phone || undefined,
+          storeCreditCents: Math.round(parseFloat(form.storeCreditCents || "0") * 100),
+        }),
+      });
+      setForm({ name: "", email: "", phone: "", storeCreditCents: "0" });
+      setMsg("Customer added.");
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not add customer");
+    }
+  }
+
+  function openEdit(c: Cust) {
+    setEditing(c);
+    setSelected(c.id);
+    setEditForm({
+      name: c.name,
+      email: c.email ?? "",
+      phone: c.phone ?? "",
+      note: c.note ?? "",
+      loyaltyPoints: String(c.loyaltyPoints),
+      storeCreditCents: (c.storeCreditCents / 100).toFixed(2),
     });
-    setForm({ name: "", email: "", phone: "", storeCreditCents: "0" });
-    await load();
+    setMsg("");
+  }
+
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editing) return;
+    setMsg("");
+    try {
+      await api(`/customers/${editing.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: editForm.name.trim(),
+          email: editForm.email.trim() || null,
+          phone: editForm.phone.trim() || null,
+          note: editForm.note.trim() || null,
+          loyaltyPoints: Math.round(parseFloat(editForm.loyaltyPoints || "0")),
+          storeCreditCents: Math.round(parseFloat(editForm.storeCreditCents || "0") * 100),
+        }),
+      });
+      setEditing(null);
+      setMsg("Customer updated.");
+      await load();
+      void api<typeof detail>(`/customers/${editing.id}`).then(setDetail);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not update customer");
+    }
+  }
+
+  async function removeCustomer(c: Cust) {
+    if (!window.confirm(`Delete ${c.name}? Only works if they have no sales history.`)) return;
+    setMsg("");
+    try {
+      await api(`/customers/${c.id}`, { method: "DELETE" });
+      if (selected === c.id) {
+        setSelected(null);
+        setDetail(null);
+      }
+      setEditing((cur) => (cur?.id === c.id ? null : cur));
+      setMsg(`${c.name} deleted.`);
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not delete customer");
+    }
   }
 
   return (
@@ -1215,9 +1287,10 @@ function CustomersPage() {
       <div className="page-head">
         <div>
           <h2>Customers</h2>
-          <p>Purchase history, loyalty points, store credit</p>
+          <p>Add, edit, or remove · loyalty and store credit</p>
         </div>
       </div>
+      {msg && <p className="panel-box" style={{ marginBottom: 12 }}>{msg}</p>}
       <form className="panel-box" onSubmit={(e) => void create(e)}>
         <h3>Add customer</h3>
         <div className="grid-2">
@@ -1238,8 +1311,52 @@ function CustomersPage() {
             <input value={form.storeCreditCents} onChange={(e) => setForm({ ...form, storeCreditCents: e.target.value })} />
           </div>
         </div>
-        <button type="submit">Save</button>
+        <button type="submit">Add</button>
       </form>
+
+      {editing && (
+        <form className="panel-box" onSubmit={(e) => void saveEdit(e)}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+            <h3 style={{ margin: 0 }}>Edit · {editing.name}</h3>
+            <button type="button" className="secondary" onClick={() => setEditing(null)}>
+              Cancel
+            </button>
+          </div>
+          <div className="grid-2" style={{ marginTop: 12 }}>
+            <div className="field">
+              <label>Name</label>
+              <input required value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>Email</label>
+              <input value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>Phone</label>
+              <input value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>Store credit (£)</label>
+              <input value={editForm.storeCreditCents} onChange={(e) => setEditForm({ ...editForm, storeCreditCents: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>Loyalty points</label>
+              <input value={editForm.loyaltyPoints} onChange={(e) => setEditForm({ ...editForm, loyaltyPoints: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>Note</label>
+              <input value={editForm.note} onChange={(e) => setEditForm({ ...editForm, note: e.target.value })} />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="submit">Save changes</button>
+            <button type="button" className="secondary" onClick={() => void removeCustomer(editing)}>
+              Delete
+            </button>
+          </div>
+        </form>
+      )}
+
       <div className="grid-2">
         <div className="table-wrap">
           <table>
@@ -1249,6 +1366,7 @@ function CustomersPage() {
                 <th>Points</th>
                 <th>Credit</th>
                 <th>Spent</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -1258,6 +1376,14 @@ function CustomersPage() {
                   <td>{c.loyaltyPoints}</td>
                   <td>{money(c.storeCreditCents)}</td>
                   <td>{money(c.totalSpentCents)}</td>
+                  <td style={{ whiteSpace: "nowrap" }} onClick={(ev) => ev.stopPropagation()}>
+                    <button type="button" className="secondary" onClick={() => openEdit(c)}>
+                      Edit
+                    </button>{" "}
+                    <button type="button" className="secondary" onClick={() => void removeCustomer(c)}>
+                      Delete
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1294,10 +1420,12 @@ function CustomersPage() {
 }
 
 function EmployeesPage() {
-  const [employees, setEmployees] = useState<
-    { id: string; name: string; email: string; role: string; active: boolean; pinDisplay: string }[]
-  >([]);
+  type Emp = { id: string; name: string; email: string; role: string; active: boolean; pinDisplay: string };
+  const [employees, setEmployees] = useState<Emp[]>([]);
   const [form, setForm] = useState({ name: "", email: "", pin: "3333", role: "cashier" });
+  const [editing, setEditing] = useState<Emp | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", email: "", pin: "", role: "cashier", active: true });
+  const [msg, setMsg] = useState("");
 
   async function load() {
     setEmployees(await api("/employees"));
@@ -1309,11 +1437,82 @@ function EmployeesPage() {
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
-    await api("/employees", {
-      method: "POST",
-      body: JSON.stringify(form),
+    setMsg("");
+    try {
+      await api("/employees", {
+        method: "POST",
+        body: JSON.stringify(form),
+      });
+      setForm({ name: "", email: "", pin: "3333", role: "cashier" });
+      setMsg("Employee added.");
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not add employee");
+    }
+  }
+
+  function openEdit(emp: Emp) {
+    setEditing(emp);
+    setEditForm({
+      name: emp.name,
+      email: emp.email,
+      pin: "",
+      role: emp.role,
+      active: emp.active,
     });
-    await load();
+    setMsg("");
+  }
+
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editing) return;
+    setMsg("");
+    try {
+      await api(`/employees/${editing.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: editForm.name.trim(),
+          email: editForm.email.trim(),
+          role: editForm.role,
+          active: editForm.active,
+          ...(editForm.pin.trim() ? { pin: editForm.pin.trim() } : {}),
+        }),
+      });
+      setEditing(null);
+      setMsg("Employee updated.");
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not update employee");
+    }
+  }
+
+  async function setActive(emp: Emp, active: boolean) {
+    setMsg("");
+    try {
+      await api(`/employees/${emp.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ active }),
+      });
+      setMsg(active ? `${emp.name} reactivated.` : `${emp.name} deactivated.`);
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not update status");
+    }
+  }
+
+  async function removeEmp(emp: Emp) {
+    if (!window.confirm(`Remove ${emp.name}? If they have sales history they will be deactivated instead.`)) return;
+    setMsg("");
+    try {
+      const result = await api<{ deactivated?: boolean; deleted?: boolean; message?: string }>(`/employees/${emp.id}`, {
+        method: "DELETE",
+      });
+      setEditing((cur) => (cur?.id === emp.id ? null : cur));
+      setMsg(result.message || (result.deactivated ? `${emp.name} deactivated.` : `${emp.name} deleted.`));
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not remove employee");
+    }
   }
 
   return (
@@ -1321,9 +1520,10 @@ function EmployeesPage() {
       <div className="page-head">
         <div>
           <h2>Employees</h2>
-          <p>Roles (owner / manager / cashier) and PIN login</p>
+          <p>Add, edit, deactivate, or remove staff · PIN login</p>
         </div>
       </div>
+      {msg && <p className="panel-box" style={{ marginBottom: 12 }}>{msg}</p>}
       <form className="panel-box" onSubmit={(e) => void create(e)}>
         <h3>Add employee</h3>
         <div className="grid-2">
@@ -1333,7 +1533,7 @@ function EmployeesPage() {
           </div>
           <div className="field">
             <label>Email</label>
-            <input required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           </div>
           <div className="field">
             <label>PIN</label>
@@ -1348,8 +1548,58 @@ function EmployeesPage() {
             </select>
           </div>
         </div>
-        <button type="submit">Save</button>
+        <button type="submit">Add</button>
       </form>
+
+      {editing && (
+        <form className="panel-box" onSubmit={(e) => void saveEdit(e)}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+            <h3 style={{ margin: 0 }}>Edit · {editing.name}</h3>
+            <button type="button" className="secondary" onClick={() => setEditing(null)}>
+              Cancel
+            </button>
+          </div>
+          <div className="grid-2" style={{ marginTop: 12 }}>
+            <div className="field">
+              <label>Name</label>
+              <input required value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>Email</label>
+              <input required type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>New PIN (leave blank to keep)</label>
+              <input value={editForm.pin} onChange={(e) => setEditForm({ ...editForm, pin: e.target.value })} placeholder="••••" />
+            </div>
+            <div className="field">
+              <label>Role</label>
+              <select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}>
+                <option value="cashier">Cashier</option>
+                <option value="manager">Manager</option>
+                <option value="owner">Owner</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={editForm.active}
+                  onChange={(e) => setEditForm({ ...editForm, active: e.target.checked })}
+                />{" "}
+                Active (can sign in)
+              </label>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="submit">Save changes</button>
+            <button type="button" className="secondary" onClick={() => void removeEmp(editing)}>
+              Delete
+            </button>
+          </div>
+        </form>
+      )}
+
       <div className="table-wrap">
         <table>
           <thead>
@@ -1357,8 +1607,9 @@ function EmployeesPage() {
               <th>Name</th>
               <th>Email</th>
               <th>Role</th>
-              <th>PIN (demo)</th>
+              <th>PIN</th>
               <th>Status</th>
+              <th />
             </tr>
           </thead>
           <tbody>
@@ -1369,6 +1620,23 @@ function EmployeesPage() {
                 <td>{e.role}</td>
                 <td>{e.pinDisplay}</td>
                 <td>{e.active ? <span className="badge">Active</span> : <span className="badge danger">Inactive</span>}</td>
+                <td style={{ whiteSpace: "nowrap" }}>
+                  <button type="button" className="secondary" onClick={() => openEdit(e)}>
+                    Edit
+                  </button>{" "}
+                  {e.active ? (
+                    <button type="button" className="secondary" onClick={() => void setActive(e, false)}>
+                      Deactivate
+                    </button>
+                  ) : (
+                    <button type="button" className="secondary" onClick={() => void setActive(e, true)}>
+                      Reactivate
+                    </button>
+                  )}{" "}
+                  <button type="button" className="secondary" onClick={() => void removeEmp(e)}>
+                    Delete
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -1755,6 +2023,21 @@ function StoresPage() {
                       >
                         Edit
                       </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => {
+                          if (!window.confirm(`Remove ${dev.label} from this list? It will reappear if they open the till again.`)) return;
+                          void api(`/employees/devices/${dev.id}`, { method: "DELETE" })
+                            .then(() => {
+                              setTillMsg(`${dev.label} removed.`);
+                              return load();
+                            })
+                            .catch((err) => setTillMsg(err instanceof Error ? err.message : "Could not remove device"));
+                        }}
+                      >
+                        Remove
+                      </button>
                     </div>
                   )}
                 </li>
@@ -1860,16 +2143,33 @@ function StoresPage() {
                     )}
                   </div>
                   {(role === "owner" || role === "manager") && (
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() => {
-                        setEditingId(reg.id);
-                        setEditingName(reg.name);
-                      }}
-                    >
-                      Rename
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => {
+                          setEditingId(reg.id);
+                          setEditingName(reg.name);
+                        }}
+                      >
+                        Rename
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => {
+                          if (!window.confirm(`Delete till ${reg.name}? Only works if it has no sales history.`)) return;
+                          void api(`/employees/registers/${reg.id}`, { method: "DELETE" })
+                            .then(() => {
+                              setTillMsg(`${reg.name} deleted.`);
+                              return load();
+                            })
+                            .catch((err) => setTillMsg(err instanceof Error ? err.message : "Could not delete till"));
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </>
                   )}
                 </>
               )}
@@ -2866,6 +3166,7 @@ function SettingsPage() {
                 <th>Name</th>
                 <th>Rate</th>
                 <th>Enabled</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -2874,6 +3175,30 @@ function SettingsPage() {
                   <td>{t.name}</td>
                   <td>{(t.rateBps / 100).toFixed(2)}%</td>
                   <td>{t.enabled ? "Yes" : "No"}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() =>
+                        void api(`/settings/taxes/${t.id}`, {
+                          method: "PATCH",
+                          body: JSON.stringify({ enabled: !t.enabled }),
+                        }).then(() => load())
+                      }
+                    >
+                      {t.enabled ? "Disable" : "Enable"}
+                    </button>{" "}
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => {
+                        if (!window.confirm(`Delete tax ${t.name}?`)) return;
+                        void api(`/settings/taxes/${t.id}`, { method: "DELETE" }).then(() => load());
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -2911,6 +3236,7 @@ function SettingsPage() {
                 <th>Name</th>
                 <th>Type</th>
                 <th>Drawer</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -2919,6 +3245,30 @@ function SettingsPage() {
                   <td>{p.name}</td>
                   <td>{p.type}</td>
                   <td>{p.opensDrawer ? "Yes" : "No"}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() =>
+                        void api(`/settings/payment-types/${p.id}`, {
+                          method: "PATCH",
+                          body: JSON.stringify({ enabled: !p.enabled }),
+                        }).then(() => load())
+                      }
+                    >
+                      {p.enabled ? "Disable" : "Enable"}
+                    </button>{" "}
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => {
+                        if (!window.confirm(`Delete payment type ${p.name}?`)) return;
+                        void api(`/settings/payment-types/${p.id}`, { method: "DELETE" }).then(() => load());
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

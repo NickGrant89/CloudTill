@@ -162,6 +162,7 @@ settingsRouter.post("/taxes", requireRole("owner", "manager"), async (req: Authe
 });
 
 settingsRouter.patch("/taxes/:id", owned("tax"), requireRole("owner", "manager"), async (req, res) => {
+  const id = String(req.params.id);
   const body = z
     .object({
       name: z.string().optional(),
@@ -170,8 +171,13 @@ settingsRouter.patch("/taxes/:id", owned("tax"), requireRole("owner", "manager")
       enabled: z.boolean().optional(),
     })
     .parse(req.body);
-  const tax = await prisma.tax.update({ where: { id: req.params.id }, data: body });
+  const tax = await prisma.tax.update({ where: { id }, data: body });
   res.json(tax);
+});
+
+settingsRouter.delete("/taxes/:id", owned("tax"), requireRole("owner", "manager"), async (req, res) => {
+  await prisma.tax.delete({ where: { id: String(req.params.id) } });
+  res.json({ ok: true });
 });
 
 settingsRouter.post("/payment-types", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
@@ -196,6 +202,7 @@ settingsRouter.post("/payment-types", requireRole("owner", "manager"), async (re
 });
 
 settingsRouter.patch("/payment-types/:id", owned("paymentType"), requireRole("owner", "manager"), async (req, res) => {
+  const id = String(req.params.id);
   const body = z
     .object({
       name: z.string().optional(),
@@ -203,6 +210,11 @@ settingsRouter.patch("/payment-types/:id", owned("paymentType"), requireRole("ow
       opensDrawer: z.boolean().optional(),
     })
     .parse(req.body);
-  const pt = await prisma.paymentType.update({ where: { id: req.params.id }, data: body });
+  const pt = await prisma.paymentType.update({ where: { id }, data: body });
   res.json(pt);
+});
+
+settingsRouter.delete("/payment-types/:id", owned("paymentType"), requireRole("owner", "manager"), async (req, res) => {
+  await prisma.paymentType.delete({ where: { id: String(req.params.id) } });
+  res.json({ ok: true });
 });

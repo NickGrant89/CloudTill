@@ -59,15 +59,45 @@ employeesRouter.post("/", requireRole("owner", "manager"), async (req: AuthedReq
 });
 
 employeesRouter.patch("/:id", owned("employee"), requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const id = String(req.params.id);
   const body = z
     .object({
-      name: z.string().optional(),
+      name: z.string().min(1).optional(),
       email: z.string().email().optional(),
       pin: z.string().min(4).max(8).optional(),
       role: z.enum(["owner", "manager", "cashier"]).optional(),
       active: z.boolean().optional(),
     })
     .parse(req.body);
+
+  const existing = await prisma.employee.findFirst({ where: { id, storeId: req.user!.storeId } });
+  if (!existing) return res.status(404).json({ error: "Employee not found" });
+
+  if (req.user!.role === "manager" && (existing.role === "owner" || body.role === "owner")) {
+    return res.status(403).json({ error: "Managers cannot edit owners" });
+  }
+
+  if (body.active === false && id === req.user!.sub) {
+    return res.status(400).json({ error: "You cannot deactivate your own login" });
+  }
+
+  if (body.active === false && existing.role === "owner") {
+    const otherOwners = await prisma.employee.count({
+      where: { storeId: req.user!.storeId, role: "owner", active: true, id: { not: id } },
+    });
+    if (otherOwners === 0) {
+      return res.status(400).json({ error: "Keep at least one active owner" });
+    }
+  }
+
+  if (body.role && body.role !== "owner" && existing.role === "owner") {
+    const otherOwners = await prisma.employee.count({
+      where: { storeId: req.user!.storeId, role: "owner", active: true, id: { not: id } },
+    });
+    if (otherOwners === 0) {
+      return res.status(400).json({ error: "Keep at least one active owner" });
+    }
+  }
 
   const data: Record<string, unknown> = { ...body };
   if (body.pin) {
@@ -76,14 +106,51 @@ employeesRouter.patch("/:id", owned("employee"), requireRole("owner", "manager")
     delete data.pin;
   }
 
-  const employee = await prisma.employee.update({ where: { id: req.params.id }, data });
+  const employee = await prisma.employee.update({ where: { id }, data });
   res.json({
     id: employee.id,
     name: employee.name,
     email: employee.email,
     role: employee.role,
     active: employee.active,
+    pinDisplay: employee.pinDisplay,
   });
+});
+
+employeesRouter.delete("/:id", owned("employee"), requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const id = String(req.params.id);
+  const existing = await prisma.employee.findFirst({ where: { id, storeId: req.user!.storeId } });
+  if (!existing) return res.status(404).json({ error: "Employee not found" });
+
+  if (id === req.user!.sub) {
+    return res.status(400).json({ error: "You cannot delete your own login" });
+  }
+  if (req.user!.role === "manager" && existing.role === "owner") {
+    return res.status(403).json({ error: "Managers cannot delete owners" });
+  }
+  if (existing.role === "owner") {
+    const otherOwners = await prisma.employee.count({
+      where: { storeId: req.user!.storeId, role: "owner", active: true, id: { not: id } },
+    });
+    if (otherOwners === 0) {
+      return res.status(400).json({ error: "Keep at least one active owner" });
+    }
+  }
+
+  const sales = await prisma.sale.count({ where: { employeeId: id } });
+  if (sales > 0) {
+    await prisma.employee.update({ where: { id }, data: { active: false } });
+    return res.json({
+      ok: true,
+      deactivated: true,
+      message: "Employee has sales history — deactivated instead of deleted",
+    });
+  }
+
+  await prisma.timeClockEntry.deleteMany({ where: { employeeId: id } });
+  await prisma.shift.deleteMany({ where: { employeeId: id } });
+  await prisma.employee.delete({ where: { id } });
+  res.json({ ok: true, deleted: true });
 });
 
 const ONLINE_MS = 3 * 60 * 1000;
@@ -155,6 +222,35 @@ employeesRouter.patch("/registers/:id", owned("register"), requireRole("owner", 
     data: { name: body.name.trim() },
   });
   res.json(register);
+});
+
+employeesRouter.delete("/registers/:id", owned("register"), requireRole("owner", "manager"), async (req, res) => {
+  const id = String(req.params.id);
+  const storeId = req.user!.storeId;
+  const count = await prisma.register.count({ where: { storeId } });
+  if (count <= 1) {
+    return res.status(400).json({ error: "Keep at least one till" });
+  }
+  const openTickets = await prisma.ticket.count({ where: { registerId: id, status: { in: ["open", "held"] } } });
+  if (openTickets > 0) {
+    return res.status(400).json({ error: "Close or move open tickets on this till first" });
+  }
+  await prisma.tillDevice.updateMany({ where: { registerId: id }, data: { registerId: null } });
+  // Keep sales/shifts history — Prisma requires the register row; refuse if history exists
+  const sales = await prisma.sale.count({ where: { registerId: id } });
+  const shifts = await prisma.shift.count({ where: { registerId: id } });
+  if (sales > 0 || shifts > 0) {
+    return res.status(400).json({
+      error: "Till has sales history — rename it instead of deleting",
+    });
+  }
+  await prisma.ticket.deleteMany({ where: { registerId: id, status: "voided" } });
+  const leftover = await prisma.ticket.count({ where: { registerId: id } });
+  if (leftover > 0) {
+    return res.status(400).json({ error: "Till still has tickets — clear them first" });
+  }
+  await prisma.register.delete({ where: { id } });
+  res.json({ ok: true });
 });
 
 /** Till app calls this after login and while open so the device shows up in back office. */
@@ -292,4 +388,12 @@ employeesRouter.patch("/devices/:id", requireRole("owner", "manager"), async (re
     include: { register: { select: { id: true, name: true } } },
   });
   res.json(devicePayload(device));
+});
+
+employeesRouter.delete("/devices/:id", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const id = String(req.params.id);
+  const existing = await prisma.tillDevice.findFirst({ where: { id, storeId: req.user!.storeId } });
+  if (!existing) return res.status(404).json({ error: "Device not found" });
+  await prisma.tillDevice.delete({ where: { id } });
+  res.json({ ok: true });
 });
