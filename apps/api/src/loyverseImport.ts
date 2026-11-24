@@ -24,7 +24,48 @@ const CUSTOMER_NOTES =
   "Loyverse customer list. Imports name, email, phone, address, note, visits, spend, and points. Matched by email when one is present.";
 
 type OptionChoice = { name: string; priceCents: number };
-type OptionGroup = { name: string; minSelect?: number; options: OptionChoice[] };
+type OptionGroup = {
+  name: string;
+  minSelect?: number;
+  maxSelect?: number;
+  freeSelect?: number;
+  options: OptionChoice[];
+};
+
+/** Till rules from Loyverse modifier menu names (pizza half-and-half, free toppings, etc.). */
+export function inferLoyverseModifierGroupRules(name: string, optionCount: number) {
+  const n = name.replace(/\*+/g, "").trim().toLowerCase();
+  const safeMax = Math.max(optionCount, 1);
+  const freeMatch = n.match(/(\d+)\s*x\s*free/);
+  if (freeMatch) {
+    const freeSelect = Math.min(Number(freeMatch[1]), safeMax);
+    return { minSelect: 0, maxSelect: safeMax, freeSelect };
+  }
+  if (/remove\s+topping/.test(n)) {
+    return { minSelect: 0, maxSelect: safeMax, freeSelect: 0 };
+  }
+  if (/extra\s+topping/.test(n) || (/extras/.test(n) && /half/.test(n))) {
+    return { minSelect: 0, maxSelect: safeMax, freeSelect: 0 };
+  }
+  if ((/cyo/.test(n) || /create your own/.test(n)) && optionCount > 4) {
+    return { minSelect: 0, maxSelect: safeMax, freeSelect: 0 };
+  }
+  if (
+    n === "pizza base" ||
+    n.startsWith("pizza sauce") ||
+    /half\s*&\s*half\s*pizza$/.test(n) ||
+    n === "pizza options"
+  ) {
+    return { minSelect: 1, maxSelect: 1, freeSelect: 0 };
+  }
+  if (/^left half/.test(n) && optionCount >= 4 && !/extra|remove|cyo|topping/.test(n)) {
+    return { minSelect: 1, maxSelect: 1, freeSelect: 0 };
+  }
+  if (/^right half/.test(n) && optionCount >= 4 && !/extra|remove|cyo|topping/.test(n)) {
+    return { minSelect: 1, maxSelect: 1, freeSelect: 0 };
+  }
+  return { minSelect: 0, maxSelect: 1, freeSelect: 0 };
+}
 
 type ItemDraft = {
   line: number;
@@ -725,12 +766,14 @@ async function syncItemModifierGroups(itemId: string, flags: string[], optionGro
     const key = group.name.toLowerCase();
     let existing = byName.get(key);
     if (!existing) {
+      const rules = inferLoyverseModifierGroupRules(group.name, group.options.length);
       existing = await prisma.modifierGroup.create({
         data: {
           itemId,
           name: group.name,
-          minSelect: group.minSelect ?? 1,
-          maxSelect: 1,
+          minSelect: group.minSelect ?? rules.minSelect,
+          maxSelect: group.maxSelect ?? rules.maxSelect,
+          freeSelect: group.freeSelect ?? rules.freeSelect,
           sortOrder: orderIndex,
           modifiers: {
             create: group.options.map((option, index) => ({
@@ -748,9 +791,21 @@ async function syncItemModifierGroups(itemId: string, flags: string[], optionGro
       continue;
     }
 
-    if (existing.sortOrder !== orderIndex) {
-      await prisma.modifierGroup.update({ where: { id: existing.id }, data: { sortOrder: orderIndex } });
-      existing.sortOrder = orderIndex;
+    const rules = inferLoyverseModifierGroupRules(group.name, group.options.length);
+    const groupPatch = {
+      sortOrder: orderIndex,
+      minSelect: group.minSelect ?? rules.minSelect,
+      maxSelect: group.maxSelect ?? rules.maxSelect,
+      freeSelect: group.freeSelect ?? rules.freeSelect,
+    };
+    if (
+      existing.sortOrder !== groupPatch.sortOrder ||
+      existing.minSelect !== groupPatch.minSelect ||
+      existing.maxSelect !== groupPatch.maxSelect ||
+      existing.freeSelect !== groupPatch.freeSelect
+    ) {
+      await prisma.modifierGroup.update({ where: { id: existing.id }, data: groupPatch });
+      Object.assign(existing, groupPatch);
     }
 
     const seen = new Set<string>();
@@ -979,9 +1034,12 @@ function groupsFromCatalog(catalog: LoyverseCatalog) {
         .sort(compareLoyversePosition)
         .map((option) => ({ name: option.name!.trim(), priceCents: apiCents(option.price) ?? 0 }));
       if (options.length) {
+        const rules = inferLoyverseModifierGroupRules(modifier.name.trim(), options.length);
         attachedGroups.push({
           name: modifier.name.trim(),
-          minSelect: 0,
+          minSelect: rules.minSelect,
+          maxSelect: rules.maxSelect,
+          freeSelect: rules.freeSelect,
           options,
         });
       } else {
