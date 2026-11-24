@@ -5,6 +5,7 @@ import { owned, rejectForeign } from "../tenant.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 import { companyStoreIds, sameCompany } from "../company.js";
 import { ensurePizzaMenu } from "../pizzaMenu.js";
+import { consolidatePizzaTill } from "../pizzaTillConsolidate.js";
 import {
   defaultModifierFolder,
   deleteModifierFolder,
@@ -648,6 +649,11 @@ catalogRouter.post("/modifier-sets", requireRole("owner", "manager"), async (req
 catalogRouter.post("/pizza-menu", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
   const result = await ensurePizzaMenu(req.user!.storeId);
   res.status(result.created.length ? 201 : 200).json(result);
+});
+
+catalogRouter.post("/pizza-consolidate", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const result = await consolidatePizzaTill(req.user!.storeId);
+  res.json({ ok: true, ...result });
 });
 
 catalogRouter.delete("/modifier-sets", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {

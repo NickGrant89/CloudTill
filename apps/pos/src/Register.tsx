@@ -1,4 +1,9 @@
-import { applyModifierFreeSelect, groupModifierLines } from "@cloudtill/shared";
+import {
+  applyModifierFreeSelect,
+  groupModifierLines,
+  isConsolidatedPizzaItem,
+  visiblePizzaModifierGroups,
+} from "@cloudtill/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, getToken, loadCatalogSnapshot, money, OfflineError, saveCatalogSnapshot } from "./api";
 import type { SessionRegister, SessionStore, SessionUser } from "./App";
@@ -532,12 +537,13 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
 
   function openModifierMenu(item: Item) {
     const initial: Record<string, Modifier[]> = {};
-    for (const group of item.modifierGroups) {
+    const groups = visiblePizzaModifierGroups(item.name, item.modifierGroups, initial);
+    for (const group of groups) {
       initial[group.id] = group.minSelect > 0 && group.modifiers[0] ? [group.modifiers[0]] : [];
     }
     setEditingLineKey(null);
     setSelectedMods(initial);
-    setModifierGroupId(item.modifierGroups[0]?.id ?? "");
+    setModifierGroupId(groups[0]?.id ?? "");
     setModifierItem(item);
     setMobilePane("items");
   }
@@ -545,16 +551,30 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
   function chooseModifier(group: ModGroup, modifier: Modifier) {
     setSelectedMods((prev) => {
       const current = prev[group.id] ?? [];
-      if (group.maxSelect <= 1) return { ...prev, [group.id]: [modifier] };
-      if (current.some((option) => option.id === modifier.id)) {
-        return { ...prev, [group.id]: current.filter((option) => option.id !== modifier.id) };
+      let next: Record<string, Modifier[]>;
+      if (group.maxSelect <= 1) next = { ...prev, [group.id]: [modifier] };
+      else if (current.some((option) => option.id === modifier.id)) {
+        next = { ...prev, [group.id]: current.filter((option) => option.id !== modifier.id) };
+      } else if (current.length >= group.maxSelect) return prev;
+      else next = { ...prev, [group.id]: [...current, modifier] };
+
+      if (group.name.trim().toLowerCase() === "size" && modifierItem) {
+        const visibleIds = new Set(
+          visiblePizzaModifierGroups(modifierItem.name, modifierItem.modifierGroups, next).map((g) => g.id)
+        );
+        for (const key of Object.keys(next)) {
+          if (!visibleIds.has(key)) delete next[key];
+        }
       }
-      if (current.length >= group.maxSelect) return prev;
-      return { ...prev, [group.id]: [...current, modifier] };
+      return next;
     });
     if (group.maxSelect <= 1 && modifierItem) {
-      const index = modifierItem.modifierGroups.findIndex((entry) => entry.id === group.id);
-      const next = modifierItem.modifierGroups[index + 1];
+      const visible = visiblePizzaModifierGroups(modifierItem.name, modifierItem.modifierGroups, {
+        ...selectedMods,
+        [group.id]: [modifier],
+      });
+      const index = visible.findIndex((entry) => entry.id === group.id);
+      const next = visible[index + 1];
       if (next) setModifierGroupId(next.id);
     }
   }
@@ -719,7 +739,8 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
 
   async function confirmModifiers() {
     if (!modifierItem) return;
-    for (const group of modifierItem.modifierGroups) {
+    const groups = visiblePizzaModifierGroups(modifierItem.name, modifierItem.modifierGroups, selectedMods);
+    for (const group of groups) {
       const picked = selectedMods[group.id] ?? [];
       if (picked.length < group.minSelect) {
         setModifierGroupId(group.id);
@@ -1555,8 +1576,18 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
     }
   }
   const visibleItems = showFavorites && favorites.length ? favorites : filtered;
+  const visibleModifierGroups = useMemo(() => {
+    if (!modifierItem) return [];
+    return visiblePizzaModifierGroups(modifierItem.name, modifierItem.modifierGroups, selectedMods);
+  }, [modifierItem, selectedMods]);
   const activeModGroup =
-    modifierItem?.modifierGroups.find((group) => group.id === modifierGroupId) ?? modifierItem?.modifierGroups[0];
+    visibleModifierGroups.find((group) => group.id === modifierGroupId) ?? visibleModifierGroups[0];
+  useEffect(() => {
+    if (!modifierItem || !visibleModifierGroups.length) return;
+    if (!visibleModifierGroups.some((group) => group.id === modifierGroupId)) {
+      setModifierGroupId(visibleModifierGroups[0]!.id);
+    }
+  }, [modifierItem, visibleModifierGroups, modifierGroupId]);
   const pricedSelection = modifierItem ? priceSelectedModifiers(modifierItem, selectedMods) : [];
   const chargedByModifierId = new Map(
     pricedSelection.flatMap((row) => (row.modifierId ? [[row.modifierId, row.priceCents] as const] : []))
@@ -1565,7 +1596,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
   const modifierTotal = (modifierItem?.variants[0]?.priceCents ?? 0) + modifierExtra;
   const modifierPreview = modifierItem
     ? sortModsByItemGroups(
-        modifierItem.modifierGroups.flatMap((group) =>
+        visibleModifierGroups.flatMap((group) =>
           (selectedMods[group.id] ?? []).map((option) => ({ name: option.name, groupName: group.name }))
         ),
         modifierItem.modifierGroups
@@ -1744,14 +1775,14 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
           </div>
           <div className="chip-row" role="tablist" aria-label={modifierItem ? "Modifier options" : "Item groups"}>
             {modifierItem ? (
-              modifierItem.modifierGroups.map((group) => (
+              visibleModifierGroups.map((group) => (
                 <button
                   key={group.id}
                   type="button"
                   className={`chip ${activeModGroup?.id === group.id ? "active" : ""}`}
                   onClick={() => setModifierGroupId(group.id)}
                 >
-                  {group.name}
+                  {group.name.replace(/^\d+\s*(?:”|")\s*/g, "").replace(/^(\d+)\s*(?:”|")\s*/g, "") || group.name}
                   {group.minSelect > 0 ? " *" : ""}
                   {(group.freeSelect ?? 0) > 0 ? ` · ${group.freeSelect} free` : ""}
                 </button>
@@ -1835,7 +1866,9 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                     onClick={() => void addItem(item)}
                   >
                     <span className="name">{item.name}</span>
-                    <span className="price">{money(item.variants[0]?.priceCents ?? 0)}</span>
+                    <span className="price">
+                      {isConsolidatedPizzaItem(item.name) ? `from ${money(800)}` : money(item.variants[0]?.priceCents ?? 0)}
+                    </span>
                   </button>
                 ))}
               </>
