@@ -45,24 +45,27 @@ async function main() {
     return;
   }
 
-  for (const [path, name] of [
-    ["/", "marketing"],
-    ["/bo/", "backoffice SPA"],
-    ["/pos/", "till SPA"],
-    ["/pos/kitchen", "kitchen SPA"],
-    ["/order/", "ordering SPA"],
-    ["/admin", "platform admin"],
-    ["/pricing", "pricing redirect"],
+  for (const [path, name, expectRedirect] of [
+    ["/", "marketing", false],
+    ["/bo/", "backoffice SPA", false],
+    ["/pos/", "till SPA", false],
+    ["/pos/kitchen", "kitchen SPA", false],
+    ["/order/", "ordering SPA", false],
+    ["/admin", "platform admin", false],
+    ["/pricing", "pricing redirect", true],
+    ["/signup", "signup redirect", true],
   ]) {
     try {
       const r = await fetch(`${BASE}${path}`, { redirect: "manual" });
-      const ok = r.status >= 200 && r.status < 400;
-      record("Static", name, ok ? "pass" : "fail", String(r.status));
+      const ok = expectRedirect
+        ? r.status === 302 && (r.headers.get("location") || "").includes("#pricing")
+        : r.status >= 200 && r.status < 400;
+      const loc = expectRedirect ? ` ${r.headers.get("location") || ""}`.trim() : "";
+      record("Static", name, ok ? "pass" : "fail", `${r.status}${loc}`);
     } catch (e) {
       record("Static", name, "fail", e.message);
     }
   }
-  record("Static", "/signup URL", "missing", "404 — signup is marketing modal + POST /api/public/signup");
 
   record("Security", "login invalid body", "pending");
   try {
@@ -157,6 +160,7 @@ async function main() {
 
   const fails = results.filter((r) => r.status === "fail").length;
   console.log(`\n${results.length} checks, ${fails} failed`);
+  if (fails > 0) process.exit(1);
 }
 
 main().catch((e) => {

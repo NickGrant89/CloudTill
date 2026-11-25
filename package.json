@@ -21,7 +21,8 @@
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f --tail=100",
     "host:mac": "pnpm dev",
-    "host:docker": "pnpm docker:up"
+    "host:docker": "pnpm docker:up",
+    "smoke:platform": "node scripts/platform-exhaustive-check.mjs"
   },
   "engines": {
     "node": ">=20"
