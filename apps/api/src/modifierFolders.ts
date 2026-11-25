@@ -1,4 +1,6 @@
+import { isConsolidatedPizzaItem } from "@cloudtill/shared";
 import { prisma } from "./db.js";
+import { comparePizzaModifierGroups } from "./pizzaTillLayout.js";
 
 const SETTING_KEY = "modifiers.folders";
 
@@ -271,7 +273,7 @@ export function effectiveMenuRank(layout: ModifierLayout, names: string[]): Map<
 }
 
 async function pushGroupOrders(
-  groups: { id: string; name: string; itemId: string; sortOrder: number }[],
+  groups: { id: string; name: string; itemId: string; sortOrder: number; itemName?: string }[],
   rank: Map<string, number>
 ) {
   const byItem = new Map<string, typeof groups>();
@@ -282,7 +284,10 @@ async function pushGroupOrders(
   }
   let updated = 0;
   for (const list of byItem.values()) {
+    const itemName = list[0]?.itemName ?? "";
+    const pizzaTill = isConsolidatedPizzaItem(itemName);
     const sorted = [...list].sort((a, b) => {
+      if (pizzaTill) return comparePizzaModifierGroups(itemName, a.name, b.name);
       const ra = rank.has(a.name.toLowerCase()) ? rank.get(a.name.toLowerCase())! : 10_000;
       const rb = rank.has(b.name.toLowerCase()) ? rank.get(b.name.toLowerCase())! : 10_000;
       if (ra !== rb) return ra - rb;
@@ -303,13 +308,16 @@ export async function syncModifierGroupSortOrders(storeId: string, menuOrder?: s
   if (menuOrder?.length) layout.menuOrder = menuOrder;
   const groups = await prisma.modifierGroup.findMany({
     where: { item: { storeId, active: true } },
-    select: { id: true, name: true, itemId: true, sortOrder: true },
+    select: { id: true, name: true, itemId: true, sortOrder: true, item: { select: { name: true } } },
   });
   const rank = effectiveMenuRank(
     layout,
     [...new Set(groups.map((group) => group.name))]
   );
-  return pushGroupOrders(groups, rank);
+  return pushGroupOrders(
+    groups.map((group) => ({ ...group, itemName: group.item.name })),
+    rank
+  );
 }
 
 /**
@@ -325,9 +333,12 @@ export async function syncModifierGroupSortOrdersByMenu(storeId: string, menuOrd
   );
   const groups = await prisma.modifierGroup.findMany({
     where: { item: { storeId, active: true } },
-    select: { id: true, name: true, itemId: true, sortOrder: true },
+    select: { id: true, name: true, itemId: true, sortOrder: true, item: { select: { name: true } } },
   });
-  return pushGroupOrders(groups, rank);
+  return pushGroupOrders(
+    groups.map((group) => ({ ...group, itemName: group.item.name })),
+    rank
+  );
 }
 
 export async function saveModifierLayout(

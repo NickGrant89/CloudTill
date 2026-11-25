@@ -1,5 +1,10 @@
 import { prisma } from "./db.js";
-import { readModifierLayout, saveModifierLayout } from "./modifierFolders.js";
+import { readModifierLayout, saveModifierLayout, syncModifierGroupSortOrders } from "./modifierFolders.js";
+import {
+  comparePizzaModifierGroups,
+  PIZZA_MODIFIER_MENU_ORDER,
+  TILL_LAYOUT,
+} from "./pizzaTillLayout.js";
 
 const SIZE_GROUP = "Size";
 const PIZZA_SIZES = [
@@ -210,51 +215,6 @@ async function buildConsolidatedItem(storeId: string, categoryId: string, spec: 
   return { name: spec.name, itemId: item.id, created: true };
 }
 
-type TillLayoutRule = {
-  order: string[];
-  drop: (name: string) => boolean;
-  freeSelect?: Record<string, number>;
-};
-
-const TILL_LAYOUT: Record<string, TillLayoutRule> = {
-  "Pizza — Half & half (CYO)": {
-    order: ["Size", "Pizza Base", "Pizza Sauce", "Pizza Sauce 2", "Right CYO Half & Half", "Left CYO Half & Half"],
-    drop: (name) => /extras/i.test(name) || /extra toppings/i.test(name) || /remove/i.test(name),
-    freeSelect: { "Right CYO Half & Half": 4, "Left CYO Half & Half": 4 },
-  },
-  "Pizza — Create your own": {
-    order: ["Size", "Pizza Base", "Pizza Sauce", "Create Your Own (4 x Free Toppings)"],
-    drop: (name) => /extra toppings/i.test(name),
-    freeSelect: { "Create Your Own (4 x Free Toppings)": 4 },
-  },
-  "Pizza — Single": {
-    order: ["Size", "Pizza Base", "Pizza Sauce", "Pizza Options", "Remove Toppings"],
-    drop: (name) => /extra toppings/i.test(name),
-  },
-  "Pizza — Half & half": {
-    order: ["Size", "Pizza Base", "Pizza Sauce", "Right Half & Half Pizza", "Pizza Sauce 2", "Left Half & Half"],
-    drop: (name) => {
-      const n = name.toLowerCase();
-      if (n.includes("extra toppings") && !n.includes("half")) return true;
-      return false;
-    },
-  },
-};
-
-function sortRank(groupName: string, order: string[]): number {
-  const lower = groupName.toLowerCase();
-  for (let i = 0; i < order.length; i++) {
-    if (lower === order[i]!.toLowerCase()) return i;
-  }
-  if (/half & half extras/i.test(groupName)) {
-    const inch = inchSizeInName(groupName) ?? 99;
-    const side = /left/i.test(groupName) ? 0.2 : 0.1;
-    return 20 + inch / 100 + side;
-  }
-  if (/remove/i.test(groupName)) return 40;
-  return 100;
-}
-
 async function applyMenuFreeSelect(storeId: string, menuName: string, freeSelect: number) {
   await prisma.modifierGroup.updateMany({
     where: { item: { storeId }, name: menuName },
@@ -368,7 +328,7 @@ export async function repairPizzaTillLayout(storeId: string) {
       where: { itemId: item.id },
       orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
     });
-    const sorted = [...fresh].sort((a, b) => sortRank(a.name, rule.order) - sortRank(b.name, rule.order));
+    const sorted = [...fresh].sort((a, b) => comparePizzaModifierGroups(itemName, a.name, b.name));
     for (let index = 0; index < sorted.length; index += 1) {
       const group = sorted[index]!;
       if (group.sortOrder === index) continue;
@@ -378,10 +338,35 @@ export async function repairPizzaTillLayout(storeId: string) {
     changed.push({ item: itemName, removed, order: sorted.map((g) => g.name) });
   }
 
+  const layout = await readModifierLayout(storeId);
+  const map = { ...layout.map };
+  const pizzaFolder = map["pizza base"] || map["pizza options"] || "PIZZAS OPTIONS";
+  for (const menu of PIZZA_MODIFIER_MENU_ORDER) {
+    map[menu.toLowerCase()] = pizzaFolder;
+  }
+  map["size"] = pizzaFolder;
+  const seen = new Set<string>();
+  const menuOrder: string[] = [];
+  for (const menu of PIZZA_MODIFIER_MENU_ORDER) {
+    const key = menu.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    menuOrder.push(menu);
+  }
+  for (const name of layout.menuOrder) {
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    menuOrder.push(name);
+  }
+  await saveModifierLayout(storeId, { map, folderOrder: layout.folderOrder, menuOrder }, { tillOrder: "none" });
+  const syncedGroups = await syncModifierGroupSortOrders(storeId, menuOrder);
+
   return {
     repaired: changed.length,
     items: changed,
-    message: "Pizza till order updated — CYO uses free priced options; extra topping tabs removed where duplicated.",
+    syncedGroups,
+    message: "Pizza till order updated — Size → Base → Sauce → toppings; BO menu order aligned.",
   };
 }
 
