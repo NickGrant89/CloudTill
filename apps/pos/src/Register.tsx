@@ -243,7 +243,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
   }, []);
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<Item[]>([]);
-  const [categoryId, setCategoryId] = useState<string | "all">("all");
+  const [categoryId, setCategoryId] = useState<string | "all" | "home">("home");
   const [query, setQuery] = useState("");
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [paymentTypes, setPaymentTypes] = useState<PaymentType[]>([]);
@@ -521,10 +521,44 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
   }, [registerId]);
 
   const sectionedAllGroups = !showFavorites && categoryId === "all";
+  const showGroupHome = !modifierItem && !showFavorites && categoryId === "home" && !query.trim();
+
+  const itemCountByCategory = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of items) {
+      if (!item.categoryId) continue;
+      counts.set(item.categoryId, (counts.get(item.categoryId) ?? 0) + 1);
+    }
+    return counts;
+  }, [items]);
+
+  const ungroupedItemCount = useMemo(() => items.filter((item) => !item.categoryId).length, [items]);
+
+  function openGroupHome() {
+    setShowFavorites(false);
+    setCategoryId("home");
+    setQuery("");
+  }
+
+  function openCategory(catId: string) {
+    setShowFavorites(false);
+    setCategoryId(catId);
+    setQuery("");
+  }
+
+  function openAllGroupsMenu() {
+    setShowFavorites(false);
+    setCategoryId("all");
+    setQuery("");
+  }
 
   const itemsMatchingFilter = useMemo(() => {
     return items.filter((item) => {
-      if (categoryId !== "all" && item.categoryId !== categoryId) return false;
+      if (categoryId === "__none__") {
+        if (item.categoryId) return false;
+      } else if (categoryId !== "all" && categoryId !== "home" && item.categoryId !== categoryId) {
+        return false;
+      }
       if (!query.trim()) return true;
       const q = query.toLowerCase();
       return (
@@ -1796,7 +1830,22 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
               </>
             ) : (
               <>
-                <div className="brand-mini">PurePOS</div>
+                {!showGroupHome && (
+                  <button type="button" className="chip chip-back" onClick={() => openGroupHome()}>
+                    ← Groups
+                  </button>
+                )}
+                <div className="brand-mini catalog-title">
+                  {showFavorites
+                    ? "Quick keys"
+                    : categoryId === "all"
+                      ? "All groups"
+                      : categoryId === "home"
+                        ? "PurePOS"
+                        : categoryId === "__none__"
+                          ? "Ungrouped"
+                          : categories.find((c) => c.id === categoryId)?.name ?? "PurePOS"}
+                </div>
                 <input
                   className="search"
                   placeholder="Search or scan barcode / SKU"
@@ -1807,7 +1856,11 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
               </>
             )}
           </div>
-          <div className="chip-row" role="tablist" aria-label={modifierItem ? "Modifier options" : "Item groups"}>
+          <div
+            className={`chip-row${showGroupHome ? " chip-row--home" : ""}`}
+            role="tablist"
+            aria-label={modifierItem ? "Modifier options" : "Item groups"}
+          >
             {modifierItem ? (
               visibleModifierGroups.map((group) => (
                 <button
@@ -1830,7 +1883,8 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                   className={`chip ${showFavorites ? "active" : ""}`}
                   onClick={() => {
                     setShowFavorites(true);
-                    setCategoryId("all");
+                    setCategoryId("home");
+                    setQuery("");
                   }}
                 >
                   ★ Quick keys
@@ -1838,26 +1892,22 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                 <button
                   type="button"
                   className={`chip ${!showFavorites && categoryId === "all" ? "active" : ""}`}
-                  onClick={() => {
-                    setShowFavorites(false);
-                    setCategoryId("all");
-                  }}
+                  onClick={() => openAllGroupsMenu()}
                 >
                   All groups
                 </button>
-                {categories.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    className={`chip ${!showFavorites && categoryId === c.id ? "active" : ""}`}
-                    onClick={() => {
-                      setShowFavorites(false);
-                      setCategoryId(c.id);
-                    }}
-                  >
-                    {c.name}
-                  </button>
-                ))}
+                <div className="chip-row-extra" aria-hidden={showGroupHome}>
+                  {categories.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className={`chip ${!showFavorites && categoryId === c.id ? "active" : ""}`}
+                      onClick={() => openCategory(c.id)}
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
               </>
             )}
           </div>
@@ -1900,6 +1950,34 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                 );
               })}
           </div>
+          ) : showGroupHome ? (
+            <div className="grid group-picker-grid">
+              {!menuReady && <p className="empty">Loading menu…</p>}
+              {menuReady &&
+                categories.map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    className="item-tile group-tile"
+                    style={{ backgroundColor: cat.color }}
+                    onClick={() => openCategory(cat.id)}
+                  >
+                    <span className="name">{cat.name}</span>
+                    <span className="price">{itemCountByCategory.get(cat.id) ?? 0} items</span>
+                  </button>
+                ))}
+              {menuReady && ungroupedItemCount > 0 && (
+                <button
+                  type="button"
+                  className="item-tile group-tile"
+                  style={{ backgroundColor: "#4b5563" }}
+                  onClick={() => openCategory("__none__")}
+                >
+                  <span className="name">Ungrouped</span>
+                  <span className="price">{ungroupedItemCount} items</span>
+                </button>
+              )}
+            </div>
           ) : sectionedAllGroups ? (
             <div className="menu-sections" role="list">
               {!menuReady && <p className="empty">Loading menu…</p>}

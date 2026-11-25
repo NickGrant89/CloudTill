@@ -367,6 +367,39 @@ select:focus-visible {
   color: #f7f3eb;
 }
 
+.chip-back {
+  flex: 0 0 auto;
+  font-weight: 600;
+}
+
+.chip-row-extra {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.chip-row--home .chip-row-extra {
+  display: none;
+}
+
+.catalog-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-tile .price {
+  font-size: 0.82rem;
+  font-weight: 500;
+  opacity: 0.92;
+}
+
+.group-picker-grid {
+  align-content: start;
+}
+
 .grid {
   flex: 1 1 auto;
   min-height: 0;
@@ -1472,6 +1505,10 @@ select:focus-visible {
     padding: 6px 10px;
   }
 
+  .chip-row-extra {
+    display: none;
+  }
+
   .chip {
     min-height: 34px;
   }
@@ -1753,6 +1790,10 @@ select:focus-visible {
     padding: 8px 10px;
     gap: 6px;
     -webkit-overflow-scrolling: touch;
+  }
+
+  .chip-row-extra {
+    display: none;
   }
 
   .chip {
