@@ -6,6 +6,8 @@ type BoEditSheetProps = {
   onClose: () => void;
   title: string;
   children: ReactNode;
+  /** Wider centred modal on desktop (e.g. item modifiers). */
+  wide?: boolean;
 };
 
 function usePhoneLayout() {
@@ -21,7 +23,7 @@ function usePhoneLayout() {
 }
 
 /** Always modal: phone = bottom sheet, desktop = centred dialog — list stays put. */
-export function BoEditSheet({ open, onClose, title, children }: BoEditSheetProps) {
+export function BoEditSheet({ open, onClose, title, children, wide }: BoEditSheetProps) {
   const phone = usePhoneLayout();
 
   useEffect(() => {
@@ -58,7 +60,7 @@ export function BoEditSheet({ open, onClose, title, children }: BoEditSheetProps
 
   return createPortal(
     <div
-      className={`bo-edit-layer${phone ? "" : " bo-edit-layer--desktop"}`}
+      className={`bo-edit-layer${phone ? "" : " bo-edit-layer--desktop"}${wide && !phone ? " bo-edit-layer--wide" : ""}`}
       role="dialog"
       aria-modal="true"
       aria-label={title}

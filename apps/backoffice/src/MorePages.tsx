@@ -397,10 +397,13 @@ export function ModifierEditor({
   itemId,
   itemName,
   onClose,
+  embedded,
 }: {
   itemId: string;
   itemName: string;
   onClose: () => void;
+  /** When true, omit outer panel header (parent BoEditSheet provides chrome). */
+  embedded?: boolean;
 }) {
   const [groups, setGroups] = useState<
     {
@@ -601,19 +604,26 @@ export function ModifierEditor({
     }
   }
 
-  return (
-    <div className="panel-box">
-      <div className="page-head" style={{ marginBottom: 12 }}>
-        <div>
-          <h3 style={{ margin: 0 }}>Modifiers · {itemName}</h3>
-          <p style={{ margin: "6px 0 0", color: "var(--muted)" }}>
-            Edit or delete a group here. That only changes {itemName}. Option names and prices are per item too.
-          </p>
+  const body = (
+    <>
+      {!embedded && (
+        <div className="page-head" style={{ marginBottom: 12 }}>
+          <div>
+            <h3 style={{ margin: 0 }}>Modifiers · {itemName}</h3>
+            <p style={{ margin: "6px 0 0", color: "var(--muted)" }}>
+              Edit or delete a group here. That only changes {itemName}. Option names and prices are per item too.
+            </p>
+          </div>
+          <button type="button" className="secondary" onClick={onClose}>
+            Close
+          </button>
         </div>
-        <button type="button" className="secondary" onClick={onClose}>
-          Close
-        </button>
-      </div>
+      )}
+      {embedded && (
+        <p style={{ margin: "0 0 12px", color: "var(--muted)", fontSize: "0.92rem" }}>
+          Edit or delete a group here. That only changes {itemName}. Option names and prices are per item too.
+        </p>
+      )}
       {error && <p className="error">{error}</p>}
       {groups.length === 0 && <p style={{ color: "var(--muted)" }}>No modifiers on this item yet.</p>}
       {groups.map((g, groupIndex) => {
@@ -747,8 +757,11 @@ export function ModifierEditor({
           Add to {itemName}
         </button>
       </form>
-    </div>
+    </>
   );
+
+  if (embedded) return body;
+  return <div className="panel-box">{body}</div>;
 }
 
 export function ModifierLibrary({

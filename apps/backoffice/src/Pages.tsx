@@ -929,9 +929,27 @@ function CatalogPage() {
         </div>
       </div>
 
-      {editMods && (
-        <ModifierEditor itemId={editMods.id} itemName={editMods.name} onClose={() => { setEditMods(null); void load(); }} />
-      )}
+      <BoEditSheet
+        open={Boolean(editMods)}
+        onClose={() => {
+          setEditMods(null);
+          void load();
+        }}
+        title={editMods ? `Modifiers · ${editMods.name}` : ""}
+        wide
+      >
+        {editMods && (
+          <ModifierEditor
+            embedded
+            itemId={editMods.id}
+            itemName={editMods.name}
+            onClose={() => {
+              setEditMods(null);
+              void load();
+            }}
+          />
+        )}
+      </BoEditSheet>
 
       <form className="panel-box" onSubmit={(e) => void assignToBranches(e)}>
         <h3>Send items to branches</h3>
@@ -1997,11 +2015,10 @@ function StoresPage() {
   const [devices, setDevices] = useState<TillDeviceRow[]>([]);
   const [openTickets, setOpenTickets] = useState<OpenTicketRow[]>([]);
   const [regName, setRegName] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingName, setEditingName] = useState("");
-  const [editingDeviceId, setEditingDeviceId] = useState<string | null>(null);
-  const [editingDeviceLabel, setEditingDeviceLabel] = useState("");
-  const [editingDeviceNote, setEditingDeviceNote] = useState("");
+  const [editingRegister, setEditingRegister] = useState<RegisterRow | null>(null);
+  const [registerFormName, setRegisterFormName] = useState("");
+  const [editingDevice, setEditingDevice] = useState<TillDeviceRow | null>(null);
+  const [deviceForm, setDeviceForm] = useState({ label: "", supportNote: "" });
   const [tillMsg, setTillMsg] = useState("");
   const [branch, setBranch] = useState({ name: "", address: "", phone: "" });
   const [branchMsg, setBranchMsg] = useState("");
@@ -2066,17 +2083,19 @@ function StoresPage() {
     }
   }
 
-  async function saveRegisterName(id: string) {
-    const name = editingName.trim();
+  async function saveRegisterName(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingRegister) return;
+    const name = registerFormName.trim();
     if (!name) return;
     setTillMsg("");
     try {
-      await api(`/employees/registers/${id}`, {
+      await api(`/employees/registers/${editingRegister.id}`, {
         method: "PATCH",
         body: JSON.stringify({ name }),
       });
-      setEditingId(null);
-      setEditingName("");
+      setEditingRegister(null);
+      setRegisterFormName("");
       setTillMsg("Till name saved.");
       await load();
     } catch (err) {
@@ -2084,17 +2103,19 @@ function StoresPage() {
     }
   }
 
-  async function saveDevice(id: string) {
+  async function saveDevice(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingDevice) return;
     setTillMsg("");
     try {
-      await api(`/employees/devices/${id}`, {
+      await api(`/employees/devices/${editingDevice.id}`, {
         method: "PATCH",
         body: JSON.stringify({
-          label: editingDeviceLabel.trim() || undefined,
-          supportNote: editingDeviceNote.trim() || null,
+          label: deviceForm.label.trim() || undefined,
+          supportNote: deviceForm.supportNote.trim() || null,
         }),
       });
-      setEditingDeviceId(null);
+      setEditingDevice(null);
       setTillMsg("Device details saved.");
       await load();
     } catch (err) {
@@ -2240,40 +2261,7 @@ function StoresPage() {
                     borderBottom: "1px solid var(--line)",
                   }}
                 >
-                  {editingDeviceId === dev.id ? (
-                    <div style={{ display: "grid", gap: 8 }}>
-                      <div className="field" style={{ margin: 0 }}>
-                        <label htmlFor={`dev-label-${dev.id}`}>Device name</label>
-                        <input
-                          id={`dev-label-${dev.id}`}
-                          value={editingDeviceLabel}
-                          onChange={(e) => setEditingDeviceLabel(e.target.value)}
-                        />
-                      </div>
-                      <div className="field" style={{ margin: 0 }}>
-                        <label htmlFor={`dev-note-${dev.id}`}>Support note</label>
-                        <input
-                          id={`dev-note-${dev.id}`}
-                          placeholder="e.g. Patio iPad — Guided Access on"
-                          value={editingDeviceNote}
-                          onChange={(e) => setEditingDeviceNote(e.target.value)}
-                        />
-                      </div>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        <button type="button" onClick={() => void saveDevice(dev.id)}>
-                          Save
-                        </button>
-                        <button
-                          type="button"
-                          className="secondary"
-                          onClick={() => setEditingDeviceId(null)}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-start" }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-start" }}>
                       <span
                         title={dev.online ? "Online" : "Offline"}
                         style={{
@@ -2303,9 +2291,8 @@ function StoresPage() {
                         type="button"
                         className="secondary"
                         onClick={() => {
-                          setEditingDeviceId(dev.id);
-                          setEditingDeviceLabel(dev.label);
-                          setEditingDeviceNote(dev.supportNote ?? "");
+                          setEditingDevice(dev);
+                          setDeviceForm({ label: dev.label, supportNote: dev.supportNote ?? "" });
                         }}
                       >
                         Edit
@@ -2326,7 +2313,6 @@ function StoresPage() {
                         Remove
                       </button>
                     </div>
-                  )}
                 </li>
               ))}
             </ul>
@@ -2361,30 +2347,7 @@ function StoresPage() {
                 borderBottom: "1px solid var(--line)",
               }}
             >
-              {editingId === reg.id ? (
-                <>
-                  <input
-                    value={editingName}
-                    onChange={(e) => setEditingName(e.target.value)}
-                    style={{ flex: "1 1 160px", minWidth: 140 }}
-                    aria-label="Till name"
-                  />
-                  <button type="button" onClick={() => void saveRegisterName(reg.id)}>
-                    Save
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => {
-                      setEditingId(null);
-                      setEditingName("");
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </>
-              ) : (
-                <>
+              <>
                   <span
                     title={reg.online ? "Online" : "Offline"}
                     style={{
@@ -2435,11 +2398,11 @@ function StoresPage() {
                         type="button"
                         className="secondary"
                         onClick={() => {
-                          setEditingId(reg.id);
-                          setEditingName(reg.name);
+                          setEditingRegister(reg);
+                          setRegisterFormName(reg.name);
                         }}
                       >
-                        Rename
+                        Edit
                       </button>
                       <button
                         type="button"
@@ -2458,8 +2421,7 @@ function StoresPage() {
                       </button>
                     </>
                   )}
-                </>
-              )}
+              </>
             </li>
             );
           })}
@@ -2562,6 +2524,56 @@ function StoresPage() {
           {branchMsg && <p style={{ marginBottom: 0 }}>{branchMsg}</p>}
         </form>
       )}
+
+      <BoEditSheet
+        open={Boolean(editingRegister)}
+        onClose={() => setEditingRegister(null)}
+        title={editingRegister ? `Edit till · ${editingRegister.name}` : ""}
+      >
+        {editingRegister && (
+          <form onSubmit={(e) => void saveRegisterName(e)}>
+            <div className="field">
+              <label htmlFor="till-edit-name">Till name</label>
+              <input
+                id="till-edit-name"
+                required
+                value={registerFormName}
+                onChange={(e) => setRegisterFormName(e.target.value)}
+              />
+            </div>
+            <button type="submit">Save till</button>
+          </form>
+        )}
+      </BoEditSheet>
+
+      <BoEditSheet
+        open={Boolean(editingDevice)}
+        onClose={() => setEditingDevice(null)}
+        title={editingDevice ? `Edit device · ${editingDevice.label}` : ""}
+      >
+        {editingDevice && (
+          <form onSubmit={(e) => void saveDevice(e)}>
+            <div className="field">
+              <label htmlFor="dev-edit-label">Device name</label>
+              <input
+                id="dev-edit-label"
+                value={deviceForm.label}
+                onChange={(e) => setDeviceForm({ ...deviceForm, label: e.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="dev-edit-note">Support note</label>
+              <input
+                id="dev-edit-note"
+                placeholder="e.g. Patio iPad — Guided Access on"
+                value={deviceForm.supportNote}
+                onChange={(e) => setDeviceForm({ ...deviceForm, supportNote: e.target.value })}
+              />
+            </div>
+            <button type="submit">Save device</button>
+          </form>
+        )}
+      </BoEditSheet>
     </div>
   );
 }
@@ -3038,7 +3050,7 @@ function SettingsPage() {
     store: StoreDetails;
     orderingHost: string;
     receipt: { header: string; footer: string; showTaxBreakdown: boolean; printCustomer: boolean };
-    taxes: { id: string; name: string; rateBps: number; enabled: boolean }[];
+    taxes: { id: string; name: string; rateBps: number; enabled: boolean; inclusive: boolean }[];
     paymentTypes: { id: string; name: string; type: string; enabled: boolean; opensDrawer: boolean }[];
   } | null>(null);
   const [billing, setBilling] = useState<{
@@ -3051,8 +3063,25 @@ function SettingsPage() {
   } | null>(null);
   const [billingMsg, setBillingMsg] = useState("");
   const [receipt, setReceipt] = useState({ header: "", footer: "", printCustomer: true });
-  const [taxForm, setTaxForm] = useState({ name: "VAT", rate: "20" });
-  const [ptForm, setPtForm] = useState({ name: "", type: "other" });
+  const [editingTax, setEditingTax] = useState<
+    { id: string; name: string; rateBps: number; enabled: boolean; inclusive: boolean } | "new" | null
+  >(null);
+  const [taxEditForm, setTaxEditForm] = useState({
+    name: "VAT",
+    rate: "20",
+    inclusive: false,
+    enabled: true,
+  });
+  const [editingPay, setEditingPay] = useState<
+    { id: string; name: string; type: string; enabled: boolean; opensDrawer: boolean } | "new" | null
+  >(null);
+  const [payEditForm, setPayEditForm] = useState({
+    name: "",
+    type: "other",
+    enabled: true,
+    opensDrawer: false,
+  });
+  const [settingsMsg, setSettingsMsg] = useState("");
   const [pilotMsg, setPilotMsg] = useState("");
   const [backupMsg, setBackupMsg] = useState("");
   const [backupBusy, setBackupBusy] = useState(false);
@@ -3089,6 +3118,124 @@ function SettingsPage() {
   useEffect(() => {
     void load();
   }, []);
+
+  function openTaxEdit(t: NonNullable<typeof settings>["taxes"][number]) {
+    setEditingTax(t);
+    setTaxEditForm({
+      name: t.name,
+      rate: (t.rateBps / 100).toFixed(2),
+      inclusive: t.inclusive,
+      enabled: t.enabled,
+    });
+  }
+
+  function openTaxAdd() {
+    setEditingTax("new");
+    setTaxEditForm({ name: "VAT", rate: "20", inclusive: false, enabled: true });
+  }
+
+  async function saveTaxEdit(e: React.FormEvent) {
+    e.preventDefault();
+    setSettingsMsg("");
+    const rateBps = Math.round(parseFloat(taxEditForm.rate) * 100);
+    if (!taxEditForm.name.trim() || !Number.isFinite(rateBps)) {
+      setSettingsMsg("Tax name and rate are required.");
+      return;
+    }
+    try {
+      const payload = {
+        name: taxEditForm.name.trim(),
+        rateBps,
+        inclusive: taxEditForm.inclusive,
+        enabled: taxEditForm.enabled,
+      };
+      if (editingTax === "new") {
+        await api("/settings/taxes", { method: "POST", body: JSON.stringify(payload) });
+      } else if (editingTax) {
+        await api(`/settings/taxes/${editingTax.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+      }
+      setEditingTax(null);
+      await load();
+    } catch (err) {
+      setSettingsMsg(err instanceof Error ? err.message : "Could not save tax");
+    }
+  }
+
+  async function deleteTax() {
+    if (!editingTax || editingTax === "new") return;
+    if (!window.confirm(`Delete tax ${editingTax.name}?`)) return;
+    setSettingsMsg("");
+    try {
+      await api(`/settings/taxes/${editingTax.id}`, { method: "DELETE" });
+      setEditingTax(null);
+      await load();
+    } catch (err) {
+      setSettingsMsg(err instanceof Error ? err.message : "Could not delete tax");
+    }
+  }
+
+  function openPayEdit(p: NonNullable<typeof settings>["paymentTypes"][number]) {
+    setEditingPay(p);
+    setPayEditForm({
+      name: p.name,
+      type: p.type,
+      enabled: p.enabled,
+      opensDrawer: p.opensDrawer,
+    });
+  }
+
+  function openPayAdd() {
+    setEditingPay("new");
+    setPayEditForm({ name: "", type: "other", enabled: true, opensDrawer: false });
+  }
+
+  async function savePayEdit(e: React.FormEvent) {
+    e.preventDefault();
+    setSettingsMsg("");
+    if (!payEditForm.name.trim()) {
+      setSettingsMsg("Payment type name is required.");
+      return;
+    }
+    try {
+      if (editingPay === "new") {
+        await api("/settings/payment-types", {
+          method: "POST",
+          body: JSON.stringify({
+            name: payEditForm.name.trim(),
+            type: payEditForm.type,
+            enabled: payEditForm.enabled,
+            opensDrawer: payEditForm.opensDrawer,
+          }),
+        });
+      } else if (editingPay) {
+        await api(`/settings/payment-types/${editingPay.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            name: payEditForm.name.trim(),
+            enabled: payEditForm.enabled,
+            opensDrawer: payEditForm.opensDrawer,
+          }),
+        });
+      }
+      setEditingPay(null);
+      await load();
+    } catch (err) {
+      setSettingsMsg(err instanceof Error ? err.message : "Could not save payment type");
+    }
+  }
+
+  async function deletePay() {
+    if (!editingPay || editingPay === "new") return;
+    if (!window.confirm(`Delete payment type ${editingPay.name}?`)) return;
+    setSettingsMsg("");
+    try {
+      await api(`/settings/payment-types/${editingPay.id}`, { method: "DELETE" });
+      setEditingPay(null);
+      await load();
+    } catch (err) {
+      setSettingsMsg(err instanceof Error ? err.message : "Could not delete payment type");
+    }
+  }
 
   if (!settings) return <p>Loading…</p>;
 
@@ -3450,9 +3597,20 @@ function SettingsPage() {
         <button type="submit">Save receipt</button>
       </form>
 
+      {settingsMsg && (
+        <p className="panel-box" style={{ marginBottom: 12, color: "var(--muted)" }}>
+          {settingsMsg}
+        </p>
+      )}
+
       <div className="grid-2">
         <div className="panel-box">
-          <h3>Taxes</h3>
+          <div className="page-head" style={{ marginBottom: 8 }}>
+            <h3 style={{ margin: 0 }}>Taxes</h3>
+            <button type="button" onClick={openTaxAdd}>
+              Add tax
+            </button>
+          </div>
           <table>
             <thead>
               <tr>
@@ -3465,70 +3623,37 @@ function SettingsPage() {
             <tbody>
               {settings.taxes.map((t) => (
                 <tr key={t.id}>
-                  <td>{t.name}</td>
+                  <td>
+                    {t.name}
+                    {t.inclusive && <span className="badge" style={{ marginLeft: 6 }}>Inclusive</span>}
+                  </td>
                   <td>{(t.rateBps / 100).toFixed(2)}%</td>
                   <td>{t.enabled ? "Yes" : "No"}</td>
-                  <td style={{ whiteSpace: "nowrap" }}>
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() =>
-                        void api(`/settings/taxes/${t.id}`, {
-                          method: "PATCH",
-                          body: JSON.stringify({ enabled: !t.enabled }),
-                        }).then(() => load())
-                      }
-                    >
-                      {t.enabled ? "Disable" : "Enable"}
-                    </button>{" "}
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() => {
-                        if (!window.confirm(`Delete tax ${t.name}?`)) return;
-                        void api(`/settings/taxes/${t.id}`, { method: "DELETE" }).then(() => load());
-                      }}
-                    >
-                      Delete
+                  <td>
+                    <button type="button" className="secondary" onClick={() => openTaxEdit(t)}>
+                      Edit
                     </button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <form
-            style={{ marginTop: 12 }}
-            onSubmit={(e) => {
-              e.preventDefault();
-              void api("/settings/taxes", {
-                method: "POST",
-                body: JSON.stringify({
-                  name: taxForm.name,
-                  rateBps: Math.round(parseFloat(taxForm.rate) * 100),
-                }),
-              }).then(() => load());
-            }}
-          >
-            <div className="field">
-              <label>Name</label>
-              <input value={taxForm.name} onChange={(e) => setTaxForm({ ...taxForm, name: e.target.value })} />
-            </div>
-            <div className="field">
-              <label>Rate %</label>
-              <input value={taxForm.rate} onChange={(e) => setTaxForm({ ...taxForm, rate: e.target.value })} />
-            </div>
-            <button type="submit">Add tax</button>
-          </form>
         </div>
 
         <div className="panel-box">
-          <h3>Payment types</h3>
+          <div className="page-head" style={{ marginBottom: 8 }}>
+            <h3 style={{ margin: 0 }}>Payment types</h3>
+            <button type="button" onClick={openPayAdd}>
+              Add payment type
+            </button>
+          </div>
           <table>
             <thead>
               <tr>
                 <th>Name</th>
                 <th>Type</th>
                 <th>Drawer</th>
+                <th>Enabled</th>
                 <th />
               </tr>
             </thead>
@@ -3538,61 +3663,135 @@ function SettingsPage() {
                   <td>{p.name}</td>
                   <td>{p.type}</td>
                   <td>{p.opensDrawer ? "Yes" : "No"}</td>
-                  <td style={{ whiteSpace: "nowrap" }}>
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() =>
-                        void api(`/settings/payment-types/${p.id}`, {
-                          method: "PATCH",
-                          body: JSON.stringify({ enabled: !p.enabled }),
-                        }).then(() => load())
-                      }
-                    >
-                      {p.enabled ? "Disable" : "Enable"}
-                    </button>{" "}
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() => {
-                        if (!window.confirm(`Delete payment type ${p.name}?`)) return;
-                        void api(`/settings/payment-types/${p.id}`, { method: "DELETE" }).then(() => load());
-                      }}
-                    >
-                      Delete
+                  <td>{p.enabled ? "Yes" : "No"}</td>
+                  <td>
+                    <button type="button" className="secondary" onClick={() => openPayEdit(p)}>
+                      Edit
                     </button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <form
-            style={{ marginTop: 12 }}
-            onSubmit={(e) => {
-              e.preventDefault();
-              void api("/settings/payment-types", {
-                method: "POST",
-                body: JSON.stringify(ptForm),
-              }).then(() => load());
-            }}
-          >
+        </div>
+      </div>
+
+      <BoEditSheet
+        open={editingTax !== null}
+        onClose={() => setEditingTax(null)}
+        title={editingTax === "new" ? "Add tax" : editingTax ? `Edit · ${editingTax.name}` : ""}
+      >
+        {editingTax !== null && (
+          <form onSubmit={(e) => void saveTaxEdit(e)}>
             <div className="field">
               <label>Name</label>
-              <input value={ptForm.name} onChange={(e) => setPtForm({ ...ptForm, name: e.target.value })} required />
+              <input
+                required
+                value={taxEditForm.name}
+                onChange={(e) => setTaxEditForm({ ...taxEditForm, name: e.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label>Rate %</label>
+              <input
+                required
+                value={taxEditForm.rate}
+                onChange={(e) => setTaxEditForm({ ...taxEditForm, rate: e.target.value })}
+              />
+            </div>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+              <input
+                type="checkbox"
+                checked={taxEditForm.inclusive}
+                onChange={(e) => setTaxEditForm({ ...taxEditForm, inclusive: e.target.checked })}
+              />
+              Prices include this tax (inclusive)
+            </label>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16 }}>
+              <input
+                type="checkbox"
+                checked={taxEditForm.enabled}
+                onChange={(e) => setTaxEditForm({ ...taxEditForm, enabled: e.target.checked })}
+              />
+              Enabled on till
+            </label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="submit">{editingTax === "new" ? "Add tax" : "Save tax"}</button>
+              {editingTax !== "new" && (
+                <button type="button" className="danger" onClick={() => void deleteTax()}>
+                  Delete
+                </button>
+              )}
+            </div>
+          </form>
+        )}
+      </BoEditSheet>
+
+      <BoEditSheet
+        open={editingPay !== null}
+        onClose={() => setEditingPay(null)}
+        title={editingPay === "new" ? "Add payment type" : editingPay ? `Edit · ${editingPay.name}` : ""}
+      >
+        {editingPay !== null && (
+          <form onSubmit={(e) => void savePayEdit(e)}>
+            <div className="field">
+              <label>Name</label>
+              <input
+                required
+                value={payEditForm.name}
+                onChange={(e) => setPayEditForm({ ...payEditForm, name: e.target.value })}
+              />
             </div>
             <div className="field">
               <label>Type</label>
-              <select value={ptForm.type} onChange={(e) => setPtForm({ ...ptForm, type: e.target.value })}>
-                <option value="cash">Cash</option>
-                <option value="card">Card</option>
-                <option value="other">Other</option>
-                <option value="store_credit">Store credit</option>
-              </select>
+              {editingPay === "new" ? (
+                <select
+                  value={payEditForm.type}
+                  onChange={(e) => {
+                    const type = e.target.value;
+                    setPayEditForm({
+                      ...payEditForm,
+                      type,
+                      opensDrawer: type === "cash" ? true : payEditForm.opensDrawer,
+                    });
+                  }}
+                >
+                  <option value="cash">Cash</option>
+                  <option value="card">Card</option>
+                  <option value="other">Other</option>
+                  <option value="store_credit">Store credit</option>
+                </select>
+              ) : (
+                <input value={payEditForm.type} readOnly aria-readonly />
+              )}
             </div>
-            <button type="submit">Add payment type</button>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+              <input
+                type="checkbox"
+                checked={payEditForm.opensDrawer}
+                onChange={(e) => setPayEditForm({ ...payEditForm, opensDrawer: e.target.checked })}
+              />
+              Opens cash drawer when used
+            </label>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16 }}>
+              <input
+                type="checkbox"
+                checked={payEditForm.enabled}
+                onChange={(e) => setPayEditForm({ ...payEditForm, enabled: e.target.checked })}
+              />
+              Enabled on till
+            </label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="submit">{editingPay === "new" ? "Add payment type" : "Save payment type"}</button>
+              {editingPay !== "new" && (
+                <button type="button" className="danger" onClick={() => void deletePay()}>
+                  Delete
+                </button>
+              )}
+            </div>
           </form>
-        </div>
-      </div>
+        )}
+      </BoEditSheet>
     </div>
   );
 }
