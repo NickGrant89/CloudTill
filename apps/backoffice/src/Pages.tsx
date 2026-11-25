@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, getToken, money, setToken } from "./api";
+import { sortItemGroups, sortTillMenuItems } from "@cloudtill/shared";
 import { applyReorder, DragGrip, GiftCardsPage, ModifierEditor, ModifierLibrary, TimeClockPage } from "./MorePages";
 import { KitchenPage, PrintersPage } from "./KitchenPrinters";
 import { EodPage, ImportPage, LabelsPage, StocktakePage } from "./ExtrasPages";
@@ -378,7 +379,7 @@ function CatalogPage() {
       }>("/catalog/items/store-presence").catch(() => null),
     ]);
     setItems(its);
-    setCategories([...cats].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name)));
+    setCategories(sortItemGroups(cats));
     if (presence) {
       setCurrentStoreId(presence.currentStoreId);
       setBranchStores(presence.stores);
@@ -436,17 +437,20 @@ function CatalogPage() {
   const groupName = (categoryId: string | null) =>
     categoryId ? categories.find((c) => c.id === categoryId)?.name ?? "Group" : "Ungrouped";
 
-  const filtered = items.filter((i) => {
-    if (groupFilter === "none" && i.categoryId) return false;
-    if (groupFilter !== "all" && groupFilter !== "none" && i.categoryId !== groupFilter) return false;
-    if (!q) return true;
-    const needle = q.toLowerCase();
-    return (
-      i.name.toLowerCase().includes(needle) ||
-      groupName(i.categoryId).toLowerCase().includes(needle) ||
-      i.variants.some((v) => v.sku.toLowerCase().includes(needle))
-    );
-  });
+  const filtered = useMemo(() => {
+    const list = items.filter((i) => {
+      if (groupFilter === "none" && i.categoryId) return false;
+      if (groupFilter !== "all" && groupFilter !== "none" && i.categoryId !== groupFilter) return false;
+      if (!q) return true;
+      const needle = q.toLowerCase();
+      return (
+        i.name.toLowerCase().includes(needle) ||
+        groupName(i.categoryId).toLowerCase().includes(needle) ||
+        i.variants.some((v) => v.sku.toLowerCase().includes(needle))
+      );
+    });
+    return groupFilter === "all" ? sortTillMenuItems(list, categories) : list;
+  }, [items, groupFilter, q, categories]);
 
   async function createItem(e: React.FormEvent) {
     e.preventDefault();

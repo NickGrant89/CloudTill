@@ -25,7 +25,7 @@ catalogRouter.use(requireAuth);
 catalogRouter.get("/categories", async (req: AuthedRequest, res) => {
   const cats = await prisma.category.findMany({
     where: { storeId: req.user!.storeId },
-    orderBy: { sortOrder: "asc" },
+    orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
   });
   res.json(cats);
 });
@@ -141,7 +141,7 @@ catalogRouter.get("/items", async (req: AuthedRequest, res) => {
       },
       kitComponents: true,
     },
-    orderBy: { name: "asc" },
+    orderBy: [{ category: { sortOrder: "asc" } }, { name: "asc" }],
   });
 
   const levels = await prisma.inventoryLevel.findMany({ where: { storeId } });

@@ -67,7 +67,7 @@ publicOrderingRouter.get("/stores/:slug/menu", async (req, res) => {
   if (!store) return res.status(404).json({ error: "Store not found" });
 
   const [categories, items, tax, settings, soldOut, popular] = await Promise.all([
-    prisma.category.findMany({ where: { storeId: store.id }, orderBy: { sortOrder: "asc" } }),
+    prisma.category.findMany({ where: { storeId: store.id }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
     prisma.item.findMany({
       where: { storeId: store.id, active: true },
       include: {
@@ -79,7 +79,7 @@ publicOrderingRouter.get("/stores/:slug/menu", async (req, res) => {
           },
         },
       },
-      orderBy: { name: "asc" },
+      orderBy: [{ category: { sortOrder: "asc" } }, { name: "asc" }],
     }),
     prisma.tax.findFirst({ where: { storeId: store.id, enabled: true } }),
     readOrderingSettings(store.id),

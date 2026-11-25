@@ -4,6 +4,9 @@ import {
   modifierListPriceCents,
   pizzaSizeInchesFromSelection,
   priceModifierPicks,
+  sortItemGroups,
+  sortTillFavoriteItems,
+  sortTillMenuItems,
   tillPizzaModGroupLabel,
   visiblePizzaModifierGroups,
 } from "@cloudtill/shared";
@@ -31,6 +34,7 @@ interface Category {
   id: string;
   name: string;
   color: string;
+  sortOrder?: number;
 }
 
 interface Modifier {
@@ -363,7 +367,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
       api<{ clockedIn: boolean }>("/time-clock/status"),
       api<Item[]>("/extras/favorites"),
     ]);
-    if (cats.status === "fulfilled") setCategories(cats.value);
+    if (cats.status === "fulfilled") setCategories(sortItemGroups(cats.value));
     if (its.status === "fulfilled") setItems(its.value);
     if (pts.status === "fulfilled") setPaymentTypes(pts.value);
     if (sett.status === "fulfilled") {
@@ -389,7 +393,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
     } else {
       const cached = await loadCatalogSnapshot();
       if (cached) {
-        setCategories(cached.categories as Category[]);
+        setCategories(sortItemGroups(cached.categories as Category[]));
         setItems(cached.items as Item[]);
         setPaymentTypes(cached.paymentTypes as PaymentType[]);
         if (cached.settings) setSettings(cached.settings as typeof settings);
@@ -516,7 +520,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
   }, [registerId]);
 
   const filtered = useMemo(() => {
-    return items.filter((item) => {
+    const list = items.filter((item) => {
       if (categoryId !== "all" && item.categoryId !== categoryId) return false;
       if (!query.trim()) return true;
       const q = query.toLowerCase();
@@ -527,7 +531,13 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
         )
       );
     });
-  }, [items, categoryId, query]);
+    return categoryId === "all" ? sortTillMenuItems(list, categories) : list;
+  }, [items, categoryId, query, categories]);
+
+  const sortedFavorites = useMemo(
+    () => sortTillFavoriteItems(favorites, categories, favorites.map((item) => item.id)),
+    [favorites, categories]
+  );
 
   function openModifierMenu(item: Item) {
     const initial: Record<string, Modifier[]> = {};
@@ -1569,7 +1579,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
       setBusy(false);
     }
   }
-  const visibleItems = showFavorites && favorites.length ? favorites : filtered;
+  const visibleItems = showFavorites && favorites.length ? sortedFavorites : filtered;
   const visibleModifierGroups = useMemo(() => {
     if (!modifierItem) return [];
     return visiblePizzaModifierGroups(modifierItem.name, modifierItem.modifierGroups, selectedMods);
