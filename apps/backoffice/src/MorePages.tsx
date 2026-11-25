@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, money } from "./api";
 
-function applyReorder<T>(list: T[], from: number, to: number): T[] | null {
+export function applyReorder<T>(list: T[], from: number, to: number): T[] | null {
   if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return null;
   const next = [...list];
   const [row] = next.splice(from, 1);
@@ -10,7 +10,7 @@ function applyReorder<T>(list: T[], from: number, to: number): T[] | null {
 }
 
 /** Pointer drag grip — works on iPad (HTML5 drag-and-drop does not). */
-function DragGrip({
+export function DragGrip({
   index,
   listLength,
   group,

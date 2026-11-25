@@ -34,10 +34,36 @@ catalogRouter.post("/categories", requireRole("owner", "manager"), async (req: A
   const body = z
     .object({ name: z.string().min(1), color: z.string().optional(), sortOrder: z.number().optional() })
     .parse(req.body);
+  const count = await prisma.category.count({ where: { storeId: req.user!.storeId } });
   const cat = await prisma.category.create({
-    data: { storeId: req.user!.storeId, name: body.name, color: body.color ?? "#2F6F4E", sortOrder: body.sortOrder ?? 0 },
+    data: {
+      storeId: req.user!.storeId,
+      name: body.name,
+      color: body.color ?? "#2F6F4E",
+      sortOrder: body.sortOrder ?? count,
+    },
   });
   res.status(201).json(cat);
+});
+
+catalogRouter.post("/categories/order", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const body = z.object({ categoryIds: z.array(z.string().min(1)).min(1).max(200) }).parse(req.body);
+  if (await rejectForeign(res, "category", body.categoryIds, req.user!.storeId)) return;
+  const unique = [...new Set(body.categoryIds)];
+  if (unique.length !== body.categoryIds.length) {
+    return res.status(400).json({ error: "Duplicate group ids in order list." });
+  }
+  const owned = await prisma.category.findMany({
+    where: { storeId: req.user!.storeId, id: { in: unique } },
+    select: { id: true },
+  });
+  if (owned.length !== unique.length) {
+    return res.status(400).json({ error: "One or more groups were not found." });
+  }
+  for (let index = 0; index < body.categoryIds.length; index += 1) {
+    await prisma.category.update({ where: { id: body.categoryIds[index] }, data: { sortOrder: index } });
+  }
+  res.json({ ok: true, count: body.categoryIds.length });
 });
 
 catalogRouter.patch("/categories/:id", owned("category"), requireRole("owner", "manager"), async (req: AuthedRequest, res) => {

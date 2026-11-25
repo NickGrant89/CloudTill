@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, getToken, money, setToken } from "./api";
-import { GiftCardsPage, ModifierEditor, ModifierLibrary, TimeClockPage } from "./MorePages";
+import { applyReorder, DragGrip, GiftCardsPage, ModifierEditor, ModifierLibrary, TimeClockPage } from "./MorePages";
 import { KitchenPage, PrintersPage } from "./KitchenPrinters";
 import { EodPage, ImportPage, LabelsPage, StocktakePage } from "./ExtrasPages";
 
@@ -323,7 +323,7 @@ function CatalogPage() {
       modifierGroups: { id: string; name: string; modifiers: { name: string }[] }[];
     }[]
   >([]);
-  const [categories, setCategories] = useState<{ id: string; name: string; color?: string }[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string; color?: string; sortOrder?: number }[]>([]);
   const [q, setQ] = useState("");
   const [groupFilter, setGroupFilter] = useState<string | "all" | "none">("all");
   const [showForm, setShowForm] = useState(false);
@@ -377,7 +377,7 @@ function CatalogPage() {
       }>("/catalog/items/store-presence").catch(() => null),
     ]);
     setItems(its);
-    setCategories(cats);
+    setCategories([...cats].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name)));
     if (presence) {
       setCurrentStoreId(presence.currentStoreId);
       setBranchStores(presence.stores);
@@ -562,6 +562,30 @@ function CatalogPage() {
     }
   }
 
+  async function saveGroupOrder(ordered: { id: string }[]) {
+    setGroupBusy(true);
+    setGroupMsg("");
+    try {
+      await api("/catalog/categories/order", {
+        method: "POST",
+        body: JSON.stringify({ categoryIds: ordered.map((c) => c.id) }),
+      });
+      setGroupMsg("Group order saved — till chips follow this order.");
+      await load();
+    } catch (err) {
+      setGroupMsg(err instanceof Error ? err.message : "Could not reorder groups");
+    } finally {
+      setGroupBusy(false);
+    }
+  }
+
+  async function reorderGroups(from: number, to: number) {
+    const next = applyReorder(categories, from, to);
+    if (!next) return;
+    setCategories(next);
+    await saveGroupOrder(next);
+  }
+
   async function deleteGroup(categoryId: string) {
     const count = itemCountInGroup(categoryId);
     const cat = categories.find((c) => c.id === categoryId);
@@ -629,7 +653,7 @@ function CatalogPage() {
         <form className="panel-box" onSubmit={(e) => void createGroup(e)}>
           <h3>Item groups</h3>
           <p style={{ color: "var(--muted)", marginTop: 0 }}>
-            Groups organise the menu (Drinks, Food, Retail…). Same groups appear as chips on the till.
+            Groups organise the menu (Drinks, Food, Retail…). Drag to reorder — the till uses the same chip order.
           </p>
           <div className="toolbar" style={{ marginBottom: 12 }}>
             <input
@@ -644,15 +668,20 @@ function CatalogPage() {
           </div>
           {groupMsg && <p style={{ color: "var(--muted)" }}>{groupMsg}</p>}
           {categories.length === 0 ? (
-            <p style={{ color: "var(--muted)" }}>No groups till — add one above.</p>
+            <p style={{ color: "var(--muted)" }}>No groups yet — add one above.</p>
           ) : (
-            <ul className="item-group-list" style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}>
-              {categories.map((c) => {
+            <ul
+              data-drag-group="item-groups"
+              className="item-group-list"
+              style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}
+            >
+              {categories.map((c, groupIndex) => {
                 const count = itemCountInGroup(c.id);
                 const deleting = deleteGroupId === c.id;
                 return (
                   <li
                     key={c.id}
+                    data-drag-index={groupIndex}
                     style={{
                       display: "flex",
                       flexDirection: "column",
@@ -663,6 +692,15 @@ function CatalogPage() {
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      {categories.length > 1 && renamingGroupId !== c.id && !deleting && (
+                        <DragGrip
+                          index={groupIndex}
+                          listLength={categories.length}
+                          group="item-groups"
+                          label={c.name}
+                          onDrop={(from, to) => void reorderGroups(from, to)}
+                        />
+                      )}
                       {renamingGroupId === c.id ? (
                         <>
                           <input
