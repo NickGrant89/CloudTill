@@ -863,31 +863,69 @@ function CatalogPage() {
         <span style={{ color: "var(--muted)" }}>{filtered.length} items</span>
       </div>
 
-      <div className="chip-row" role="tablist" aria-label="Filter by group" style={{ marginBottom: 12 }}>
-        <button
-          type="button"
-          className={`chip${groupFilter === "all" ? " active" : ""}`}
-          onClick={() => setGroupFilter("all")}
-        >
-          All
-        </button>
-        <button
-          type="button"
-          className={`chip${groupFilter === "none" ? " active" : ""}`}
-          onClick={() => setGroupFilter("none")}
-        >
-          Ungrouped
-        </button>
-        {categories.map((c) => (
+      <div className="items-group-filters" style={{ marginBottom: 12 }}>
+        <div className="items-group-filter-mobile">
+          <div className="items-group-filter-quick" role="group" aria-label="Quick filters">
+            <button
+              type="button"
+              className={`chip${groupFilter === "all" ? " active" : ""}`}
+              onClick={() => setGroupFilter("all")}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              className={`chip${groupFilter === "none" ? " active" : ""}`}
+              onClick={() => setGroupFilter("none")}
+            >
+              Ungrouped
+            </button>
+          </div>
+          <label className="items-group-filter-select-field">
+            <span className="items-group-filter-label">Filter group</span>
+            <select
+              aria-label="Filter by group"
+              value={groupFilter === "all" || groupFilter === "none" ? "" : groupFilter}
+              onChange={(e) => {
+                const next = e.target.value;
+                setGroupFilter(next ? next : "all");
+              }}
+            >
+              <option value="">All groups (overview)</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="chip-row items-group-filters-chips" role="tablist" aria-label="Filter by group">
           <button
-            key={c.id}
             type="button"
-            className={`chip${groupFilter === c.id ? " active" : ""}`}
-            onClick={() => setGroupFilter(c.id)}
+            className={`chip${groupFilter === "all" ? " active" : ""}`}
+            onClick={() => setGroupFilter("all")}
           >
-            {c.name}
+            All
           </button>
-        ))}
+          <button
+            type="button"
+            className={`chip${groupFilter === "none" ? " active" : ""}`}
+            onClick={() => setGroupFilter("none")}
+          >
+            Ungrouped
+          </button>
+          {categories.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              className={`chip${groupFilter === c.id ? " active" : ""}`}
+              onClick={() => setGroupFilter(c.id)}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
       </div>
 
       {editItem && (
