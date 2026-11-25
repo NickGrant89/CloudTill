@@ -517,9 +517,55 @@ catalogRouter.patch("/items/:id", owned("item"), requireRole("owner", "manager")
   res.json(full);
 });
 
-catalogRouter.delete("/items/:id", owned("item"), requireRole("owner", "manager"), async (req, res) => {
-  await prisma.item.update({ where: { id: req.params.id }, data: { active: false } });
-  res.status(204).end();
+catalogRouter.delete("/items/:id", owned("item"), requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const id = String(req.params.id);
+  const item = await prisma.item.findFirst({
+    where: { id, storeId: req.user!.storeId },
+    include: { variants: { select: { id: true } } },
+  });
+  if (!item) return res.status(404).json({ error: "Item not found" });
+
+  const variantIds = item.variants.map((v) => v.id);
+  const sales =
+    variantIds.length > 0
+      ? await prisma.saleLine.count({ where: { variantId: { in: variantIds } } })
+      : 0;
+
+  if (sales > 0) {
+    await prisma.item.update({ where: { id }, data: { active: false } });
+    await prisma.variant.updateMany({ where: { itemId: id }, data: { active: false } });
+    return res.json({
+      ok: true,
+      deactivated: true,
+      message: `${item.name} has sales history — hidden from till and items list`,
+    });
+  }
+
+  if (variantIds.length > 0) {
+    const openTicketLines = await prisma.ticketLine.count({
+      where: {
+        variantId: { in: variantIds },
+        ticket: { storeId: req.user!.storeId, status: { in: ["open", "held"] } },
+      },
+    });
+    if (openTicketLines > 0) {
+      return res.status(400).json({ error: "Item is on an open ticket — remove it on the till first" });
+    }
+
+    const kitUse = await prisma.kitComponent.count({
+      where: {
+        OR: [{ parentItemId: id }, { componentVarId: { in: variantIds } }],
+      },
+    });
+    if (kitUse > 0) {
+      return res.status(400).json({ error: "Item is used in a kit — remove it from the kit first" });
+    }
+
+    await prisma.ticketLine.deleteMany({ where: { variantId: { in: variantIds } } });
+  }
+
+  await prisma.item.delete({ where: { id } });
+  res.json({ ok: true, deleted: true, message: `${item.name} deleted` });
 });
 
 catalogRouter.get("/modifier-sets", async (req: AuthedRequest, res) => {

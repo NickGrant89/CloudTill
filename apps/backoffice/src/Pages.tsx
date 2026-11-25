@@ -346,6 +346,7 @@ function CatalogPage() {
     trackStock: true,
   });
   const [pizzaMsg, setPizzaMsg] = useState("");
+  const [itemMsg, setItemMsg] = useState("");
   const [pizzaBusy, setPizzaBusy] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [branchStores, setBranchStores] = useState<{ id: string; name: string; slug?: string }[]>([]);
@@ -499,6 +500,29 @@ function CatalogPage() {
     await load();
   }
 
+  async function removeItem(item: (typeof items)[number]) {
+    if (
+      !window.confirm(
+        `Delete ${item.name}? If it has sales history it will be hidden from the till instead of removed permanently.`
+      )
+    ) {
+      return;
+    }
+    setItemMsg("");
+    try {
+      const result = await api<{ deactivated?: boolean; deleted?: boolean; message?: string }>(`/catalog/items/${item.id}`, {
+        method: "DELETE",
+      });
+      setEditItem((cur) => (cur?.id === item.id ? null : cur));
+      setEditMods((cur) => (cur?.id === item.id ? null : cur));
+      setSelectedIds((prev) => prev.filter((id) => id !== item.id));
+      setItemMsg(result.message || (result.deactivated ? `${item.name} hidden from till.` : `${item.name} deleted.`));
+      await load();
+    } catch (err) {
+      setItemMsg(err instanceof Error ? err.message : "Could not delete item");
+    }
+  }
+
   async function addPizzaMenu() {
     setPizzaBusy(true);
     setPizzaMsg("");
@@ -648,6 +672,7 @@ function CatalogPage() {
         </div>
       </div>
       {pizzaMsg && <p style={{ color: "var(--muted)" }}>{pizzaMsg}</p>}
+      {itemMsg && <p className="panel-box" style={{ marginBottom: 12 }}>{itemMsg}</p>}
 
       {showGroups && (
         <form className="panel-box" onSubmit={(e) => void createGroup(e)}>
@@ -918,6 +943,9 @@ function CatalogPage() {
             >
               Edit options
             </button>
+            <button type="button" className="secondary" onClick={() => void removeItem(editItem)}>
+              Delete
+            </button>
           </div>
         </form>
       )}
@@ -1048,6 +1076,9 @@ function CatalogPage() {
                       onClick={() => setEditMods({ id: item.id, name: item.name })}
                     >
                       Options
+                    </button>
+                    <button type="button" className="secondary" onClick={() => void removeItem(item)}>
+                      Delete
                     </button>
                   </td>
                 </tr>
