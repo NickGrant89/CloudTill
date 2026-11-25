@@ -46,9 +46,41 @@ catalogRouter.patch("/categories/:id", owned("category"), requireRole("owner", "
   res.json(cat);
 });
 
-catalogRouter.delete("/categories/:id", owned("category"), requireRole("owner", "manager"), async (req, res) => {
-  await prisma.category.delete({ where: { id: req.params.id } });
-  res.status(204).end();
+catalogRouter.delete("/categories/:id", owned("category"), requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const body = z
+    .object({
+      moveToCategoryId: z.string().min(1).nullable().optional(),
+    })
+  .parse(req.body ?? {});
+
+  const categoryId = req.params.id;
+  const itemCount = await prisma.item.count({
+    where: { storeId: req.user!.storeId, categoryId, active: true },
+  });
+
+  if (itemCount > 0) {
+    if (body.moveToCategoryId === undefined) {
+      return res.status(400).json({
+        error: `This group has ${itemCount} item${itemCount === 1 ? "" : "s"}. Pick another group to move them to, or pass moveToCategoryId: null to leave ungrouped.`,
+        itemCount,
+      });
+    }
+    const moveTo = body.moveToCategoryId;
+    if (moveTo && moveTo === categoryId) {
+      return res.status(400).json({ error: "Choose a different group to move items into." });
+    }
+    if (moveTo) {
+      const target = await prisma.category.findFirst({ where: { id: moveTo, storeId: req.user!.storeId } });
+      if (!target) return res.status(400).json({ error: "Target group not found." });
+    }
+    await prisma.item.updateMany({
+      where: { storeId: req.user!.storeId, categoryId },
+      data: { categoryId: moveTo },
+    });
+  }
+
+  await prisma.category.delete({ where: { id: categoryId } });
+  res.json({ ok: true, movedItems: itemCount, targetCategoryId: body.moveToCategoryId ?? null });
 });
 
 catalogRouter.get("/items", async (req: AuthedRequest, res) => {

@@ -331,6 +331,10 @@ function CatalogPage() {
   const [newGroupName, setNewGroupName] = useState("");
   const [groupBusy, setGroupBusy] = useState(false);
   const [groupMsg, setGroupMsg] = useState("");
+  const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
+  const [renameGroupValue, setRenameGroupValue] = useState("");
+  const [deleteGroupId, setDeleteGroupId] = useState<string | null>(null);
+  const [deleteMoveToId, setDeleteMoveToId] = useState("");
   const [editMods, setEditMods] = useState<{ id: string; name: string } | null>(null);
   const [editItem, setEditItem] = useState<(typeof items)[number] | null>(null);
   const [editForm, setEditForm] = useState({
@@ -533,6 +537,73 @@ function CatalogPage() {
     }
   }
 
+  function itemCountInGroup(categoryId: string) {
+    return items.filter((i) => i.categoryId === categoryId).length;
+  }
+
+  async function renameGroup(categoryId: string, name: string) {
+    const cleaned = name.trim();
+    if (!cleaned) return;
+    setGroupBusy(true);
+    setGroupMsg("");
+    try {
+      await api(`/catalog/categories/${categoryId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name: cleaned }),
+      });
+      setRenamingGroupId(null);
+      setRenameGroupValue("");
+      setGroupMsg(`Renamed to “${cleaned}”.`);
+      await load();
+    } catch (err) {
+      setGroupMsg(err instanceof Error ? err.message : "Could not rename group");
+    } finally {
+      setGroupBusy(false);
+    }
+  }
+
+  async function deleteGroup(categoryId: string) {
+    const count = itemCountInGroup(categoryId);
+    const cat = categories.find((c) => c.id === categoryId);
+    const label = cat?.name ?? "Group";
+    if (count > 0 && !deleteMoveToId && deleteMoveToId !== "__ungrouped__") {
+      setGroupMsg(`Pick where to move ${count} item${count === 1 ? "" : "s"} before deleting “${label}”.`);
+      return;
+    }
+  if (
+      count > 0 &&
+      !window.confirm(
+        `Delete “${label}”? ${count} item${count === 1 ? "" : "s"} will move to ${
+          deleteMoveToId === "__ungrouped__"
+            ? "Ungrouped"
+            : categories.find((c) => c.id === deleteMoveToId)?.name ?? "another group"
+        }.`
+      )
+    ) {
+      return;
+    }
+    if (count === 0 && !window.confirm(`Delete empty group “${label}”?`)) return;
+
+    setGroupBusy(true);
+    setGroupMsg("");
+    try {
+      await api(`/catalog/categories/${categoryId}`, {
+        method: "DELETE",
+        body: JSON.stringify({
+          moveToCategoryId: count > 0 ? (deleteMoveToId === "__ungrouped__" ? null : deleteMoveToId) : undefined,
+        }),
+      });
+      setDeleteGroupId(null);
+      setDeleteMoveToId("");
+      setGroupMsg(`Deleted “${label}”.`);
+      await load();
+    } catch (err) {
+      setGroupMsg(err instanceof Error ? err.message : "Could not delete group");
+    } finally {
+      setGroupBusy(false);
+    }
+  }
+
   return (
     <div>
       <div className="page-head">
@@ -573,16 +644,100 @@ function CatalogPage() {
           </div>
           {groupMsg && <p style={{ color: "var(--muted)" }}>{groupMsg}</p>}
           {categories.length === 0 ? (
-            <p style={{ color: "var(--muted)" }}>No groups yet — add one above.</p>
+            <p style={{ color: "var(--muted)" }}>No groups till — add one above.</p>
           ) : (
-            <ul style={{ margin: 0, paddingLeft: "1.1rem", color: "var(--muted)" }}>
-              {categories.map((c) => (
-                <li key={c.id}>
-                  <strong style={{ color: "var(--ink)" }}>{c.name}</strong>
-                  {" · "}
-                  {items.filter((i) => i.categoryId === c.id).length} items
-                </li>
-              ))}
+            <ul className="item-group-list" style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}>
+              {categories.map((c) => {
+                const count = itemCountInGroup(c.id);
+                const deleting = deleteGroupId === c.id;
+                return (
+                  <li
+                    key={c.id}
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 6,
+                      padding: "10px 12px",
+                      border: "1px solid var(--line)",
+                      borderRadius: 10,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      {renamingGroupId === c.id ? (
+                        <>
+                          <input
+                            value={renameGroupValue}
+                            onChange={(e) => setRenameGroupValue(e.target.value)}
+                            aria-label="Group name"
+                            style={{ flex: 1, minWidth: 140 }}
+                          />
+                          <button type="button" className="secondary" disabled={groupBusy} onClick={() => void renameGroup(c.id, renameGroupValue)}>
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary"
+                            onClick={() => {
+                              setRenamingGroupId(null);
+                              setRenameGroupValue("");
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <strong style={{ color: "var(--ink)", flex: 1 }}>{c.name}</strong>
+                          <span style={{ color: "var(--muted)", fontSize: "0.88rem" }}>
+                            {count} item{count === 1 ? "" : "s"}
+                          </span>
+                          <button
+                            type="button"
+                            className="linkish"
+                            onClick={() => {
+                              setRenamingGroupId(c.id);
+                              setRenameGroupValue(c.name);
+                            }}
+                          >
+                            Rename
+                          </button>
+                          <button
+                            type="button"
+                            className="linkish"
+                            onClick={() => {
+                              setDeleteGroupId(deleting ? null : c.id);
+                              setDeleteMoveToId("");
+                            }}
+                          >
+                            {deleting ? "Cancel" : "Delete"}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    {deleting && count > 0 && (
+                      <div className="field" style={{ margin: 0 }}>
+                        <label>Move items to</label>
+                        <select value={deleteMoveToId} onChange={(e) => setDeleteMoveToId(e.target.value)}>
+                          <option value="">Choose…</option>
+                          <option value="__ungrouped__">Ungrouped</option>
+                          {categories
+                            .filter((other) => other.id !== c.id)
+                            .map((other) => (
+                              <option key={other.id} value={other.id}>
+                                {other.name}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    )}
+                    {deleting && (
+                      <button type="button" className="secondary" disabled={groupBusy} onClick={() => void deleteGroup(c.id)}>
+                        {count > 0 ? "Move items and delete group" : "Delete empty group"}
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </form>
