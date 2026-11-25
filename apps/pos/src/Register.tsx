@@ -1,10 +1,9 @@
 import {
-  applyModifierFreeSelect,
   groupModifierLines,
   isConsolidatedPizzaItem,
-  isPizzaCyoToppingGroup,
+  modifierListPriceCents,
   pizzaSizeInchesFromSelection,
-  pizzaSizedToppingPriceCents,
+  priceModifierPicks,
   tillPizzaModGroupLabel,
   visiblePizzaModifierGroups,
 } from "@cloudtill/shared";
@@ -50,41 +49,15 @@ interface ModGroup {
 }
 
 function priceSelectedModifiers(item: Item, selectedMods: Record<string, Modifier[]>) {
-  const groupRules = item.modifierGroups.map((group) => ({
-    id: group.id,
-    name: group.name,
-    freeSelect: group.freeSelect ?? 0,
-  }));
-  const sizeInches = isConsolidatedPizzaItem(item.name)
-    ? pizzaSizeInchesFromSelection(item.modifierGroups, selectedMods)
-    : null;
-  const listPriceByModifierId = new Map(
-    item.modifierGroups.flatMap((group) =>
-      group.modifiers.map((mod) => {
-        let list = mod.priceCents;
-        if (list <= 0 && sizeInches && isPizzaCyoToppingGroup(group.name)) {
-          list = pizzaSizedToppingPriceCents(sizeInches);
-        }
-        return [mod.id, list] as const;
-      })
-    )
+  const picks = item.modifierGroups.flatMap((group) =>
+    (selectedMods[group.id] ?? []).map((option) => ({
+      modifierId: option.id,
+      name: option.name,
+      groupId: group.id,
+      groupName: group.name,
+    }))
   );
-  const raw = item.modifierGroups.flatMap((group) =>
-    (selectedMods[group.id] ?? []).map((option) => {
-      let priceCents = option.priceCents;
-      if (priceCents <= 0 && sizeInches && isPizzaCyoToppingGroup(group.name)) {
-        priceCents = pizzaSizedToppingPriceCents(sizeInches);
-      }
-      return {
-        modifierId: option.id,
-        name: option.name,
-        priceCents,
-        groupId: group.id,
-        groupName: group.name,
-      };
-    })
-  );
-  return applyModifierFreeSelect(raw, listPriceByModifierId, groupRules);
+  return priceModifierPicks(item.name, item.modifierGroups, picks);
 }
 
 interface Item {
@@ -1868,10 +1841,12 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                           modifierItem && isConsolidatedPizzaItem(modifierItem.name)
                             ? pizzaSizeInchesFromSelection(modifierItem.modifierGroups, selectedMods)
                             : null;
-                        let listPrice = option.priceCents;
-                        if (listPrice <= 0 && sizeInches && isPizzaCyoToppingGroup(activeModGroup.name)) {
-                          listPrice = pizzaSizedToppingPriceCents(sizeInches);
-                        }
+                        const listPrice = modifierListPriceCents(
+                          option.priceCents,
+                          activeModGroup.name,
+                          modifierItem.name,
+                          sizeInches
+                        );
                         if (!listPrice) return "Included";
                         if (selected) {
                           const charged = chargedByModifierId.get(option.id);

@@ -40,7 +40,10 @@ export function visiblePizzaModifierGroups<
 
 export function isPizzaCyoToppingGroup(groupName: string): boolean {
   const n = groupName.trim().toLowerCase();
-  return n.includes("cyo half & half") || n.includes("create your own (4 x free");
+  return (
+    n.includes("cyo half & half") ||
+    n.includes("create your own") && n.includes("free topping")
+  );
 }
 
 /** G&A Loyverse extra-topping pence by size when CYO options are listed at £0. */

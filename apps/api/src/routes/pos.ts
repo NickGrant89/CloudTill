@@ -233,7 +233,7 @@ posRouter.post("/tickets/:id/lines", owned("ticket"), async (req: AuthedRequest,
       name: variant.item.name + (variant.name !== "Regular" ? ` (${variant.name})` : ""),
       quantity: body.quantity,
       unitPriceCents: variant.priceCents,
-      modifiersJson: JSON.stringify(await orderStoredModifiers(body.modifiers ?? [])),
+      modifiersJson: JSON.stringify(await orderStoredModifiers(body.modifiers ?? [], { variantId: variant.id })),
       note: body.note,
     },
   });
@@ -263,12 +263,19 @@ posRouter.patch("/tickets/:id/lines/:lineId", owned("ticket"), owned("ticketLine
     return;
   }
   const { modifiers, ...rest } = body;
+  const lineRow = modifiers
+    ? await prisma.ticketLine.findUnique({ where: { id: String(req.params.lineId) }, select: { variantId: true } })
+    : null;
   await prisma.ticketLine.update({
     where: { id: String(req.params.lineId) },
     data: {
       ...rest,
       ...(modifiers
-        ? { modifiersJson: JSON.stringify(await orderStoredModifiers(modifiers)) }
+        ? {
+            modifiersJson: JSON.stringify(
+              await orderStoredModifiers(modifiers, lineRow ? { variantId: lineRow.variantId } : undefined)
+            ),
+          }
         : {}),
     },
   });
@@ -728,7 +735,9 @@ posRouter.post("/offline-sales", async (req: AuthedRequest, res) => {
       lines: {
         create: await Promise.all(
           body.lines.map(async (line) => {
-            const modifiers = await orderStoredModifiers(line.modifiers);
+            const modifiers = await orderStoredModifiers(line.modifiers, {
+              variantId: line.variantId ?? undefined,
+            });
             const modSum = modifiers.reduce((s, m) => s + m.priceCents, 0);
             return {
               variantId: line.variantId,

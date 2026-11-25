@@ -890,9 +890,14 @@ function CatalogPage() {
         <form className="panel-box" onSubmit={(e) => void saveEdit(e)}>
           <div className="page-head" style={{ marginBottom: 12 }}>
             <h3 style={{ margin: 0 }}>Edit · {editItem.name}</h3>
-            <button type="button" className="secondary" onClick={() => setEditItem(null)}>
-              Close
-            </button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="button" className="danger" onClick={() => void removeItem(editItem)}>
+                Delete item
+              </button>
+              <button type="button" className="secondary" onClick={() => setEditItem(null)}>
+                Close
+              </button>
+            </div>
           </div>
           <div className="grid-2">
             <div className="field">
@@ -931,7 +936,7 @@ function CatalogPage() {
             />
             Track stock
           </label>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
             <button type="submit">Save item</button>
             <button
               type="button"
@@ -943,8 +948,8 @@ function CatalogPage() {
             >
               Edit options
             </button>
-            <button type="button" className="secondary" onClick={() => void removeItem(editItem)}>
-              Delete
+            <button type="button" className="danger" onClick={() => void removeItem(editItem)}>
+              Delete item
             </button>
           </div>
         </form>
@@ -1077,7 +1082,7 @@ function CatalogPage() {
                     >
                       Options
                     </button>
-                    <button type="button" className="secondary" onClick={() => void removeItem(item)}>
+                    <button type="button" className="danger" onClick={() => void removeItem(item)}>
                       Delete
                     </button>
                   </td>
