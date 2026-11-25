@@ -425,6 +425,12 @@ tr:last-child td {
   padding: 0;
 }
 
+.bo-edit-layer--desktop {
+  justify-content: center;
+  align-items: center;
+  padding: max(20px, env(safe-area-inset-top)) 24px max(20px, env(safe-area-inset-bottom));
+}
+
 .bo-edit-backdrop {
   position: absolute;
   inset: 0;
@@ -470,10 +476,12 @@ tr:last-child td {
   margin-bottom: 10px;
 }
 
-@media (min-width: 701px) {
-  .bo-edit-sheet:not(.bo-edit-layer .bo-edit-sheet) {
-    margin-top: 16px;
-  }
+.bo-edit-layer--desktop .bo-edit-sheet {
+  width: min(560px, 100%);
+  max-height: min(88vh, 760px);
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  box-shadow: 0 24px 64px rgba(18, 24, 22, 0.22);
 }
 
 .btn-file {

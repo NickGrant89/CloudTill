@@ -20,18 +20,27 @@ function usePhoneLayout() {
   return phone;
 }
 
-/** Desktop: inline panel. Phone: bottom sheet over the list (no jump to page top). */
+/** Always modal: phone = bottom sheet, desktop = centred dialog — list stays put. */
 export function BoEditSheet({ open, onClose, title, children }: BoEditSheetProps) {
   const phone = usePhoneLayout();
 
   useEffect(() => {
-    if (!open || !phone) return;
+    if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = prev;
     };
-  }, [open, phone]);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
 
   if (!open) return null;
 
@@ -47,15 +56,16 @@ export function BoEditSheet({ open, onClose, title, children }: BoEditSheetProps
     </div>
   );
 
-  if (phone) {
-    return createPortal(
-      <div className="bo-edit-layer" role="dialog" aria-modal="true" aria-label={title}>
-        <button type="button" className="bo-edit-backdrop" tabIndex={-1} aria-label="Dismiss" onClick={onClose} />
-        {sheet}
-      </div>,
-      document.body
-    );
-  }
-
-  return sheet;
+  return createPortal(
+    <div
+      className={`bo-edit-layer${phone ? "" : " bo-edit-layer--desktop"}`}
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
+      <button type="button" className="bo-edit-backdrop" tabIndex={-1} aria-label="Dismiss" onClick={onClose} />
+      {sheet}
+    </div>,
+    document.body
+  );
 }
