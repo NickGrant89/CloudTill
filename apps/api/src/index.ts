@@ -30,6 +30,12 @@ import { syncModifierGroupSortOrders } from "./modifierFolders.js";
 import { orderingHostMiddleware } from "./orderingHost.js";
 
 const app = express();
+
+/** Express 4 does not forward rejections from async handlers to the error middleware. */
+process.on("unhandledRejection", (reason) => {
+  console.error("unhandledRejection", reason);
+});
+
 const PORT = Number(process.env.PORT || 4000);
 const HOST = process.env.HOST || "0.0.0.0";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -74,7 +80,7 @@ app.get("/api/health", async (_req, res) => {
     product: process.env.PRODUCT_NAME || "PurePOS",
     legalName: process.env.PRODUCT_LEGAL || "PurePOS UK",
     domain: process.env.PRODUCT_DOMAIN || "purepos.co.uk",
-    version: "0.10.73",
+    version: "0.10.74",
     database,
     storeCount,
     time: new Date().toISOString(),

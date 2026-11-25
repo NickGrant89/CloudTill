@@ -4,6 +4,7 @@ import { prisma } from "../db.js";
 import { checkPin, requireAuth, requireRole, signToken, type AuthedRequest } from "../auth.js";
 import type { Role } from "@cloudtill/shared";
 import { companyStoreIds, DEMO_COMPANY, sameCompany } from "../company.js";
+import { parseBody } from "../parse.js";
 import {
   BILLING_LICENSE_KEY,
   BILLING_LICENSE_LAST_KEY,
@@ -56,16 +57,17 @@ async function session(emp: EmployeeRow, storeId = emp.storeId) {
   };
 }
 
+const loginBodySchema = z.object({
+  email: z.string().email().optional(),
+  pin: z.string().min(4).max(8),
+  storeId: z.string().optional(),
+  /** backoffice = email+PIN owners/managers only; pos = till PIN login */
+  client: z.enum(["backoffice", "pos"]).optional(),
+});
+
 authRouter.post("/login", async (req, res) => {
-  const body = z
-    .object({
-      email: z.string().email().optional(),
-      pin: z.string().min(4).max(8),
-      storeId: z.string().optional(),
-      /** backoffice = email+PIN owners/managers only; pos = till PIN login */
-      client: z.enum(["backoffice", "pos"]).optional(),
-    })
-    .parse(req.body);
+  const body = parseBody(loginBodySchema, req.body, res);
+  if (!body) return;
 
   const paired = body.storeId
     ? await prisma.store.findUnique({ where: { id: body.storeId }, select: { id: true, companyKey: true } })
