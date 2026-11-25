@@ -28,6 +28,7 @@ import { backfillCompanyKeys } from "./company.js";
 import { migrateBillingEntitlements } from "./routes/billing.js";
 import { syncModifierGroupSortOrders } from "./modifierFolders.js";
 import { orderingHostMiddleware } from "./orderingHost.js";
+import { installAsyncHandlers } from "./expressAsync.js";
 
 const app = express();
 
@@ -80,7 +81,7 @@ app.get("/api/health", async (_req, res) => {
     product: process.env.PRODUCT_NAME || "PurePOS",
     legalName: process.env.PRODUCT_LEGAL || "PurePOS UK",
     domain: process.env.PRODUCT_DOMAIN || "purepos.co.uk",
-    version: "0.10.74",
+    version: "0.10.75",
     database,
     storeCount,
     time: new Date().toISOString(),
@@ -137,6 +138,35 @@ mountSpa("/pos", "pos");
 mountSpa("/bo", "bo");
 mountSpa("/order", "order");
 app.use(express.static(path.join(webRoot, "marketing")));
+
+const apiRouters = [
+  authRouter,
+  catalogRouter,
+  posRouter,
+  shiftsRouter,
+  inventoryRouter,
+  customersRouter,
+  employeesRouter,
+  salesRouter,
+  reportsRouter,
+  settingsRouter,
+  giftCardsRouter,
+  timeClockRouter,
+  publicOrderingRouter,
+  publicBillingRouter,
+  publicDeliveryRouter,
+  publicTextPayRouter,
+  billingRouter,
+  adminRouter,
+  backupRouter,
+  kitchenRouter,
+  deliveryRouter,
+  textPayRouter,
+  printersRouter,
+  extrasRouter,
+  importRouter,
+];
+for (const r of apiRouters) installAsyncHandlers(r);
 
 app.use("/api/auth", authRouter);
 app.use("/api/catalog", catalogRouter);

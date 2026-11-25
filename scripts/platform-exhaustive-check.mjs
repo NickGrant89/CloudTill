@@ -106,15 +106,15 @@ async function main() {
     ["Back office", "GET shifts", "/shifts"],
     ["Back office", "GET gift-cards", "/gift-cards"],
     ["Back office", "GET inventory", "/inventory/levels"],
-    ["Till API", "GET catalog", "/pos/catalog"],
+    ["Till API", "GET catalog items", "/catalog/items"],
     ["Till API", "GET payment types", "/pos/payment-types"],
-    ["Till API", "GET registers", "/pos/registers"],
-    ["Kitchen", "GET board", "/kitchen/board"],
-    ["Ordering", "GET public menu", "/public/menu?store=demo-cafe"],
+    ["Till API", "GET tickets", "/pos/tickets"],
+    ["Kitchen", "GET orders", "/kitchen/orders"],
+    ["Ordering", "GET public menu", "/public/stores/demo-cafe/menu"],
     ["Stores", "GET auth/stores", "/auth/stores"],
     ["Devices", "GET devices", "/employees/devices"],
     ["Devices", "GET registers", "/employees/registers"],
-    ["Import", "GET loyverse status", "/import/loyverse"],
+    ["Import", "POST loyverse preview invalid", "/import/loyverse/preview"],
     ["Extras", "GET tickets-board", "/extras/tickets-board"],
   ];
 
@@ -128,10 +128,17 @@ async function main() {
   }
 
   try {
-    await http("GET", "/public/menu?store=demo-cafe");
-    record("Ordering", "public menu no auth", "pass");
+    await http("POST", "/pos/tickets", { token, body: {}, expect: 400 });
+    record("Till API", "POST ticket invalid (no crash)", "pass");
   } catch (e) {
-    record("Ordering", "public menu", "fail", e.message);
+    record("Till API", "POST ticket invalid", "fail", e.message);
+  }
+
+  try {
+    await http("POST", "/import/loyverse/preview", { token, body: {}, expect: 400 });
+    record("Import", "Loyverse preview validation", "pass");
+  } catch (e) {
+    record("Import", "Loyverse preview validation", "fail", e.message);
   }
 
   try {
