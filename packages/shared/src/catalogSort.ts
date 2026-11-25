@@ -28,6 +28,35 @@ export function sortTillMenuItems<T extends TillItemLike>(items: T[], groups: It
 }
 
 /** Quick keys: same group order, keep favourite sequence within each group. */
+export type TillMenuSection<T extends TillItemLike> = {
+  id: string;
+  name: string;
+  items: T[];
+};
+
+/** Section headers in Manage groups order; items A–Z within each section. */
+export function buildTillMenuSections<T extends TillItemLike>(
+  items: T[],
+  groups: (ItemGroupLike & { name: string })[]
+): TillMenuSection<T>[] {
+  const inGroup = new Set(groups.map((group) => group.id));
+  const sections: TillMenuSection<T>[] = [];
+  for (const group of sortItemGroups(groups)) {
+    const sectionItems = items
+      .filter((item) => item.categoryId === group.id)
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+    if (!sectionItems.length) continue;
+    sections.push({ id: group.id, name: group.name, items: sectionItems });
+  }
+  const ungrouped = items
+    .filter((item) => !item.categoryId || !inGroup.has(item.categoryId))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  if (ungrouped.length) {
+    sections.push({ id: "__ungrouped__", name: "Ungrouped", items: ungrouped });
+  }
+  return sections;
+}
+
 export function sortTillFavoriteItems<T extends TillItemLike>(
   items: T[],
   groups: ItemGroupLike[],

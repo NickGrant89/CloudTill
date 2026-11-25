@@ -4,6 +4,7 @@ import {
   modifierListPriceCents,
   pizzaSizeInchesFromSelection,
   priceModifierPicks,
+  buildTillMenuSections,
   sortItemGroups,
   sortTillFavoriteItems,
   sortTillMenuItems,
@@ -519,8 +520,10 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
     })();
   }, [registerId]);
 
-  const filtered = useMemo(() => {
-    const list = items.filter((item) => {
+  const sectionedAllGroups = !showFavorites && categoryId === "all";
+
+  const itemsMatchingFilter = useMemo(() => {
+    return items.filter((item) => {
       if (categoryId !== "all" && item.categoryId !== categoryId) return false;
       if (!query.trim()) return true;
       const q = query.toLowerCase();
@@ -531,8 +534,18 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
         )
       );
     });
-    return categoryId === "all" ? sortTillMenuItems(list, categories) : list;
-  }, [items, categoryId, query, categories]);
+  }, [items, categoryId, query]);
+
+  const filtered = useMemo(() => {
+    if (categoryId === "all" && sectionedAllGroups) return itemsMatchingFilter;
+    if (categoryId === "all") return sortTillMenuItems(itemsMatchingFilter, categories);
+    return itemsMatchingFilter;
+  }, [itemsMatchingFilter, categoryId, categories, sectionedAllGroups]);
+
+  const menuSections = useMemo(() => {
+    if (!sectionedAllGroups) return [];
+    return buildTillMenuSections(itemsMatchingFilter, categories);
+  }, [sectionedAllGroups, itemsMatchingFilter, categories]);
 
   const sortedFavorites = useMemo(
     () => sortTillFavoriteItems(favorites, categories, favorites.map((item) => item.id)),
@@ -1580,6 +1593,23 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
     }
   }
   const visibleItems = showFavorites && favorites.length ? sortedFavorites : filtered;
+
+  function renderItemTile(item: Item) {
+    return (
+      <button
+        key={item.id}
+        type="button"
+        className="item-tile"
+        style={{ backgroundColor: item.color }}
+        onClick={() => void addItem(item)}
+      >
+        <span className="name">{item.name}</span>
+        <span className="price">
+          {isConsolidatedPizzaItem(item.name) ? `from ${money(800)}` : money(item.variants[0]?.priceCents ?? 0)}
+        </span>
+      </button>
+    );
+  }
   const visibleModifierGroups = useMemo(() => {
     if (!modifierItem) return [];
     return visiblePizzaModifierGroups(modifierItem.name, modifierItem.modifierGroups, selectedMods);
@@ -1832,9 +1862,9 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
             )}
           </div>
           {catalogError && <p className="banner">{catalogError}</p>}
+          {modifierItem && activeModGroup ? (
           <div className="grid">
-            {modifierItem && activeModGroup ? (
-              activeModGroup.modifiers.map((option) => {
+              {activeModGroup.modifiers.map((option) => {
                 const selected = (selectedMods[activeModGroup.id] ?? []).some((picked) => picked.id === option.id);
                 return (
                   <button
@@ -1868,28 +1898,34 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                     </span>
                   </button>
                 );
-              })
-            ) : (
-              <>
-                {!menuReady && <p className="empty">Loading menu…</p>}
-                {menuReady && visibleItems.length === 0 && <p className="empty">Nothing in this group.</p>}
-                {visibleItems.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="item-tile"
-                    style={{ backgroundColor: item.color }}
-                    onClick={() => void addItem(item)}
-                  >
-                    <span className="name">{item.name}</span>
-                    <span className="price">
-                      {isConsolidatedPizzaItem(item.name) ? `from ${money(800)}` : money(item.variants[0]?.priceCents ?? 0)}
-                    </span>
-                  </button>
-                ))}
-              </>
-            )}
+              })}
           </div>
+          ) : sectionedAllGroups ? (
+            <div className="menu-sections" role="list">
+              {!menuReady && <p className="empty">Loading menu…</p>}
+              {menuReady && menuSections.length === 0 && <p className="empty">Nothing in this group.</p>}
+              {menuSections.map((section) => {
+                const groupColor = categories.find((c) => c.id === section.id)?.color;
+                return (
+                  <section key={section.id} className="menu-section" role="listitem" aria-label={section.name}>
+                    <h3
+                      className="menu-section-title"
+                      style={groupColor ? { borderLeftColor: groupColor } : undefined}
+                    >
+                      {section.name}
+                    </h3>
+                    <div className="menu-section-grid">{section.items.map((item) => renderItemTile(item))}</div>
+                  </section>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="grid">
+              {!menuReady && <p className="empty">Loading menu…</p>}
+              {menuReady && visibleItems.length === 0 && <p className="empty">Nothing in this group.</p>}
+              {visibleItems.map((item) => renderItemTile(item))}
+            </div>
+          )}
           {modifierItem && (
             <div className="modifier-bar">
               <div>
