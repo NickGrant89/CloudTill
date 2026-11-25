@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, getToken, money, setToken } from "./api";
 import { sortItemGroups, sortTillMenuItems } from "@cloudtill/shared";
+import { BoEditSheet } from "./BoEditSheet";
 import { applyReorder, DragGrip, GiftCardsPage, ModifierEditor, ModifierLibrary, TimeClockPage } from "./MorePages";
 import { KitchenPage, PrintersPage } from "./KitchenPrinters";
 import { EodPage, ImportPage, LabelsPage, StocktakePage } from "./ExtrasPages";
@@ -928,75 +929,6 @@ function CatalogPage() {
         </div>
       </div>
 
-      {editItem && (
-        <form className="panel-box" onSubmit={(e) => void saveEdit(e)}>
-          <div className="page-head" style={{ marginBottom: 12 }}>
-            <h3 style={{ margin: 0 }}>Edit · {editItem.name}</h3>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button type="button" className="danger" onClick={() => void removeItem(editItem)}>
-                Delete item
-              </button>
-              <button type="button" className="secondary" onClick={() => setEditItem(null)}>
-                Close
-              </button>
-            </div>
-          </div>
-          <div className="grid-2">
-            <div className="field">
-              <label>Name</label>
-              <input required value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
-            </div>
-            <div className="field">
-              <label>Group</label>
-              <select value={editForm.categoryId} onChange={(e) => setEditForm({ ...editForm, categoryId: e.target.value })}>
-                <option value="">Ungrouped</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label>Price</label>
-              <input value={editForm.price} onChange={(e) => setEditForm({ ...editForm, price: e.target.value })} />
-            </div>
-            <div className="field">
-              <label>SKU</label>
-              <input value={editForm.sku} onChange={(e) => setEditForm({ ...editForm, sku: e.target.value })} />
-            </div>
-            <div className="field">
-              <label>Barcode</label>
-              <input value={editForm.barcode} onChange={(e) => setEditForm({ ...editForm, barcode: e.target.value })} />
-            </div>
-          </div>
-          <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
-            <input
-              type="checkbox"
-              checked={editForm.trackStock}
-              onChange={(e) => setEditForm({ ...editForm, trackStock: e.target.checked })}
-            />
-            Track stock
-          </label>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            <button type="submit">Save item</button>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => {
-                setEditMods({ id: editItem.id, name: editForm.name });
-                setEditItem(null);
-              }}
-            >
-              Edit options
-            </button>
-            <button type="button" className="danger" onClick={() => void removeItem(editItem)}>
-              Delete item
-            </button>
-          </div>
-        </form>
-      )}
-
       {editMods && (
         <ModifierEditor itemId={editMods.id} itemName={editMods.name} onClose={() => { setEditMods(null); void load(); }} />
       )}
@@ -1134,6 +1066,70 @@ function CatalogPage() {
           </tbody>
         </table>
       </div>
+
+      <BoEditSheet
+        open={Boolean(editItem)}
+        onClose={() => setEditItem(null)}
+        title={editItem ? `Edit · ${editItem.name}` : ""}
+      >
+        {editItem && (
+          <form onSubmit={(e) => void saveEdit(e)}>
+            <div className="grid-2">
+              <div className="field">
+                <label>Name</label>
+                <input required value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>Group</label>
+                <select value={editForm.categoryId} onChange={(e) => setEditForm({ ...editForm, categoryId: e.target.value })}>
+                  <option value="">Ungrouped</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>Price</label>
+                <input value={editForm.price} onChange={(e) => setEditForm({ ...editForm, price: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>SKU</label>
+                <input value={editForm.sku} onChange={(e) => setEditForm({ ...editForm, sku: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>Barcode</label>
+                <input value={editForm.barcode} onChange={(e) => setEditForm({ ...editForm, barcode: e.target.value })} />
+              </div>
+            </div>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+              <input
+                type="checkbox"
+                checked={editForm.trackStock}
+                onChange={(e) => setEditForm({ ...editForm, trackStock: e.target.checked })}
+              />
+              Track stock
+            </label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <button type="submit">Save item</button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  setEditMods({ id: editItem.id, name: editForm.name });
+                  setEditItem(null);
+                }}
+              >
+                Edit options
+              </button>
+              <button type="button" className="danger" onClick={() => void removeItem(editItem)}>
+                Delete item
+              </button>
+            </div>
+          </form>
+        )}
+      </BoEditSheet>
     </div>
   );
 }
@@ -1585,49 +1581,6 @@ function CustomersPage() {
         <button type="submit">Add</button>
       </form>
 
-      {editing && (
-        <form className="panel-box" onSubmit={(e) => void saveEdit(e)}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
-            <h3 style={{ margin: 0 }}>Edit · {editing.name}</h3>
-            <button type="button" className="secondary" onClick={() => setEditing(null)}>
-              Cancel
-            </button>
-          </div>
-          <div className="grid-2" style={{ marginTop: 12 }}>
-            <div className="field">
-              <label>Name</label>
-              <input required value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
-            </div>
-            <div className="field">
-              <label>Email</label>
-              <input value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
-            </div>
-            <div className="field">
-              <label>Phone</label>
-              <input value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
-            </div>
-            <div className="field">
-              <label>Store credit (£)</label>
-              <input value={editForm.storeCreditCents} onChange={(e) => setEditForm({ ...editForm, storeCreditCents: e.target.value })} />
-            </div>
-            <div className="field">
-              <label>Loyalty points</label>
-              <input value={editForm.loyaltyPoints} onChange={(e) => setEditForm({ ...editForm, loyaltyPoints: e.target.value })} />
-            </div>
-            <div className="field">
-              <label>Note</label>
-              <input value={editForm.note} onChange={(e) => setEditForm({ ...editForm, note: e.target.value })} />
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button type="submit">Save changes</button>
-            <button type="button" className="secondary" onClick={() => void removeCustomer(editing)}>
-              Delete
-            </button>
-          </div>
-        </form>
-      )}
-
       <div className="grid-2">
         <div className="table-wrap">
           <table>
@@ -1686,6 +1639,49 @@ function CustomersPage() {
           )}
         </div>
       </div>
+
+      <BoEditSheet
+        open={Boolean(editing)}
+        onClose={() => setEditing(null)}
+        title={editing ? `Edit · ${editing.name}` : ""}
+      >
+        {editing && (
+          <form onSubmit={(e) => void saveEdit(e)}>
+            <div className="grid-2">
+              <div className="field">
+                <label>Name</label>
+                <input required value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>Email</label>
+                <input value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>Phone</label>
+                <input value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>Store credit (£)</label>
+                <input value={editForm.storeCreditCents} onChange={(e) => setEditForm({ ...editForm, storeCreditCents: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>Loyalty points</label>
+                <input value={editForm.loyaltyPoints} onChange={(e) => setEditForm({ ...editForm, loyaltyPoints: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>Note</label>
+                <input value={editForm.note} onChange={(e) => setEditForm({ ...editForm, note: e.target.value })} />
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="submit">Save changes</button>
+              <button type="button" className="secondary" onClick={() => void removeCustomer(editing)}>
+                Delete
+              </button>
+            </div>
+          </form>
+        )}
+      </BoEditSheet>
     </div>
   );
 }
@@ -1831,64 +1827,6 @@ function EmployeesPage() {
         <button type="submit">Add</button>
       </form>
 
-      {editing && (
-        <form className="panel-box" onSubmit={(e) => void saveEdit(e)}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
-            <h3 style={{ margin: 0 }}>Edit · {editing.name}</h3>
-            <button type="button" className="secondary" onClick={() => setEditing(null)}>
-              Cancel
-            </button>
-          </div>
-          <div className="grid-2" style={{ marginTop: 12 }}>
-            <div className="field">
-              <label>Name</label>
-              <input required value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
-            </div>
-            <div className="field">
-              <label>Email</label>
-              <input required type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
-            </div>
-            <div className="field">
-              <label>New PIN (leave blank to keep)</label>
-              <input
-                type="password"
-                inputMode="numeric"
-                autoComplete="new-password"
-                minLength={4}
-                maxLength={8}
-                value={editForm.pin}
-                onChange={(e) => setEditForm({ ...editForm, pin: e.target.value })}
-                placeholder="••••"
-              />
-            </div>
-            <div className="field">
-              <label>Role</label>
-              <select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}>
-                <option value="cashier">Cashier</option>
-                <option value="manager">Manager</option>
-                <option value="owner">Owner</option>
-              </select>
-            </div>
-            <div className="field">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={editForm.active}
-                  onChange={(e) => setEditForm({ ...editForm, active: e.target.checked })}
-                />{" "}
-                Active (can sign in)
-              </label>
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button type="submit">Save changes</button>
-            <button type="button" className="secondary" onClick={() => void removeEmp(editing)}>
-              Delete
-            </button>
-          </div>
-        </form>
-      )}
-
       <div className="table-wrap">
         <table>
           <thead>
@@ -1933,6 +1871,64 @@ function EmployeesPage() {
           </tbody>
         </table>
       </div>
+
+      <BoEditSheet
+        open={Boolean(editing)}
+        onClose={() => setEditing(null)}
+        title={editing ? `Edit · ${editing.name}` : ""}
+      >
+        {editing && (
+          <form onSubmit={(e) => void saveEdit(e)}>
+            <div className="grid-2">
+              <div className="field">
+                <label>Name</label>
+                <input required value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>Email</label>
+                <input required type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>New PIN (leave blank to keep)</label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="new-password"
+                  minLength={4}
+                  maxLength={8}
+                  value={editForm.pin}
+                  onChange={(e) => setEditForm({ ...editForm, pin: e.target.value })}
+                  placeholder="••••"
+                />
+              </div>
+              <div className="field">
+                <label>Role</label>
+                <select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}>
+                  <option value="cashier">Cashier</option>
+                  <option value="manager">Manager</option>
+                  <option value="owner">Owner</option>
+                </select>
+              </div>
+              <div className="field">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={editForm.active}
+                    onChange={(e) => setEditForm({ ...editForm, active: e.target.checked })}
+                  />{" "}
+                  Active (can sign in)
+                </label>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="submit">Save changes</button>
+              <button type="button" className="secondary" onClick={() => void removeEmp(editing)}>
+                Delete
+              </button>
+            </div>
+          </form>
+        )}
+      </BoEditSheet>
     </div>
   );
 }

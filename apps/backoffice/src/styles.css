@@ -415,6 +415,67 @@ tr:last-child td {
   font-size: 1rem;
 }
 
+.bo-edit-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 0;
+}
+
+.bo-edit-backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  margin: 0;
+  padding: 0;
+  background: rgba(18, 24, 22, 0.45);
+  cursor: default;
+}
+
+.bo-edit-sheet {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  max-height: min(88dvh, 720px);
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 16px 16px 0 0;
+  border-bottom: none;
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+}
+
+.bo-edit-sheet-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  position: sticky;
+  top: 0;
+  background: #fff;
+  padding-bottom: 8px;
+  z-index: 1;
+}
+
+.bo-edit-sheet-head h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  min-width: 0;
+}
+
+.bo-edit-sheet-body .field {
+  margin-bottom: 10px;
+}
+
+@media (min-width: 701px) {
+  .bo-edit-sheet:not(.bo-edit-layer .bo-edit-sheet) {
+    margin-top: 16px;
+  }
+}
+
 .btn-file {
   display: inline-flex;
   align-items: center;
