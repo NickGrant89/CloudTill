@@ -110,6 +110,10 @@ app.get(["/pricing", "/pricing/"], (_req, res) => {
   res.redirect(302, "/#pricing");
 });
 
+app.get(["/signup", "/signup/"], (_req, res) => {
+  res.redirect(302, "/#pricing");
+});
+
 app.get("/admin", (_req, res) => {
   res.sendFile(path.join(__dirname, "../public/admin.html"));
 });

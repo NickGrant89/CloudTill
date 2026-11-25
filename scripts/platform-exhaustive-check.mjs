@@ -114,7 +114,6 @@ async function main() {
     ["Stores", "GET auth/stores", "/auth/stores"],
     ["Devices", "GET devices", "/employees/devices"],
     ["Devices", "GET registers", "/employees/registers"],
-    ["Import", "POST loyverse preview invalid", "/import/loyverse/preview"],
     ["Extras", "GET tickets-board", "/extras/tickets-board"],
   ];
 
