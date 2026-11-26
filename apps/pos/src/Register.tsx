@@ -16,6 +16,7 @@ import {
   visiblePizzaModifierGroups,
 } from "@cloudtill/shared";
 import { HalfAndHalfWizard } from "./HalfAndHalfWizard";
+import { ModifierOptionButton } from "./ModifierOptionButton";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, getToken, loadCatalogSnapshot, money, OfflineError, saveCatalogSnapshot } from "./api";
 import type { SessionRegister, SessionStore, SessionUser } from "./App";
@@ -1884,7 +1885,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
 
       <div className={`register pane-${mobilePane}`}>
         <section
-          className={`panel catalog-panel${showHalfAndHalfWizard ? " catalog-panel--hh-wizard" : ""}${modifierItem ? " catalog-panel--options" : ""}`}
+          className={`panel catalog-panel${modifierItem ? " catalog-panel--options" : ""}`}
         >
           {showHalfAndHalfWizard && modifierItem ? (
             <HalfAndHalfWizard
@@ -1910,14 +1911,14 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
             />
           ) : modifierItem ? (
             <div className="options-picker">
-              <div className="options-picker-head">
+              <div className="options-picker-head till-options-head">
                 <div className="topbar">
                   <button type="button" className="chip" onClick={() => closeModifierPicker()}>
                     ← {editingLineKey ? "Sale" : "Menu"}
                   </button>
                   <div className="brand-mini">{editingLineKey ? `Edit · ${modifierItem.name}` : modifierItem.name}</div>
                 </div>
-                <div className="chip-row" role="tablist" aria-label="Modifier options">
+                <div className="chip-row modifier-tabs" role="tablist" aria-label="Modifier options">
                   {visibleModifierGroups.map((group) => (
                     <button
                       key={group.id}
@@ -1940,36 +1941,34 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                   <div className="grid modifier-options-grid">
                     {activeModGroup.modifiers.map((option) => {
                       const selected = (selectedMods[activeModGroup.id] ?? []).some((picked) => picked.id === option.id);
+                      const sizeInches = isConsolidatedPizzaItem(modifierItem.name)
+                        ? pizzaSizeInchesFromSelection(modifierItem.modifierGroups, selectedMods)
+                        : null;
+                      const listPrice = modifierListPriceCents(
+                        option.priceCents,
+                        activeModGroup.name,
+                        modifierItem.name,
+                        sizeInches
+                      );
+                      let priceLabel = "Included";
+                      if (listPrice) {
+                        if (selected) {
+                          const charged = chargedByModifierId.get(option.id);
+                          if (charged === 0) priceLabel = "Included";
+                          else if (charged !== undefined) priceLabel = `+${money(charged)}`;
+                          else priceLabel = `+${money(listPrice)}`;
+                        } else {
+                          priceLabel = `+${money(listPrice)}`;
+                        }
+                      }
                       return (
-                        <button
+                        <ModifierOptionButton
                           key={option.id}
-                          type="button"
-                          className={`item-tile ${selected ? "is-selected" : ""}`}
-                          style={{ backgroundColor: modifierItem.color }}
-                          onClick={() => chooseModifier(activeModGroup, option)}
-                        >
-                          <span className="name">{option.name}</span>
-                          <span className="price">
-                            {(() => {
-                              const sizeInches = isConsolidatedPizzaItem(modifierItem.name)
-                                ? pizzaSizeInchesFromSelection(modifierItem.modifierGroups, selectedMods)
-                                : null;
-                              const listPrice = modifierListPriceCents(
-                                option.priceCents,
-                                activeModGroup.name,
-                                modifierItem.name,
-                                sizeInches
-                              );
-                              if (!listPrice) return "Included";
-                              if (selected) {
-                                const charged = chargedByModifierId.get(option.id);
-                                if (charged === 0) return "Included";
-                                if (charged !== undefined) return `+${money(charged)}`;
-                              }
-                              return `+${money(listPrice)}`;
-                            })()}
-                          </span>
-                        </button>
+                          name={option.name}
+                          selected={selected}
+                          priceLabel={priceLabel}
+                          onPick={() => chooseModifier(activeModGroup, option)}
+                        />
                       );
                     })}
                   </div>

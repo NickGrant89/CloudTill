@@ -18,6 +18,7 @@ import {
 } from "@cloudtill/shared";
 import { useEffect, useMemo, useState } from "react";
 import { money } from "./api";
+import { ModifierOptionButton } from "./ModifierOptionButton";
 
 interface Modifier {
   id: string;
@@ -66,35 +67,15 @@ function firstIncompleteStep(
   return Math.max(0, steps.length - 1);
 }
 
-function OptionTile(props: {
-  item: WizardItem;
-  group: ModGroup;
-  option: Modifier;
-  selected: boolean;
-  chargedCents?: number;
-  listPrice: number;
-  onPick: () => void;
-}) {
-  const { item, option, selected, chargedCents, listPrice, onPick } = props;
-  return (
-    <button
-      type="button"
-      className={`item-tile hh-tile ${selected ? "is-selected" : ""}`}
-      style={{ backgroundColor: item.color }}
-      onClick={onPick}
-    >
-      <span className="name">{option.name}</span>
-      <span className="price">
-        {!listPrice
-          ? "Included"
-          : selected && chargedCents === 0
-            ? "Included"
-            : selected && chargedCents !== undefined
-              ? `+${money(chargedCents)}`
-              : `+${money(listPrice)}`}
-      </span>
-    </button>
-  );
+function modifierPriceLabel(
+  selected: boolean,
+  listPrice: number,
+  chargedCents: number | undefined
+): string {
+  if (!listPrice) return "Included";
+  if (selected && chargedCents === 0) return "Included";
+  if (selected && chargedCents !== undefined) return `+${money(chargedCents)}`;
+  return `+${money(listPrice)}`;
 }
 
 export function HalfAndHalfWizard(props: {
@@ -232,62 +213,63 @@ export function HalfAndHalfWizard(props: {
     const selected = (selectedMods[group.id] ?? []).some((p) => p.id === option.id);
     const listPrice = modifierListPriceCents(option.priceCents, group.name, item.name, sizeInches);
     return (
-      <OptionTile
+      <ModifierOptionButton
         key={`${group.id}-${option.id}`}
-        item={item}
-        group={group}
-        option={option}
+        name={option.name}
         selected={selected}
-        listPrice={listPrice}
-        chargedCents={chargedByModifierId.get(option.id)}
+        priceLabel={modifierPriceLabel(selected, listPrice, chargedByModifierId.get(option.id))}
         onPick={onPick}
       />
     );
   }
 
-  const canNext = currentStep ? stepComplete(currentStep.id) : false;
-  const onLastStep = stepIndex >= activeSteps.length - 1;
-
   if (!isHalfAndHalfWizardItem(item.name) || !currentStep) return null;
 
-  return (
-    <div className="hh-wizard">
-      <div className="hh-wizard-head">
-        <button type="button" className="chip" onClick={onClose}>
-          ← {editingLineKey ? "Sale" : "Menu"}
-        </button>
-        <div className="brand-mini">{editingLineKey ? `Edit · ${item.name}` : item.name}</div>
-      </div>
+  function stepTabHint(stepId: HalfAndHalfWizardStepId): string {
+    const groups = visibleGroups.filter((g) => halfAndHalfWizardStepForGroup(g.name) === stepId);
+    const minSelect = Math.max(0, ...groups.map((g) => g.minSelect));
+    const freeSelect = Math.max(0, ...groups.map((g) => g.freeSelect ?? 0));
+    let hint = "";
+    if (minSelect > 0) hint += " *";
+    if (freeSelect > 0) hint += ` · ${freeSelect} free`;
+    return hint;
+  }
 
-      <ol className="hh-steps" aria-label="Wizard progress">
-        {activeSteps.map((step, index) => (
-          <li key={step.id}>
+  return (
+    <div className="options-picker options-picker--hh">
+      <div className="options-picker-head till-options-head">
+        <div className="topbar">
+          <button type="button" className="chip" onClick={onClose}>
+            ← {editingLineKey ? "Sale" : "Menu"}
+          </button>
+          <div className="brand-mini">{editingLineKey ? `Edit · ${item.name}` : item.name}</div>
+        </div>
+        <div className="chip-row modifier-tabs" role="tablist" aria-label="Half and half options">
+          {activeSteps.map((step, index) => (
             <button
+              key={step.id}
               type="button"
-              className={`hh-step${index === stepIndex ? " is-current" : ""}${stepComplete(step.id) ? " is-done" : ""}`}
+              role="tab"
+              aria-selected={index === stepIndex}
+              className={`chip ${index === stepIndex ? "active" : ""}`}
               onClick={() => setStepIndex(index)}
             >
-              <span className="hh-step-num">{index + 1}</span>
-              <span className="hh-step-label">{step.title}</span>
+              {step.title}
+              {stepTabHint(step.id)}
             </button>
-          </li>
-        ))}
-      </ol>
-
-      <p className="hh-step-kicker">
-        Step {stepIndex + 1} · {currentStep.title} — {currentStep.subtitle}
-      </p>
-
-      {currentStep.id === "sauce" && sauceLeft && sauceRight && (
-        <div className="hh-sauce-bar">
-          <label className="hh-linked">
-            <input type="checkbox" checked={sauceLinked} onChange={(e) => toggleSauceLinked(e.target.checked)} />
-            Apply to both halves
-          </label>
+          ))}
         </div>
-      )}
+        {currentStep.id === "sauce" && sauceLeft && sauceRight ? (
+          <div className="modifier-sauce-bar">
+            <label className="modifier-sauce-linked">
+              <input type="checkbox" checked={sauceLinked} onChange={(e) => toggleSauceLinked(e.target.checked)} />
+              Apply to both halves
+            </label>
+          </div>
+        ) : null}
+      </div>
 
-      <div className="hh-wizard-body">
+      <div className="options-picker-body">
         {currentStep.id === "halves" ? (
           <div className="hh-halves-layout">
             {stepGroups.length === 0 ? (
@@ -312,7 +294,7 @@ export function HalfAndHalfWizard(props: {
                           {minSelect > 0 ? " *" : ""}
                           {freeSelect > 0 ? ` · ${freeSelect} free` : ""}
                         </h3>
-                        <div className="grid hh-half-grid">
+                        <div className="grid modifier-options-grid hh-half-grid">
                           {merged.map(({ group, modifier }) =>
                             renderOptionTiles(group, modifier, () => onChoose(group, modifier))
                           )}
@@ -324,7 +306,7 @@ export function HalfAndHalfWizard(props: {
                 {halvesExtras.map((group) => (
                   <section key={group.id} className="hh-extras-row">
                     <h3 className="hh-half-title hh-extras-title">{halfAndHalfExtrasRowLabel(group.name)}</h3>
-                    <div className="grid hh-extras-grid">
+                    <div className="grid modifier-options-grid">
                       {group.modifiers.map((option) =>
                         renderOptionTiles(group, option, () => onChoose(group, option))
                       )}
@@ -341,12 +323,12 @@ export function HalfAndHalfWizard(props: {
               stepGroups.map(
                 (group) =>
                   isHalfAndHalfSauceGroup(group.name) && (
-                    <h3 key={group.id} className="hh-half-title">
+                    <h3 key={group.id} className="hh-half-title hh-sauce-heading">
                       {halfAndHalfWizardGroupLabel(group.name)}
                     </h3>
                   )
               )}
-            <div className="grid hh-step-grid">
+            <div className="grid modifier-options-grid">
               {(currentStep.id === "sauce" && sauceLinked && sauceLeft ? [sauceLeft] : stepGroups).flatMap((group) =>
                 group
                   ? group.modifiers.map((option) =>
@@ -361,31 +343,10 @@ export function HalfAndHalfWizard(props: {
         )}
       </div>
 
-      <div className="hh-wizard-footer">
-        <div className="hh-nav">
-          <button
-            type="button"
-            className="btn ghost"
-            disabled={stepIndex === 0}
-            onClick={() => setStepIndex((i) => Math.max(0, i - 1))}
-          >
-            Back
-          </button>
-          {!onLastStep ? (
-            <button
-              type="button"
-              className="btn"
-              disabled={!canNext}
-              onClick={() => setStepIndex((i) => Math.min(activeSteps.length - 1, i + 1))}
-            >
-              Next
-            </button>
-          ) : null}
-        </div>
-
-        <div className="modifier-bar hh-modifier-bar">
-          <div className="hh-modifier-summary">
-            <p className="step-kicker">{editingLineKey ? "Edit options" : "Half & half"}</p>
+      <div className="options-picker-footer">
+        <div className="modifier-bar modifier-bar--options">
+          <div className="modifier-bar-summary">
+            <p className="step-kicker">{editingLineKey ? "Edit options" : "Step 2 · Options"}</p>
             <strong>{item.name}</strong>
             {modifierPreview.length > 0 ? (
               <div className="till-options-preview">{renderPreview(currentStep.id)}</div>
@@ -395,7 +356,7 @@ export function HalfAndHalfWizard(props: {
               </div>
             )}
           </div>
-          <button type="button" className="pay-btn hh-add-btn" onClick={onConfirm}>
+          <button type="button" className="pay-btn options-confirm-btn" onClick={onConfirm}>
             {editingLineKey ? "Update" : "Add"} {money(modifierTotal)}
           </button>
         </div>
