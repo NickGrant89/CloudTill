@@ -153,6 +153,7 @@ async function main() {
     record("Signup", "validation", "fail", e.message);
   }
 
+  record("Licensing", "gate script", "manual", "node scripts/license-gate-check.mjs (+ optional admin expire)");
   record("UI matrix", "BO 19 pages", "manual", "See platform-smoke-report.md — CRUD/modals need browser");
   record("UI matrix", "Till pizza flow", "manual", "G&A + demo — browser");
   record("Stripe", "checkout", "missing", "No STRIPE_SECRET_KEY on trial path");

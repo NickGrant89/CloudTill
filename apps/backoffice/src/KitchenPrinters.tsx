@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { upgradeBillingHint } from "@cloudtill/shared";
 import { api, money } from "./api";
 
 type DeliveryChannelId = "justeat" | "deliveroo" | "ubereats" | "hungrypanda" | "foodhub" | "generic";
@@ -49,7 +50,7 @@ function OnlineOrderingPanel() {
   useEffect(() => {
     api<OrderingSettings>("/kitchen/settings")
       .then(fill)
-      .catch((e) => setMsg(e instanceof Error ? e.message : "Could not load"));
+      .catch((e) => setMsg(upgradeBillingHint(e instanceof Error ? e.message : "Could not load")));
   }, []);
 
   async function save(patch: Partial<OrderingSettings>, done = "Saved") {

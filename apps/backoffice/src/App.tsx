@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { backOfficeNavAllowed } from "@cloudtill/shared";
 import { api, getToken, setToken } from "./api";
 import { Pages, switchStore, type PageId } from "./Pages";
 import { LowStockToast } from "./ExtrasPages";
@@ -18,6 +19,7 @@ export function App() {
   const [storeName, setStoreName] = useState("");
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
   const [page, setPage] = useState<PageId>("dashboard");
+  const [planFeatures, setPlanFeatures] = useState<string[]>([]);
   const [navOpen, setNavOpen] = useState(false);
   const [email, setEmail] = useState(() => new URLSearchParams(window.location.search).get("email") || "");
   const [pin, setPin] = useState("");
@@ -32,6 +34,12 @@ export function App() {
     if (!user) return;
     return watchBackOfficeTables(mainRef.current);
   }, [user, page]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (backOfficeNavAllowed(page, planFeatures)) return;
+    setPage("dashboard");
+  }, [user, page, planFeatures]);
 
   useEffect(() => {
     if (!navOpen) return;
@@ -53,11 +61,18 @@ export function App() {
       setLoading(false);
       return;
     }
-    api<{ user: User; store: { name: string }; stores?: { id: string; name: string }[] }>("/auth/me")
+    api<{
+      user: User;
+      store: { name: string };
+      stores?: { id: string; name: string }[];
+    }>("/auth/me")
       .then((d) => {
         setUser(d.user);
         setStoreName(d.store.name);
         setBranches(d.stores ?? []);
+        return api<{ features: string[] }>("/billing")
+          .then((b) => setPlanFeatures(b.features))
+          .catch(() => setPlanFeatures([]));
       })
       .catch(() => setToken(null))
       .finally(() => setLoading(false));
@@ -80,6 +95,12 @@ export function App() {
       setUser(data.user);
       setStoreName(data.store.name);
       setBranches(data.stores ?? []);
+      try {
+        const billing = await api<{ features: string[] }>("/billing");
+        setPlanFeatures(billing.features);
+      } catch {
+        setPlanFeatures([]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     }
@@ -172,7 +193,8 @@ export function App() {
     { id: "settings", label: "Settings" },
   ];
 
-  const pageLabel = nav.find((n) => n.id === page)?.label ?? "Back office";
+  const visibleNav = nav.filter((n) => backOfficeNavAllowed(n.id, planFeatures));
+  const pageLabel = visibleNav.find((n) => n.id === page)?.label ?? nav.find((n) => n.id === page)?.label ?? "Back office";
 
   return (
     <div className={`shell${navOpen ? " nav-open" : ""}`}>
@@ -230,7 +252,7 @@ export function App() {
             <p className="sub">{storeName}</p>
           )}
           <nav className="sidebar-nav">
-            {nav.map((n) => (
+            {visibleNav.map((n) => (
               <button
                 key={n.id}
                 type="button"
@@ -261,7 +283,7 @@ export function App() {
           </div>
         </aside>
         <main className="main" ref={mainRef}>
-          <Pages page={page} onNavigate={setPage} />
+          <Pages page={page} onNavigate={setPage} planFeatures={planFeatures} />
         </main>
       </div>
       <LowStockToast onOpenInventory={() => setPage("inventory")} />

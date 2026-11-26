@@ -241,6 +241,7 @@ export const API_PREFIX = "/api";
 
 export * from "./receipt.js";
 export * from "./plans.js";
+export * from "./planGates.js";
 
 export interface GiftCardDto {
   id: string;

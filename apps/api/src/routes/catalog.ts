@@ -265,6 +265,12 @@ catalogRouter.post("/items", requireRole("owner", "manager"), async (req: Authed
  */
 catalogRouter.get("/items/store-presence", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
   const storeId = req.user!.storeId;
+  if (!(await storeAllowsFeature(storeId, "multi_store"))) {
+    return res.status(402).json({
+      error: "Branch catalogue needs an active Multi plan. Upgrade in Settings → Billing.",
+      feature: "multi_store",
+    });
+  }
   const items = await prisma.item.findMany({
     where: { storeId, active: true },
     include: { variants: { where: { active: true }, select: { sku: true } } },

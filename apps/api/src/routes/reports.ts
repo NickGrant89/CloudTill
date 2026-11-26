@@ -159,22 +159,15 @@ reportsRouter.get("/taxes", requireAdvancedReports, async (req: AuthedRequest, r
   });
 });
 
-reportsRouter.get("/dashboard", requireAdvancedReports, async (req: AuthedRequest, res) => {
+reportsRouter.get("/dashboard", async (req: AuthedRequest, res) => {
   const storeId = req.user!.storeId;
   const now = new Date();
   const startOfToday = new Date(now);
   startOfToday.setHours(0, 0, 0, 0);
   const startOfWeek = new Date(Date.now() - 7 * 86400000);
+  const kitchenEntitled = await storeAllowsFeature(storeId, "kitchen");
 
-  const [
-    store,
-    todaySales,
-    weekSales,
-    kitchenOrders,
-    openTickets,
-    lowLevels,
-    openShifts,
-  ] = await Promise.all([
+  const [store, todaySales, weekSales, openTickets, lowLevels, openShifts, kitchenOrders] = await Promise.all([
     prisma.store.findUniqueOrThrow({
       where: { id: storeId },
       select: { id: true, name: true, slug: true, currency: true },
@@ -187,21 +180,23 @@ reportsRouter.get("/dashboard", requireAdvancedReports, async (req: AuthedReques
       where: { storeId, status: "completed", createdAt: { gte: startOfWeek } },
       select: { totalCents: true },
     }),
-    prisma.onlineOrder.findMany({
-      where: {
-        storeId,
-        status: { in: ["pending", "accepted", "preparing", "ready"] },
-      },
-      include: { lines: { select: { name: true, quantity: true } } },
-      orderBy: { createdAt: "asc" },
-      take: 8,
-    }),
     prisma.ticket.count({ where: { storeId, status: { in: ["open", "held"] } } }),
     prisma.inventoryLevel.findMany({
       where: { storeId },
       include: { variant: { include: { item: true } } },
     }),
     prisma.shift.count({ where: { storeId, status: "open" } }),
+    kitchenEntitled
+      ? prisma.onlineOrder.findMany({
+          where: {
+            storeId,
+            status: { in: ["pending", "accepted", "preparing", "ready"] },
+          },
+          include: { lines: { select: { name: true, quantity: true } } },
+          orderBy: { createdAt: "asc" },
+          take: 8,
+        })
+      : Promise.resolve([]),
   ]);
 
   const sum = (rows: { totalCents: number }[]) => rows.reduce((s, r) => s + r.totalCents, 0);
@@ -232,6 +227,7 @@ reportsRouter.get("/dashboard", requireAdvancedReports, async (req: AuthedReques
       avgTicketCents: weekSales.length ? Math.round(weekGross / weekSales.length) : 0,
     },
     kitchen: {
+      entitled: kitchenEntitled,
       counts: kitchenCounts,
       orders: kitchenOrders.map((o) => ({
         id: o.id,

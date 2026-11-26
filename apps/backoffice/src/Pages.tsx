@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, getToken, money, setToken } from "./api";
-import { getPlan, sortItemGroups, sortTillMenuItems } from "@cloudtill/shared";
+import { getPlan, sortItemGroups, sortTillMenuItems, upgradeBillingHint } from "@cloudtill/shared";
 import { BoEditSheet } from "./BoEditSheet";
 import { applyReorder, DragGrip, GiftCardsPage, ModifierEditor, ModifierLibrary, TimeClockPage } from "./MorePages";
 import { KitchenPage, PrintersPage } from "./KitchenPrinters";
@@ -27,16 +27,25 @@ export type PageId =
   | "eod"
   | "settings";
 
-export function Pages({ page, onNavigate }: { page: PageId; onNavigate?: (page: PageId) => void }) {
+export function Pages({
+  page,
+  onNavigate,
+  planFeatures = [],
+}: {
+  page: PageId;
+  onNavigate?: (page: PageId) => void;
+  planFeatures?: string[];
+}) {
+  const multiStore = planFeatures.includes("multi_store");
   switch (page) {
     case "dashboard":
-      return <Dashboard onNavigate={onNavigate} />;
+      return <Dashboard onNavigate={onNavigate} planFeatures={planFeatures} />;
     case "catalog":
-      return <CatalogPage />;
+      return <CatalogPage multiStore={multiStore} />;
     case "modifiers":
       return <ModifiersPage />;
     case "inventory":
-      return <InventoryPage />;
+      return <InventoryPage multiStore={multiStore} />;
     case "stocktake":
       return <StocktakePage />;
     case "import":
@@ -82,6 +91,7 @@ type DashData = {
   };
   week: { receiptCount: number; grossSalesCents: number; avgTicketCents: number };
   kitchen: {
+    entitled?: boolean;
     counts: { pending: number; preparing: number; ready: number; total: number };
     orders: {
       id: string;
@@ -113,16 +123,23 @@ function channelLabel(channel: string) {
   return map[channel] ?? channel;
 }
 
-function Dashboard({ onNavigate }: { onNavigate?: (page: PageId) => void }) {
+function Dashboard({
+  onNavigate,
+  planFeatures,
+}: {
+  onNavigate?: (page: PageId) => void;
+  planFeatures: string[];
+}) {
   const [data, setData] = useState<DashData | null>(null);
   const [err, setErr] = useState("");
+  const kitchenNav = planFeatures.includes("kitchen");
 
   async function load() {
     try {
       setData(await api<DashData>("/reports/dashboard"));
       setErr("");
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Could not load dashboard");
+      setErr(upgradeBillingHint(e instanceof Error ? e.message : "Could not load dashboard"));
     }
   }
 
@@ -190,16 +207,20 @@ function Dashboard({ onNavigate }: { onNavigate?: (page: PageId) => void }) {
             <div>
               <h3>Kitchen / delivery</h3>
               <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>
-                {k?.total
-                  ? `${k.pending} waiting · ${k.preparing} preparing · ${k.ready} ready`
-                  : "Queue clear"}
+                {!kitchenNav
+                  ? "Complete or Multi unlocks online orders and delivery-app tickets here."
+                  : k?.total
+                    ? `${k.pending} waiting · ${k.preparing} preparing · ${k.ready} ready`
+                    : "Queue clear"}
               </p>
             </div>
-            <button type="button" className="secondary" onClick={() => go("kitchen")}>
-              Open kitchen
-            </button>
+            {kitchenNav && (
+              <button type="button" className="secondary" onClick={() => go("kitchen")}>
+                Open kitchen
+              </button>
+            )}
           </div>
-          {data?.kitchen.orders.length ? (
+          {kitchenNav && data?.kitchen.orders.length ? (
             <ul className="dash-order-list">
               {data.kitchen.orders.map((o) => (
                 <li key={o.id}>
@@ -236,9 +257,13 @@ function Dashboard({ onNavigate }: { onNavigate?: (page: PageId) => void }) {
                 </li>
               ))}
             </ul>
-          ) : (
+          ) : kitchenNav ? (
             <p style={{ color: "var(--muted)", margin: "8px 0 0" }}>
               No open kitchen orders. Web and delivery-app orders appear here.
+            </p>
+          ) : (
+            <p style={{ color: "var(--muted)", margin: "8px 0 0" }}>
+              Upgrade in <strong>Settings → Billing</strong> for kitchen and delivery tracking.
             </p>
           )}
         </section>
@@ -313,7 +338,7 @@ function Dashboard({ onNavigate }: { onNavigate?: (page: PageId) => void }) {
   );
 }
 
-function CatalogPage() {
+function CatalogPage({ multiStore }: { multiStore: boolean }) {
   const [items, setItems] = useState<
     {
       id: string;
@@ -429,7 +454,7 @@ function CatalogPage() {
       setSelectedIds([]);
       await load();
     } catch (err) {
-      setAssignMsg(err instanceof Error ? err.message : "Could not assign items");
+      setAssignMsg(upgradeBillingHint(err instanceof Error ? err.message : "Could not assign items"));
     } finally {
       setAssignBusy(false);
     }
@@ -953,15 +978,22 @@ function CatalogPage() {
 
       <form className="panel-box" onSubmit={(e) => void assignToBranches(e)}>
         <h3>Send items to branches</h3>
+        {!multiStore ? (
+          <p style={{ color: "var(--muted)", marginTop: 0 }}>
+            Assigning items to branches is part of the <strong>Multi</strong> plan. Upgrade in{" "}
+            <strong>Settings → Billing</strong>.
+          </p>
+        ) : (
         <p style={{ color: "var(--muted)", marginTop: 0 }}>
           Tick items below, pick branches, then send. Copies the item (and its group) onto those stores by SKU —
           skips if already there. Opening stock on the new branch starts at 0.
         </p>
-        {otherStores.length === 0 ? (
+        )}
+        {multiStore && otherStores.length === 0 ? (
           <p style={{ color: "var(--muted)" }}>
             Only one store in this account. Add another branch under <strong>Stores &amp; registers</strong> first.
           </p>
-        ) : (
+        ) : multiStore ? (
           <>
             <div className="chip-row" style={{ marginBottom: 12 }} aria-label="Destination branches">
               {otherStores.map((s) => {
@@ -992,7 +1024,7 @@ function CatalogPage() {
               </button>
             </div>
           </>
-        )}
+        ) : null}
         {assignMsg && <p style={{ color: "var(--muted)" }}>{assignMsg}</p>}
       </form>
 
@@ -1004,6 +1036,7 @@ function CatalogPage() {
                 <input
                   type="checkbox"
                   aria-label="Select all filtered items"
+                  disabled={!multiStore}
                   checked={filtered.length > 0 && filtered.every((i) => selectedIds.includes(i.id))}
                   onChange={() => toggleAllFiltered()}
                 />
@@ -1184,7 +1217,7 @@ function ModifiersPage() {
   );
 }
 
-function InventoryPage() {
+function InventoryPage({ multiStore }: { multiStore: boolean }) {
   const [levels, setLevels] = useState<
     {
       id: string;
@@ -1218,11 +1251,15 @@ function InventoryPage() {
   const [receive, setReceive] = useState({ variantId: "", quantity: "10", note: "" });
   const [xfer, setXfer] = useState({ fromStoreId: "", toStoreId: "", variantId: "", quantity: "5", note: "" });
 
+  const [xferMsg, setXferMsg] = useState("");
+
   async function load() {
     const [lv, hist, xfers, allStores] = await Promise.all([
       api<typeof levels>(`/inventory/levels${lowOnly ? "?low=1" : ""}`),
       api<typeof history>("/inventory/history"),
-      api<typeof transfers>("/inventory/transfers"),
+      multiStore
+        ? api<typeof transfers>("/inventory/transfers")
+        : Promise.resolve([] as typeof transfers),
       api<{ id: string; name: string }[]>("/auth/stores"),
     ]);
     setLevels(lv);
@@ -1242,7 +1279,7 @@ function InventoryPage() {
 
   useEffect(() => {
     void load();
-  }, [lowOnly]);
+  }, [lowOnly, multiStore]);
 
   async function doReceive(e: React.FormEvent) {
     e.preventDefault();
@@ -1259,17 +1296,22 @@ function InventoryPage() {
 
   async function doTransfer(e: React.FormEvent) {
     e.preventDefault();
-    await api("/inventory/transfers", {
-      method: "POST",
-      body: JSON.stringify({
-        fromStoreId: xfer.fromStoreId,
-        toStoreId: xfer.toStoreId,
-        variantId: xfer.variantId,
-        quantity: parseFloat(xfer.quantity),
-        note: xfer.note || undefined,
-      }),
-    });
-    await load();
+    setXferMsg("");
+    try {
+      await api("/inventory/transfers", {
+        method: "POST",
+        body: JSON.stringify({
+          fromStoreId: xfer.fromStoreId,
+          toStoreId: xfer.toStoreId,
+          variantId: xfer.variantId,
+          quantity: parseFloat(xfer.quantity),
+          note: xfer.note || undefined,
+        }),
+      });
+      await load();
+    } catch (err) {
+      setXferMsg(upgradeBillingHint(err instanceof Error ? err.message : "Transfer failed"));
+    }
   }
 
   const uniqueVariants = Array.from(
@@ -1315,6 +1357,12 @@ function InventoryPage() {
 
       <form className="panel-box" onSubmit={(e) => void doTransfer(e)}>
         <h3>Store-to-store transfer</h3>
+        {!multiStore ? (
+          <p style={{ color: "var(--muted)", marginTop: 0 }}>
+            Stock transfers between branches need the <strong>Multi</strong> plan —{" "}
+            <strong>Settings → Billing</strong>.
+          </p>
+        ) : (
         <div className="grid-2">
           <div className="field">
             <label>From</label>
@@ -1355,9 +1403,16 @@ function InventoryPage() {
             <input value={xfer.note} onChange={(e) => setXfer({ ...xfer, note: e.target.value })} />
           </div>
         </div>
-        <button type="submit">Transfer</button>
+        )}
+        {multiStore && (
+          <>
+            <button type="submit">Transfer</button>
+            {xferMsg && <p className="error">{xferMsg}</p>}
+          </>
+        )}
       </form>
 
+      {multiStore && (
       <div className="table-wrap" style={{ marginBottom: 16 }}>
         <table>
           <thead>
@@ -1388,6 +1443,7 @@ function InventoryPage() {
           </tbody>
         </table>
       </div>
+      )}
 
       <div className="table-wrap" style={{ marginBottom: 16 }}>
         <table>
@@ -2756,23 +2812,38 @@ function ReportsPage() {
   const [byEmp, setByEmp] = useState<{ name: string; receipts: number; salesCents: number }[]>([]);
   const [payments, setPayments] = useState<{ name: string; count: number; amountCents: number }[]>([]);
   const [taxes, setTaxes] = useState<{ totalTaxCents: number; taxableSalesCents: number } | null>(null);
+  const [advancedBlocked, setAdvancedBlocked] = useState("");
+
+  async function loadAdvanced<T>(path: string): Promise<T | null> {
+    try {
+      return await api<T>(path);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Blocked";
+      if (/Richer reports|Complete or Multi|402/i.test(msg)) {
+        setAdvancedBlocked(upgradeBillingHint(msg));
+      }
+      return null;
+    }
+  }
 
   useEffect(() => {
-    void Promise.all([
-      api<Record<string, number | string>>("/reports/summary"),
-      api<typeof byItem>("/reports/by-item"),
-      api<typeof byCat>("/reports/by-category"),
-      api<typeof byEmp>("/reports/by-employee"),
-      api<typeof payments>("/reports/payments"),
-      api<NonNullable<typeof taxes>>("/reports/taxes"),
-    ]).then(([s, i, c, e, p, t]) => {
-      setSummary(s);
-      setByItem(i);
-      setByCat(c);
-      setByEmp(e);
-      setPayments(p);
-      setTaxes(t);
-    });
+    void (async () => {
+      setAdvancedBlocked("");
+      const s = await api<Record<string, number | string>>("/reports/summary").catch(() => null);
+      if (s) setSummary(s);
+      const [i, c, e, p, t] = await Promise.all([
+        loadAdvanced<typeof byItem>("/reports/by-item"),
+        loadAdvanced<typeof byCat>("/reports/by-category"),
+        loadAdvanced<typeof byEmp>("/reports/by-employee"),
+        loadAdvanced<typeof payments>("/reports/payments"),
+        loadAdvanced<NonNullable<typeof taxes>>("/reports/taxes"),
+      ]);
+      if (i) setByItem(i);
+      if (c) setByCat(c);
+      if (e) setByEmp(e);
+      if (p) setPayments(p);
+      if (t) setTaxes(t);
+    })();
   }, []);
 
   return (
@@ -2783,6 +2854,7 @@ function ReportsPage() {
           <p>Sales, by item / category / employee, payments, taxes</p>
         </div>
       </div>
+      {advancedBlocked && <p className="error">{advancedBlocked}</p>}
       <div className="cards reports-cards">
         <div className="stat">
           <div className="label">Gross</div>

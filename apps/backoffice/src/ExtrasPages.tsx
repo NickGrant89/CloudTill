@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { upgradeBillingHint } from "@cloudtill/shared";
 import { api, getToken, money } from "./api";
 
 export function StocktakePage() {
@@ -194,22 +195,36 @@ export function EodPage() {
       .then(setSummary)
       .catch((e) => {
         setSummary(null);
-        setError(e instanceof Error ? e.message : "Could not load the day");
+        setError(upgradeBillingHint(e instanceof Error ? e.message : "Could not load the day"));
       });
   }, [date]);
 
   function downloadCsv() {
     const token = getToken();
+    setError("");
     void fetch(`/api/extras/eod.csv?date=${date}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((r) => r.text())
+      .then(async (r) => {
+        if (!r.ok) {
+          let message = r.statusText;
+          try {
+            const body = (await r.json()) as { error?: string };
+            message = body.error || message;
+          } catch {
+            /* ignore */
+          }
+          throw new Error(message);
+        }
+        return r.text();
+      })
       .then((csv) => {
         const a = document.createElement("a");
         a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
         a.download = `eod-${date}.csv`;
         a.click();
-      });
+      })
+      .catch((e) => setError(upgradeBillingHint(e instanceof Error ? e.message : "Download failed")));
   }
 
   return (
@@ -393,11 +408,7 @@ export function ImportPage() {
       setPreview(null);
       setPulled(false);
       const message = e instanceof Error ? e.message : "Loyverse pull failed";
-      setError(
-        /Complete or Multi|csv_import|402/i.test(message)
-          ? `${message} Open Settings → Billing to upgrade.`
-          : message
-      );
+      setError(upgradeBillingHint(message));
     } finally {
       setBusy(false);
     }
@@ -422,11 +433,7 @@ export function ImportPage() {
     } catch (e) {
       setPreview(null);
       const message = e instanceof Error ? e.message : "Preview failed";
-      setError(
-        /Complete or Multi|csv_import|402/i.test(message)
-          ? `${message} Open Settings → Billing to upgrade.`
-          : message
-      );
+      setError(upgradeBillingHint(message));
     } finally {
       setBusy(false);
     }

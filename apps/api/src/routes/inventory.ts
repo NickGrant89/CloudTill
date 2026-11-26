@@ -137,6 +137,12 @@ inventoryRouter.get("/history", async (req: AuthedRequest, res) => {
 });
 
 inventoryRouter.get("/transfers", async (req: AuthedRequest, res) => {
+  if (!(await storeAllowsFeature(req.user!.storeId, "multi_store"))) {
+    return res.status(402).json({
+      error: "Multi-store transfers require the Multi plan. Upgrade under Settings → Billing.",
+      feature: "multi_store",
+    });
+  }
   const transfers = await prisma.inventoryTransfer.findMany({
     where: {
       OR: [{ fromStoreId: req.user!.storeId }, { toStoreId: req.user!.storeId }],
