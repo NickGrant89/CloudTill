@@ -1784,6 +1784,14 @@ select:focus-visible {
 
 /* Tablet+ split: never use phone single-pane rules — catalog column must stay visible (iPad landscape). */
 @media (min-width: 700px) {
+  .toolbar-actions .toolbar-desk {
+    display: inline-flex !important;
+    align-items: center;
+  }
+
+  .toolbar-phone-more {
+    display: none !important;
+  }
   .register.register-shell {
     display: grid !important;
     flex-direction: unset !important;
@@ -1896,12 +1904,6 @@ select:focus-visible {
     max-width: min(46vw, 220px);
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  @media (max-width: 1180px) {
-    .toolbar-actions .toolbar-aux {
-      display: none;
-    }
   }
 
   .offline-badge,
