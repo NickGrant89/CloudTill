@@ -76,7 +76,7 @@ const normalizedSchema = z.object({
 async function assertDeliveryAllowed(storeId: string, res: Response) {
   if (!(await storeAllowsFeature(storeId, "online_ordering"))) {
     res.status(402).json({
-      error: "Delivery apps need Venue or Multi-site (online ordering / kitchen). Upgrade in Billing.",
+      error: "Delivery apps need Complete or Multi (online ordering / kitchen). Upgrade in Billing.",
     });
     return false;
   }

@@ -176,7 +176,7 @@ inventoryRouter.get("/transfers", async (req: AuthedRequest, res) => {
 inventoryRouter.post("/transfers", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
   if (!(await storeAllowsFeature(req.user!.storeId, "multi_store"))) {
     return res.status(402).json({
-      error: "Multi-store transfers require the Multi-store plan. Upgrade under Settings → Billing.",
+      error: "Multi-store transfers require the Multi plan. Upgrade under Settings → Billing.",
       feature: "multi_store",
     });
   }

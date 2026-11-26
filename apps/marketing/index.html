@@ -6,7 +6,7 @@
     <title>PurePOS UK | Cloud till, back office &amp; online ordering</title>
     <meta
       name="description"
-      content="PurePOS is the UK cloud POS: offline-capable till, central back office, and customer online ordering. Counter £19, Venue £35, Multi-site £59."
+      content="PurePOS is the UK cloud POS: offline-capable till, central back office, and customer online ordering. Essential £19, Complete £35, Multi £59."
     />
     <meta name="author" content="PurePOS UK" />
     <link rel="canonical" href="https://purepos.co.uk/" />
@@ -279,8 +279,79 @@
       }
       .tier .price { font-size: 2rem; font-weight: 800; letter-spacing: -0.02em; }
       .tier .price span { font-size: 0.9rem; font-weight: 500; color: var(--muted); }
-      .tier ul { margin: 0; padding-left: 1.1rem; color: var(--muted); flex: 1; }
-      .tier li { margin: 0.35rem 0; }
+      .tier ul.tier-highlights {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        color: var(--ink);
+        flex: 1;
+      }
+      .tier ul.tier-highlights li {
+        position: relative;
+        margin: 0.4rem 0;
+        padding-left: 1.35rem;
+        line-height: 1.45;
+        font-size: 0.92rem;
+      }
+      .tier ul.tier-highlights li::before {
+        content: "✓";
+        position: absolute;
+        left: 0;
+        top: 0.05rem;
+        color: var(--accent);
+        font-weight: 800;
+      }
+      .plan-compare-wrap {
+        margin-top: 2.25rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid var(--line);
+      }
+      .plan-compare-title {
+        font-family: Fraunces, Georgia, serif;
+        margin: 0 0 1rem;
+        font-size: 1.35rem;
+      }
+      .plan-compare-scroll {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.78);
+      }
+      .plan-compare {
+        width: 100%;
+        min-width: 28rem;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+      }
+      .plan-compare th,
+      .plan-compare td {
+        padding: 0.65rem 0.75rem;
+        text-align: center;
+        border-bottom: 1px solid var(--line);
+      }
+      .plan-compare th:first-child,
+      .plan-compare td:first-child {
+        text-align: left;
+        font-weight: 500;
+        color: var(--ink);
+        min-width: 11rem;
+      }
+      .plan-compare thead th {
+        font-weight: 700;
+        background: rgba(13, 148, 136, 0.08);
+        color: var(--ink);
+      }
+      .plan-compare tbody tr:last-child td {
+        border-bottom: none;
+      }
+      .plan-compare .mark-yes {
+        color: var(--accent);
+        font-weight: 800;
+      }
+      .plan-compare .mark-no {
+        color: var(--muted);
+      }
       .tier .price-note { margin: -0.2rem 0 0; color: var(--muted); font-size: 0.8rem; }
       .tier > p { margin: 0; color: var(--muted); line-height: 1.4; }
       .tier .btn { width: 100%; }
@@ -411,11 +482,13 @@
         <p class="product">PurePOS</p>
         <h1>Cloud till, back office, and online ordering.</h1>
         <p>
-          One hosted UK product for shops: sell on the till (even offline), run the shop from back office, take orders online — same items, same cloud.
+          <strong>Essential</strong> keeps one till and back office selling when Wi‑Fi drops.
+          <strong>Complete</strong> adds kitchen, customer ordering and UK delivery apps.
+          <strong>Multi</strong> runs every branch from one cloud — from £19/mo ex VAT.
         </p>
         <div class="cta-row">
           <a class="btn btn-primary" href="/pos/">Open the till</a>
-          <a class="btn btn-ghost" href="#pricing">See Counter · Venue · Multi-site</a>
+          <a class="btn btn-ghost" href="#pricing">See Essential · Complete · Multi</a>
         </div>
       </div>
     </section>
@@ -425,7 +498,8 @@
         <p class="eyebrow">The product</p>
         <h2 class="section-title">Three surfaces. One PurePOS.</h2>
         <p class="section-lede">
-          PurePOS is the till, the back office, and the ordering system — not a WordPress bolt-on, not a Loyverse wrapper. Items and reports live in the cloud; browser apps stay in sync.
+          PurePOS is the till, the back office, and the ordering system — not a WordPress bolt-on, not a Loyverse wrapper.
+          Pick <strong>Essential</strong>, <strong>Complete</strong>, or <strong>Multi</strong>; items and reports live in the cloud and browser apps stay in sync.
         </p>
         <ul class="feature-list">
           <li>
@@ -446,7 +520,7 @@
             <div class="feature-num">3</div>
             <div>
               <h3>Online ordering</h3>
-              <p>Customers order into the same store; kitchen sees the tickets on Venue.</p>
+              <p>Customers order into the same store; kitchen sees the tickets on Complete.</p>
             </div>
           </li>
         </ul>
@@ -466,72 +540,160 @@
       <section id="pricing">
         <p class="eyebrow">Pricing</p>
         <h2 class="section-title">Pick a plan and start</h2>
-        <p class="section-lede">Counter £19, Venue £35, Multi-site £59 a month, ex VAT. One 14-day trial on the plan you choose. No card to begin.</p>
+        <p class="section-lede">Essential £19, Complete £35, Multi £59 a month, ex VAT. One 14-day trial on the plan you choose. No card to begin.</p>
         <div class="tiers">
-          <article class="tier" data-plan="starter" data-name="Counter">
-            <h3>Counter</h3>
-            <p>One till + cloud back office when Wi‑Fi drops. Independent counters, pop-ups, market traders.</p>
+          <article class="tier" data-plan="starter" data-name="Essential">
+            <h3>Essential</h3>
+            <p>One till + cloud back office when Wi‑Fi drops.</p>
             <div class="price">£19<span>/mo</span></div>
             <p class="price-note">ex VAT · 14-day trial</p>
-            <ul>
-              <li>Cloud back office and one offline till</li>
-              <li>Items, groups, VAT, and £ receipts</li>
-              <li>Live open tickets, backup and restore</li>
-              <li>Offline sales queue, sync when you’re back</li>
+            <ul class="tier-highlights">
+              <li>Cloud back office + 1 offline-capable till</li>
+              <li>Items &amp; groups, VAT, and receipts in £</li>
+              <li>Live open-ticket sync across tills in the store</li>
+              <li>Offline sales queue · sync when you’re back</li>
+              <li>Store backup &amp; restore from Settings</li>
+              <li>Email support</li>
             </ul>
-            <button type="button" class="btn btn-ghost-dark start-trial">Start Counter trial</button>
+            <button type="button" class="btn btn-ghost-dark start-trial">Start Essential trial</button>
             <form class="trial-form" hidden>
               <label>Business name<input name="businessName" required autocomplete="organization" placeholder="Harbour Coffee" /></label>
               <label>Owner email<input name="email" type="email" required autocomplete="email" placeholder="you@cafe.co.uk" /></label>
-              <button type="submit" class="btn btn-primary">Create Counter trial</button>
+              <button type="submit" class="btn btn-primary">Create Essential trial</button>
               <button type="button" class="btn btn-ghost-dark cancel-trial">Cancel</button>
               <p class="form-msg" hidden></p>
             </form>
             <div class="trial-done" hidden></div>
           </article>
-          <article class="tier featured" data-plan="pro" data-name="Venue">
-            <h3>Venue</h3>
-            <p class="tier-badge">Most UK venues</p>
+          <article class="tier featured" data-plan="pro" data-name="Complete">
+            <h3>Complete</h3>
+            <p class="tier-badge">Popular</p>
             <p>Till, kitchen, online ordering &amp; UK delivery apps.</p>
             <div class="price">£35<span>/mo</span></div>
             <p class="price-note">ex VAT · 14-day trial</p>
-            <ul>
-              <li>Everything in Counter</li>
-              <li>Online ordering for pickup, dine-in, and delivery</li>
-              <li>Kitchen board, plus Just Eat, Deliveroo, Uber Eats and more</li>
-              <li>CSV import, end of day, and reports</li>
+            <ul class="tier-highlights">
+              <li>Everything in Essential</li>
+              <li>Customer online ordering (pickup, dine-in, delivery)</li>
+              <li>Kitchen board for web + Just Eat, Deliveroo, Uber Eats &amp; more</li>
+              <li>CSV import · end-of-day &amp; richer reports</li>
+              <li>Best value vs hardware-tied POS in the UK</li>
             </ul>
             <button type="button" class="btn btn-primary start-trial">Start 14-day trial</button>
             <form class="trial-form" hidden>
               <label>Business name<input name="businessName" required autocomplete="organization" placeholder="Harbour Coffee" /></label>
               <label>Owner email<input name="email" type="email" required autocomplete="email" placeholder="you@cafe.co.uk" /></label>
-              <button type="submit" class="btn btn-primary">Create Venue trial</button>
+              <button type="submit" class="btn btn-primary">Create Complete trial</button>
               <button type="button" class="btn btn-ghost-dark cancel-trial">Cancel</button>
               <p class="form-msg" hidden></p>
             </form>
             <div class="trial-done" hidden></div>
           </article>
-          <article class="tier" data-plan="multi" data-name="Multi-site">
-            <h3>Multi-site</h3>
-            <p>One cloud across branches — stock &amp; catalogue. Multi-site groups and growing brands.</p>
+          <article class="tier" data-plan="multi" data-name="Multi">
+            <h3>Multi</h3>
+            <p>One cloud across branches — stock &amp; catalogue.</p>
             <div class="price">£59<span>/mo</span></div>
             <p class="price-note">ex VAT · 14-day trial</p>
-            <ul>
-              <li>Everything in Venue</li>
-              <li>Stock transfers between stores</li>
-              <li>Assign items to branches</li>
-              <li>Shared catalogue across sites</li>
+            <ul class="tier-highlights">
+              <li>Everything in Complete</li>
+              <li>Multi-store stock transfers</li>
+              <li>Assign items to branches from Items</li>
+              <li>Shared catalogue ops across sites</li>
+              <li>Priority pilot support</li>
             </ul>
-            <button type="button" class="btn btn-ghost-dark start-trial">Start Multi-site trial</button>
+            <button type="button" class="btn btn-ghost-dark start-trial">Start Multi trial</button>
             <form class="trial-form" hidden>
               <label>Business name<input name="businessName" required autocomplete="organization" placeholder="Harbour Coffee" /></label>
               <label>Owner email<input name="email" type="email" required autocomplete="email" placeholder="you@cafe.co.uk" /></label>
-              <button type="submit" class="btn btn-primary">Create Multi-site trial</button>
+              <button type="submit" class="btn btn-primary">Create Multi trial</button>
               <button type="button" class="btn btn-ghost-dark cancel-trial">Cancel</button>
               <p class="form-msg" hidden></p>
             </form>
             <div class="trial-done" hidden></div>
           </article>
+        </div>
+
+        <div class="plan-compare-wrap">
+          <h3 class="plan-compare-title">What’s included</h3>
+          <div class="plan-compare-scroll" role="region" aria-label="Plan feature comparison" tabindex="0">
+            <table class="plan-compare">
+              <thead>
+                <tr>
+                  <th scope="col">Capability</th>
+                  <th scope="col">Essential</th>
+                  <th scope="col">Complete</th>
+                  <th scope="col">Multi</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Till + back office</td>
+                  <td class="mark-yes" aria-label="Included">✓</td>
+                  <td class="mark-yes" aria-label="Included">✓</td>
+                  <td class="mark-yes" aria-label="Included">✓</td>
+                </tr>
+                <tr>
+                  <td>Offline sales queue + sync</td>
+                  <td class="mark-yes">✓</td>
+                  <td class="mark-yes">✓</td>
+                  <td class="mark-yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Live open-ticket sync</td>
+                  <td class="mark-yes">✓</td>
+                  <td class="mark-yes">✓</td>
+                  <td class="mark-yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Store backup &amp; restore</td>
+                  <td class="mark-yes">✓</td>
+                  <td class="mark-yes">✓</td>
+                  <td class="mark-yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Customer online ordering</td>
+                  <td class="mark-no">—</td>
+                  <td class="mark-yes">✓</td>
+                  <td class="mark-yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Kitchen + UK delivery apps</td>
+                  <td class="mark-no">—</td>
+                  <td class="mark-yes">✓</td>
+                  <td class="mark-yes">✓</td>
+                </tr>
+                <tr>
+                  <td>CSV import</td>
+                  <td class="mark-no">—</td>
+                  <td class="mark-yes">✓</td>
+                  <td class="mark-yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Richer reports &amp; end of day</td>
+                  <td class="mark-no">—</td>
+                  <td class="mark-yes">✓</td>
+                  <td class="mark-yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Extra branches (sites)</td>
+                  <td class="mark-no">—</td>
+                  <td class="mark-no">—</td>
+                  <td class="mark-yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Stock transfers between branches</td>
+                  <td class="mark-no">—</td>
+                  <td class="mark-no">—</td>
+                  <td class="mark-yes">✓</td>
+                </tr>
+                <tr>
+                  <td>Assign items to branches</td>
+                  <td class="mark-no">—</td>
+                  <td class="mark-no">—</td>
+                  <td class="mark-yes">✓</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 

@@ -22,7 +22,7 @@ importRouter.use(async (req: AuthedRequest, res, next) => {
   const allowed = await storeAllowsFeature(req.user!.storeId, "csv_import");
   if (!allowed) {
     return res.status(402).json({
-      error: "CSV import needs an active Venue or Multi-site plan. Upgrade in Settings → Billing.",
+      error: "CSV import needs an active Complete or Multi plan. Upgrade in Settings → Billing.",
       feature: "csv_import",
     });
   }

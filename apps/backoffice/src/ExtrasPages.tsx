@@ -394,7 +394,7 @@ export function ImportPage() {
       setPulled(false);
       const message = e instanceof Error ? e.message : "Loyverse pull failed";
       setError(
-        /Venue or Multi-site|csv_import|402/i.test(message)
+        /Complete or Multi|csv_import|402/i.test(message)
           ? `${message} Open Settings → Billing to upgrade.`
           : message
       );
@@ -423,7 +423,7 @@ export function ImportPage() {
       setPreview(null);
       const message = e instanceof Error ? e.message : "Preview failed";
       setError(
-        /Venue or Multi-site|csv_import|402/i.test(message)
+        /Complete or Multi|csv_import|402/i.test(message)
           ? `${message} Open Settings → Billing to upgrade.`
           : message
       );

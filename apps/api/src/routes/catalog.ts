@@ -336,7 +336,7 @@ catalogRouter.post("/items/assign-stores", requireRole("owner", "manager"), asyn
   const sourceStoreId = req.user!.storeId;
   if (!(await storeAllowsFeature(sourceStoreId, "multi_store"))) {
     return res.status(402).json({
-      error: "Assigning items to branches needs an active Multi-site plan. Upgrade in Settings → Billing.",
+      error: "Assigning items to branches needs an active Multi plan. Upgrade in Settings → Billing.",
       feature: "multi_store",
     });
   }

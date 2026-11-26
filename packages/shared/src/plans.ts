@@ -24,12 +24,12 @@ export interface PlanDefinition {
 
 /**
  * UK SaaS packages — priced in GBP, built for British high-street retail & hospitality.
- * IDs stay starter/pro/multi for API compatibility; display names are Counter / Venue / Multi-site.
+ * IDs stay starter/pro/multi for API compatibility; display names are Essential / Complete / Multi.
  */
 export const PLANS: PlanDefinition[] = [
   {
     id: "starter",
-    name: "Counter",
+    name: "Essential",
     tagline: "One till + cloud back office when Wi‑Fi drops.",
     audience: "Independent counters, pop-ups, market traders",
     monthlyGbp: 19,
@@ -46,15 +46,15 @@ export const PLANS: PlanDefinition[] = [
   },
   {
     id: "pro",
-    name: "Venue",
+    name: "Complete",
     tagline: "Till, kitchen, online ordering & UK delivery apps.",
     audience: "Cafés, delis, bars, and single-site retail",
     monthlyGbp: 35,
     trialDays: 14,
-    badge: "Most UK venues",
+    badge: "Popular",
     features: ["pos", "backoffice", "offline_sync", "online_ordering", "csv_import", "kitchen", "advanced_reports"],
     highlights: [
-      "Everything in Counter",
+      "Everything in Essential",
       "Customer online ordering (pickup, dine-in, delivery)",
       "Kitchen board for web + Just Eat, Deliveroo, Uber Eats & more",
       "CSV import · end-of-day & richer reports",
@@ -63,7 +63,7 @@ export const PLANS: PlanDefinition[] = [
   },
   {
     id: "multi",
-    name: "Multi-site",
+    name: "Multi",
     tagline: "One cloud across branches — stock & catalogue.",
     audience: "Multi-site groups and growing brands",
     monthlyGbp: 59,
@@ -79,7 +79,7 @@ export const PLANS: PlanDefinition[] = [
       "multi_store",
     ],
     highlights: [
-      "Everything in Venue",
+      "Everything in Complete",
       "Multi-store stock transfers",
       "Assign items to branches from Items",
       "Shared catalogue ops across sites",

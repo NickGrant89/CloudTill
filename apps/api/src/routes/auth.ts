@@ -157,7 +157,7 @@ authRouter.post("/stores", requireAuth, requireRole("owner"), async (req: Authed
   const parentId = req.user!.storeId;
   if (!(await storeAllowsFeature(parentId, "multi_store"))) {
     return res.status(402).json({
-      error: "Branches need the Multi-site plan — upgrade in Settings → Billing",
+      error: "Branches need the Multi plan — upgrade in Settings → Billing",
       feature: "multi_store",
     });
   }
