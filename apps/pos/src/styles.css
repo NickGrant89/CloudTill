@@ -1064,11 +1064,19 @@ select:focus-visible {
   align-content: start;
 }
 
-.hh-extras-row {
+.hh-column-extras {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.hh-shared-tail {
   width: 100%;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin-top: 6px;
 }
 
 .options-picker--hh .hh-half-grid.modifier-options-grid {

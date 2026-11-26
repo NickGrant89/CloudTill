@@ -1,8 +1,9 @@
 import {
   HALF_AND_HALF_WIZARD_STEPS,
   halfAndHalfColumnGroupsForSide,
-  halfAndHalfExtrasGroups,
+  halfAndHalfColumnTailGroupsForSide,
   halfAndHalfExtrasRowLabel,
+  halfAndHalfSharedTailGroups,
   halfAndHalfMergedColumnOptions,
   halfAndHalfSauceGroups,
   halfAndHalfStepSatisfied,
@@ -140,8 +141,8 @@ export function HalfAndHalfWizard(props: {
     return visibleGroups.filter((g) => halfAndHalfWizardStepForGroup(g.name) === currentStep.id);
   }, [visibleGroups, currentStep]);
 
-  const halvesExtras = useMemo(
-    () => (currentStep?.id === "halves" ? halfAndHalfExtrasGroups(stepGroups) : []),
+  const halvesSharedTail = useMemo(
+    () => (currentStep?.id === "halves" ? halfAndHalfSharedTailGroups(stepGroups) : []),
     [currentStep, stepGroups]
   );
 
@@ -279,8 +280,9 @@ export function HalfAndHalfWizard(props: {
                 <div className="hh-halves-columns">
                   {(["right", "left"] as const).map((side) => {
                     const columnGroups = halfAndHalfColumnGroupsForSide(stepGroups, side);
+                    const columnTail = halfAndHalfColumnTailGroupsForSide(stepGroups, side);
                     const merged = halfAndHalfMergedColumnOptions(columnGroups);
-                    if (!merged.length) return null;
+                    if (!merged.length && !columnTail.length) return null;
                     const freeSelect = Math.max(0, ...columnGroups.map((g) => g.freeSelect ?? 0));
                     const minSelect = Math.max(0, ...columnGroups.map((g) => g.minSelect));
                     return (
@@ -294,17 +296,29 @@ export function HalfAndHalfWizard(props: {
                           {minSelect > 0 ? " *" : ""}
                           {freeSelect > 0 ? ` · ${freeSelect} free` : ""}
                         </h3>
-                        <div className="grid modifier-options-grid hh-half-grid">
-                          {merged.map(({ group, modifier }) =>
-                            renderOptionTiles(group, modifier, () => onChoose(group, modifier))
-                          )}
-                        </div>
+                        {merged.length > 0 ? (
+                          <div className="grid modifier-options-grid hh-half-grid">
+                            {merged.map(({ group, modifier }) =>
+                              renderOptionTiles(group, modifier, () => onChoose(group, modifier))
+                            )}
+                          </div>
+                        ) : null}
+                        {columnTail.map((group) => (
+                          <section key={group.id} className="hh-column-extras">
+                            <h3 className="hh-half-title hh-extras-title">{halfAndHalfExtrasRowLabel(group.name)}</h3>
+                            <div className="grid modifier-options-grid hh-half-grid">
+                              {group.modifiers.map((option) =>
+                                renderOptionTiles(group, option, () => onChoose(group, option))
+                              )}
+                            </div>
+                          </section>
+                        ))}
                       </section>
                     );
                   })}
                 </div>
-                {halvesExtras.map((group) => (
-                  <section key={group.id} className="hh-extras-row">
+                {halvesSharedTail.map((group) => (
+                  <section key={group.id} className="hh-shared-tail">
                     <h3 className="hh-half-title hh-extras-title">{halfAndHalfExtrasRowLabel(group.name)}</h3>
                     <div className="grid modifier-options-grid">
                       {group.modifiers.map((option) =>

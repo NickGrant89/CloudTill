@@ -172,6 +172,33 @@ export function halfAndHalfExtrasGroups<T extends { name: string }>(groups: T[])
   );
 }
 
+export type HalfAndHalfColumnTailSide = "right" | "left" | "shared";
+
+/** Which halves column owns an extras/remove group (shared = full-width row below both columns). */
+export function halfAndHalfColumnTailSide(groupName: string): HalfAndHalfColumnTailSide {
+  if (!isHalfAndHalfExtrasGroup(groupName) && !isHalfAndHalfRemoveGroup(groupName)) return "shared";
+  const lower = groupName.toLowerCase();
+  const hasRight = /\bright\b/.test(lower);
+  const hasLeft = /\bleft\b/.test(lower);
+  if (hasRight && !hasLeft) return "right";
+  if (hasLeft && !hasRight) return "left";
+  if (isHalfAndHalfRemoveGroup(groupName)) return "shared";
+  if (isHalfAndHalfRightGroup(groupName)) return "right";
+  if (isHalfAndHalfLeftGroup(groupName)) return "left";
+  return "shared";
+}
+
+export function halfAndHalfColumnTailGroupsForSide<T extends { name: string }>(
+  groups: T[],
+  side: "right" | "left"
+): T[] {
+  return halfAndHalfExtrasGroups(groups).filter((g) => halfAndHalfColumnTailSide(g.name) === side);
+}
+
+export function halfAndHalfSharedTailGroups<T extends { name: string }>(groups: T[]): T[] {
+  return halfAndHalfExtrasGroups(groups).filter((g) => halfAndHalfColumnTailSide(g.name) === "shared");
+}
+
 /** One merged tile list per side (CYO main + extra topping menus). */
 export function halfAndHalfMergedColumnOptions<
   G extends { id: string; modifiers: { id: string; name: string }[] }
