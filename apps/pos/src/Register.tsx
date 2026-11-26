@@ -837,6 +837,16 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
     setModifierGroupId("");
   }
 
+  function leavePizzaOptionsToGroups() {
+    const editing = editingLineKey;
+    closeModifierPicker();
+    if (editing) setMobilePane("ticket");
+    else {
+      openGroupHome();
+      setMobilePane("items");
+    }
+  }
+
   async function saveLineModifiers(
     lineKey: string,
     mods: { modifierId?: string; name: string; priceCents: number; groupName?: string }[]
@@ -1973,7 +1983,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
               chargedByModifierId={chargedByModifierId}
               onChoose={chooseModifier}
               onSetMods={applySelectedMods}
-              onClose={closeModifierPicker}
+              onClose={leavePizzaOptionsToGroups}
               onConfirm={() => void confirmModifiers()}
               onSauceLinkedChange={setHhSauceLinked}
               renderPreview={(stepId) => (
@@ -1993,11 +2003,13 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                     type="button"
                     className="chip chip-back till-options-back"
                     onClick={(e) => {
+                      e.preventDefault();
                       e.stopPropagation();
-                      closeModifierPicker();
+                      if (isConsolidatedPizzaItem(modifierItem.name)) leavePizzaOptionsToGroups();
+                      else closeModifierPicker();
                     }}
                   >
-                    ← {editingLineKey ? "Sale" : "Menu"}
+                    ← {editingLineKey ? "Sale" : "Groups"}
                   </button>
                   <div className="brand-mini">{editingLineKey ? `Edit · ${modifierItem.name}` : modifierItem.name}</div>
                 </div>
@@ -2093,7 +2105,11 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
               <button
                 type="button"
                 className={`chip chip-back${showGroupHome ? " is-reserved" : ""}`}
-                onClick={() => openGroupHome()}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  openGroupHome();
+                }}
                 disabled={showGroupHome}
                 tabIndex={showGroupHome ? -1 : 0}
                 aria-hidden={showGroupHome}

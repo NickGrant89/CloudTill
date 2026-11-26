@@ -1164,9 +1164,10 @@ select:focus-visible {
   touch-action: manipulation;
 }
 
-.till-options-back {
+.till-options-back,
+.catalog-head .topbar .chip-back:not(.is-reserved) {
   position: relative;
-  z-index: 2;
+  z-index: 40;
   pointer-events: auto;
   touch-action: manipulation;
 }

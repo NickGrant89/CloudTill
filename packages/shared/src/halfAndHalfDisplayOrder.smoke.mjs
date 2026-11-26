@@ -43,6 +43,7 @@ for (const [item, mods] of [
   const iLeftHalf = roleIndex(ordered, (g) => /left/i.test(g) && /half/i.test(g) && !/extra/i.test(g) && !/sauce/i.test(g));
   const iLeftExtras = roleIndex(ordered, (g) => /left/i.test(g) && /extra/i.test(g));
   const iSauceR = roleIndex(ordered, (g) => /pizza sauce 2/i.test(g));
+  const iLeftRemoves = roleIndex(ordered, (g) => /remove/i.test(g));
   const iRightHalf = roleIndex(ordered, (g) => /right/i.test(g) && /half/i.test(g) && !/extra/i.test(g) && !/sauce/i.test(g));
   const iRightExtras = roleIndex(ordered, (g) => /right/i.test(g) && /extra/i.test(g));
 

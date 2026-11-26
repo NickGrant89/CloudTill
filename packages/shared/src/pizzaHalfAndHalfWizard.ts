@@ -249,7 +249,18 @@ export function halfAndHalfColumnTailGroupsForSide<T extends { name: string }>(
   return halfAndHalfWizardExtrasGroups(groups).filter((g) => halfAndHalfColumnTailSide(g.name) === side);
 }
 
-/** Full-width remove menus (wizard Options step, above extras). */
+/** Remove lists shown under each half (L/R in name, or shared catalog list on both sides). */
+export function halfAndHalfRemoveGroupsForSide<T extends { name: string }>(
+  groups: T[],
+  side: "right" | "left"
+): T[] {
+  return halfAndHalfWizardRemoveGroups(groups).filter((g) => {
+    const tail = halfAndHalfColumnTailSide(g.name);
+    return tail === side || tail === "shared";
+  });
+}
+
+/** @deprecated full-width removes — use per-side columns */
 export function halfAndHalfSharedTailGroups<T extends { name: string }>(groups: T[]): T[] {
   return halfAndHalfWizardRemoveGroups(groups);
 }
@@ -271,16 +282,20 @@ export function halfAndHalfMergedColumnOptions<
 }
 
 /**
- * Sale / kitchen / receipt display order for half-and-half:
- * Size → Base → (removes) → Sauce left → Left half → Left extras → Sauce right → Right half → Right extras.
+ * Sale / kitchen / receipt display order for half-and-half (full left block, then full right):
+ * Size → Base → Sauce L → Left half → Left removes → Left extras → Sauce R → Right half → Right removes → Right extras.
+ * Shared remove lists sort with the left block and are duplicated after the right half in prepareHalfAndHalfLineModifiers.
  */
 export function halfAndHalfModifierDisplayRank(groupName: string): number {
   const role = normRole(groupName);
   if (role === "size") return 0;
   if (role === "pizza base") return 10;
-  if (isHalfAndHalfRemoveGroup(groupName)) return 12;
   if (role === "pizza sauce") return 20;
   if (isHalfAndHalfLeftGroup(groupName) && !isHalfAndHalfExtrasGroup(groupName)) return 30;
+  if (isHalfAndHalfRemoveGroup(groupName)) {
+    const side = halfAndHalfColumnTailSide(groupName);
+    return side === "right" ? 65 : 35;
+  }
   if (isHalfAndHalfExtrasGroup(groupName) && halfAndHalfColumnTailSide(groupName) === "left") return 40;
   if (role === "pizza sauce 2") return 50;
   if (isHalfAndHalfRightGroup(groupName) && !isHalfAndHalfExtrasGroup(groupName)) return 60;
@@ -327,7 +342,36 @@ export function prepareHalfAndHalfLineModifiers<T extends { name?: string; group
   if (mirroredSauces) {
     ordered = ordered.filter((m) => normRole(m.groupName ?? "") !== "pizza sauce 2");
   }
+  ordered = duplicateSharedRemoveToppingsForRightHalf(ordered);
   return { mods: ordered, mirroredSauces };
+}
+
+/** Loyverse shared `Remove Toppings` — show under left block and again under right half on kitchen/receipt. */
+function duplicateSharedRemoveToppingsForRightHalf<T extends { name?: string; groupName?: string }>(
+  ordered: T[]
+): T[] {
+  const shared = ordered.filter(
+    (m) =>
+      isHalfAndHalfRemoveGroup(m.groupName ?? "") &&
+      halfAndHalfColumnTailSide(m.groupName ?? "") === "shared"
+  );
+  if (!shared.length) return ordered;
+  const out: T[] = [];
+  let duplicated = false;
+  for (const m of ordered) {
+    out.push(m);
+    const gn = m.groupName ?? "";
+    if (
+      !duplicated &&
+      isHalfAndHalfRightGroup(gn) &&
+      !isHalfAndHalfExtrasGroup(gn) &&
+      !isHalfAndHalfRemoveGroup(gn)
+    ) {
+      for (const row of shared) out.push({ ...row });
+      duplicated = true;
+    }
+  }
+  return out;
 }
 
 export function displayModifierGroupLabel(
