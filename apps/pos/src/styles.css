@@ -1019,9 +1019,19 @@ select:focus-visible {
 .hh-wizard {
   display: flex;
   flex-direction: column;
+  flex: 1 1 0;
   min-height: 0;
-  flex: 1;
+  height: 100%;
   gap: 8px;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.hh-wizard-head,
+.hh-steps,
+.hh-step-kicker,
+.hh-sauce-bar {
+  flex-shrink: 0;
 }
 
 .hh-wizard-head {
@@ -1029,6 +1039,16 @@ select:focus-visible {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.hh-wizard-body {
+  flex: 1 1 0;
+  min-height: 140px;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .hh-steps {
@@ -1091,10 +1111,30 @@ select:focus-visible {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+  flex: 1 1 auto;
+  min-height: min-content;
+  align-content: start;
+  padding: 0 2px 8px;
+}
+
+.hh-step-grid.grid,
+.hh-half-grid.grid {
+  flex: none;
   min-height: 0;
-  overflow: auto;
-  flex: 1;
-  padding: 0 2px;
+  overflow: visible;
+  align-content: start;
+}
+
+.hh-half-grid {
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  grid-auto-rows: minmax(104px, auto);
+}
+
+.hh-half-grid .item-tile,
+.hh-step-grid .item-tile,
+.hh-tile {
+  height: auto;
+  min-height: 104px;
 }
 
 .hh-half-col {
@@ -1113,24 +1153,102 @@ select:focus-visible {
   color: #fef3c7;
 }
 
-.hh-half-grid {
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-}
-
 .hh-nav {
   display: flex;
   gap: 10px;
   justify-content: flex-end;
-  padding: 4px;
+  padding: 4px 8px 0;
+}
+
+.hh-wizard-footer {
+  flex-shrink: 0;
+  margin-top: auto;
+  position: sticky;
+  bottom: 0;
+  z-index: 12;
+  background: #fffdf8;
+  border-top: 1px solid var(--line);
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+  box-shadow: 0 -8px 24px rgba(26, 36, 32, 0.12);
+  pointer-events: auto;
 }
 
 .hh-modifier-bar {
-  margin-top: auto;
+  margin-top: 0;
+  border-top: none;
+  position: relative;
+  z-index: 1;
+}
+
+.hh-modifier-summary {
+  min-width: 0;
+  flex: 1;
+}
+
+.hh-preview-wrap {
+  max-height: 5.5rem;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.hh-preview-compact {
+  max-height: 3.5rem;
+}
+
+.hh-add-btn {
+  position: relative;
+  z-index: 2;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+/* Options / wizard: sale column must not sit on top of the picker (phone + tablet) */
+@media (max-width: 1366px) {
+  .app-shell.till-options .register {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-shell.till-options .ticket-panel {
+    display: none !important;
+  }
+
+  .app-shell.till-options .catalog-panel {
+    position: relative;
+    z-index: 25;
+    flex: 1 1 0;
+    min-height: 0;
+  }
+
+  .app-shell.till-options .catalog-panel--hh-wizard {
+    z-index: 30;
+  }
 }
 
 @media (max-width: 768px) {
   .hh-halves {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 699px), (max-width: 920px) and (max-height: 480px) and (hover: none) {
+  .app-shell.till-options .mobile-dock,
+  .app-shell.till-options .mobile-dock.is-hidden {
+    display: none !important;
+  }
+
+  .catalog-panel--hh-wizard .hh-wizard-footer {
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+
+  .catalog-panel--hh-wizard .hh-modifier-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .catalog-panel--hh-wizard .hh-add-btn {
+    width: 100%;
+    margin-left: 0;
+    min-height: 52px;
   }
 }
 
@@ -1149,8 +1267,12 @@ select:focus-visible {
 }
 
 .app-shell.till-pay .mobile-dock,
-.app-shell.till-done .mobile-dock,
-.app-shell.till-options .mobile-dock {
+.app-shell.till-done .mobile-dock {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.app-shell.till-options .mobile-dock:not(.is-hidden) {
   opacity: 0.35;
   pointer-events: none;
 }

@@ -1843,7 +1843,9 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
       </p>
 
       <div className={`register pane-${mobilePane}`}>
-        <section className="panel catalog-panel">
+        <section
+          className={`panel catalog-panel${showHalfAndHalfWizard ? " catalog-panel--hh-wizard" : ""}${modifierItem ? " catalog-panel--options" : ""}`}
+        >
           {showHalfAndHalfWizard && modifierItem ? (
             <HalfAndHalfWizard
               item={modifierItem}

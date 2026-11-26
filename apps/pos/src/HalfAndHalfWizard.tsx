@@ -240,115 +240,133 @@ export function HalfAndHalfWizard(props: {
         </div>
       )}
 
-      {currentStep.id === "halves" ? (
-        <div className="hh-halves">
-          {stepGroups.map((group) => (
-            <section key={group.id} className="hh-half-col" aria-label={halfAndHalfWizardGroupLabel(group.name)}>
-              <h3 className="hh-half-title">
-                {halfAndHalfWizardGroupLabel(group.name)}
-                {group.minSelect > 0 ? " *" : ""}
-                {(group.freeSelect ?? 0) > 0 ? ` · ${group.freeSelect} free` : ""}
-              </h3>
-              <div className="grid hh-half-grid">
-                {group.modifiers.map((option) => {
-                  const selected = (selectedMods[group.id] ?? []).some((p) => p.id === option.id);
-                  const listPrice = modifierListPriceCents(
-                    option.priceCents,
-                    group.name,
-                    item.name,
-                    sizeInches
-                  );
-                  return (
-                    <OptionTile
-                      key={option.id}
-                      item={item}
-                      group={group}
-                      option={option}
-                      selected={selected}
-                      listPrice={listPrice}
-                      chargedCents={chargedByModifierId.get(option.id)}
-                      onPick={() => onChoose(group, option)}
-                    />
-                  );
-                })}
-              </div>
-            </section>
-          ))}
-        </div>
-      ) : (
-        <>
-          {currentStep.id === "sauce" &&
-            !sauceLinked &&
-            stepGroups.map(
-              (group) =>
-                isHalfAndHalfSauceGroup(group.name) && (
-                  <h3 key={group.id} className="hh-half-title">
+      <div className="hh-wizard-body">
+        {currentStep.id === "halves" ? (
+          <div className="hh-halves">
+            {stepGroups.length === 0 ? (
+              <p className="empty">Choose a size first — topping groups appear for 9″, 12″ or 16″.</p>
+            ) : (
+              stepGroups.map((group) => (
+                <section key={group.id} className="hh-half-col" aria-label={halfAndHalfWizardGroupLabel(group.name)}>
+                  <h3 className="hh-half-title">
                     {halfAndHalfWizardGroupLabel(group.name)}
+                    {group.minSelect > 0 ? " *" : ""}
+                    {(group.freeSelect ?? 0) > 0 ? ` · ${group.freeSelect} free` : ""}
                   </h3>
-                )
-            )}
-          <div className="grid">
-            {(currentStep.id === "sauce" && sauceLinked && sauceLeft ? [sauceLeft] : stepGroups).flatMap((group) =>
-              group
-                ? group.modifiers.map((option) => {
-                    const selected = (selectedMods[group.id] ?? []).some((p) => p.id === option.id);
-                    const listPrice = modifierListPriceCents(
-                      option.priceCents,
-                      group.name,
-                      item.name,
-                      sizeInches
-                    );
-                    return (
-                      <OptionTile
-                        key={`${group.id}-${option.id}`}
-                        item={item}
-                        group={group}
-                        option={option}
-                        selected={selected}
-                        listPrice={listPrice}
-                        chargedCents={chargedByModifierId.get(option.id)}
-                        onPick={() =>
-                          currentStep.id === "sauce" ? pickSauce(group, option) : onChoose(group, option)
-                        }
-                      />
-                    );
-                  })
-                : []
+                  <div className="grid hh-half-grid">
+                    {group.modifiers.map((option) => {
+                      const selected = (selectedMods[group.id] ?? []).some((p) => p.id === option.id);
+                      const listPrice = modifierListPriceCents(
+                        option.priceCents,
+                        group.name,
+                        item.name,
+                        sizeInches
+                      );
+                      return (
+                        <OptionTile
+                          key={option.id}
+                          item={item}
+                          group={group}
+                          option={option}
+                          selected={selected}
+                          listPrice={listPrice}
+                          chargedCents={chargedByModifierId.get(option.id)}
+                          onPick={() => onChoose(group, option)}
+                        />
+                      );
+                    })}
+                  </div>
+                </section>
+              ))
             )}
           </div>
-        </>
-      )}
-
-      <div className="hh-nav">
-        <button
-          type="button"
-          className="btn ghost"
-          disabled={stepIndex === 0}
-          onClick={() => setStepIndex((i) => Math.max(0, i - 1))}
-        >
-          Back
-        </button>
-        {!onLastStep ? (
-          <button
-            type="button"
-            className="btn"
-            disabled={!canNext}
-            onClick={() => setStepIndex((i) => Math.min(activeSteps.length - 1, i + 1))}
-          >
-            Next
-          </button>
-        ) : null}
+        ) : (
+          <>
+            {currentStep.id === "sauce" &&
+              !sauceLinked &&
+              stepGroups.map(
+                (group) =>
+                  isHalfAndHalfSauceGroup(group.name) && (
+                    <h3 key={group.id} className="hh-half-title">
+                      {halfAndHalfWizardGroupLabel(group.name)}
+                    </h3>
+                  )
+              )}
+            <div className="grid hh-step-grid">
+              {(currentStep.id === "sauce" && sauceLinked && sauceLeft ? [sauceLeft] : stepGroups).flatMap((group) =>
+                group
+                  ? group.modifiers.map((option) => {
+                      const selected = (selectedMods[group.id] ?? []).some((p) => p.id === option.id);
+                      const listPrice = modifierListPriceCents(
+                        option.priceCents,
+                        group.name,
+                        item.name,
+                        sizeInches
+                      );
+                      return (
+                        <OptionTile
+                          key={`${group.id}-${option.id}`}
+                          item={item}
+                          group={group}
+                          option={option}
+                          selected={selected}
+                          listPrice={listPrice}
+                          chargedCents={chargedByModifierId.get(option.id)}
+                          onPick={() =>
+                            currentStep.id === "sauce" ? pickSauce(group, option) : onChoose(group, option)
+                          }
+                        />
+                      );
+                    })
+                  : []
+              )}
+            </div>
+          </>
+        )}
       </div>
 
-      <div className="modifier-bar hh-modifier-bar">
-        <div>
-          <p className="step-kicker">{editingLineKey ? "Edit options" : "Half & half"}</p>
-          <strong>{item.name}</strong>
-          {modifierPreview.length > 0 ? previewList : <div className="meta">Choose options</div>}
+      <div className="hh-wizard-footer">
+        <div className="hh-nav">
+          <button
+            type="button"
+            className="btn ghost"
+            disabled={stepIndex === 0}
+            onClick={() => setStepIndex((i) => Math.max(0, i - 1))}
+          >
+            Back
+          </button>
+          {!onLastStep ? (
+            <button
+              type="button"
+              className="btn"
+              disabled={!canNext}
+              onClick={() => setStepIndex((i) => Math.min(activeSteps.length - 1, i + 1))}
+            >
+              Next
+            </button>
+          ) : null}
         </div>
-        <button type="button" className="pay-btn" onClick={onConfirm}>
-          {editingLineKey ? "Update" : "Add"} {money(modifierTotal)}
-        </button>
+
+        <div className="modifier-bar hh-modifier-bar">
+          <div className="hh-modifier-summary">
+            <p className="step-kicker">{editingLineKey ? "Edit options" : "Half & half"}</p>
+            <strong>{item.name}</strong>
+            {currentStep.id === "halves" ? (
+              modifierPreview.length > 0 ? (
+                <div className="hh-preview-wrap hh-preview-compact">{previewList}</div>
+              ) : (
+                <div className="meta">Pick RIGHT and LEFT toppings</div>
+              )
+            ) : modifierPreview.length > 0 ? (
+              <div className="hh-preview-wrap">{previewList}</div>
+            ) : (
+              <div className="meta">Choose options</div>
+            )}
+          </div>
+          <button type="button" className="pay-btn hh-add-btn" onClick={onConfirm}>
+            {editingLineKey ? "Update" : "Add"} {money(modifierTotal)}
+          </button>
+        </div>
       </div>
     </div>
   );
