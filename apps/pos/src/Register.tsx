@@ -1,6 +1,8 @@
 import {
+  displayModifierGroupLabel,
   groupModifierLines,
   isConsolidatedPizzaItem,
+  isHalfAndHalfWizardItem,
   modifierListPriceCents,
   pizzaSizeInchesFromSelection,
   priceModifierPicks,
@@ -11,6 +13,7 @@ import {
   tillPizzaModGroupLabel,
   visiblePizzaModifierGroups,
 } from "@cloudtill/shared";
+import { HalfAndHalfWizard } from "./HalfAndHalfWizard";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, getToken, loadCatalogSnapshot, money, OfflineError, saveCatalogSnapshot } from "./api";
 import type { SessionRegister, SessionStore, SessionUser } from "./App";
@@ -108,9 +111,11 @@ function sortModsByItemGroups<T extends { groupName?: string }>(mods: T[], group
 function ModifierList({
   mods,
   groups,
+  itemName,
 }: {
   mods: { name: string; groupName?: string }[];
   groups?: { name: string }[];
+  itemName?: string;
 }) {
   const ordered = groups?.length ? sortModsByItemGroups(mods, groups) : mods;
   const blocks = groupModifierLines(ordered);
@@ -119,7 +124,9 @@ function ModifierList({
     <ul className="mod-list">
       {blocks.map((block, index) => (
         <li key={`${block.groupName ?? "mods"}-${index}`}>
-          {block.groupName && <div className="mod-group">{block.groupName}</div>}
+          {block.groupName && (
+            <div className="mod-group">{displayModifierGroupLabel(itemName, block.groupName) ?? block.groupName}</div>
+          )}
           {block.names.map((name, nameIndex) => (
             <div key={`${name}-${nameIndex}`} className="mod-name">
               {name}
@@ -597,6 +604,21 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
     setModifierGroupId(groups[0]?.id ?? "");
     setModifierItem(item);
     setMobilePane("items");
+  }
+
+  function applySelectedMods(next: Record<string, Modifier[]>) {
+    if (!modifierItem) {
+      setSelectedMods(next);
+      return;
+    }
+    const visibleIds = new Set(
+      visiblePizzaModifierGroups(modifierItem.name, modifierItem.modifierGroups, next).map((g) => g.id)
+    );
+    const cleaned = { ...next };
+    for (const key of Object.keys(cleaned)) {
+      if (!visibleIds.has(key)) delete cleaned[key];
+    }
+    setSelectedMods(cleaned);
   }
 
   function chooseModifier(group: ModGroup, modifier: Modifier) {
@@ -1473,11 +1495,12 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
       const lines = s.lines
         .map((l, index) => {
           const head = `${l.quantity} x ${l.name}`.padEnd(28) + money(l.totalCents);
+          const lineItemName = ticket.lines[index]?.name;
           const blocks = groupModifierLines(ticket.lines[index]?.modifiers ?? []);
-          const modLines = blocks.flatMap((block) => [
-            ...(block.groupName ? [`  ${block.groupName}`] : []),
-            ...block.names.map((name) => `    + ${name}`),
-          ]);
+          const modLines = blocks.flatMap((block) => {
+            const heading = displayModifierGroupLabel(lineItemName, block.groupName);
+            return [...(heading ? [`  ${heading}`] : []), ...block.names.map((name) => `    + ${name}`)];
+          });
           return [head, ...modLines].join("\n");
         })
         .join("\n");
@@ -1670,6 +1693,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
         modifierItem.modifierGroups
       )
     : [];
+  const showHalfAndHalfWizard = Boolean(modifierItem && isHalfAndHalfWizardItem(modifierItem.name));
   const tillPhase: "sale" | "options" | "pay" | "done" = modifierItem
     ? "options"
     : modal?.type === "pay"
@@ -1820,6 +1844,29 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
 
       <div className={`register pane-${mobilePane}`}>
         <section className="panel catalog-panel">
+          {showHalfAndHalfWizard && modifierItem ? (
+            <HalfAndHalfWizard
+              item={modifierItem}
+              visibleGroups={visibleModifierGroups}
+              selectedMods={selectedMods}
+              modifierPreview={modifierPreview}
+              modifierTotal={modifierTotal}
+              editingLineKey={editingLineKey}
+              chargedByModifierId={chargedByModifierId}
+              onChoose={chooseModifier}
+              onSetMods={applySelectedMods}
+              onClose={closeModifierPicker}
+              onConfirm={() => void confirmModifiers()}
+              previewList={
+                <ModifierList
+                  mods={modifierPreview}
+                  groups={modifierItem.modifierGroups}
+                  itemName={modifierItem.name}
+                />
+              }
+            />
+          ) : (
+          <>
           <div className="topbar">
             {modifierItem ? (
               <>
@@ -1912,7 +1959,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
             )}
           </div>
           {catalogError && <p className="banner">{catalogError}</p>}
-          {modifierItem && activeModGroup ? (
+          {modifierItem && activeModGroup && !showHalfAndHalfWizard ? (
           <div className="grid">
               {activeModGroup.modifiers.map((option) => {
                 const selected = (selectedMods[activeModGroup.id] ?? []).some((picked) => picked.id === option.id);
@@ -2010,7 +2057,11 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                 <p className="step-kicker">{editingLineKey ? "Edit options" : "Step 2 · Options"}</p>
                 <strong>{modifierItem.name}</strong>
                 {modifierPreview.length > 0 ? (
-                  <ModifierList mods={modifierPreview} groups={modifierItem?.modifierGroups} />
+                  <ModifierList
+                    mods={modifierPreview}
+                    groups={modifierItem?.modifierGroups}
+                    itemName={modifierItem?.name}
+                  />
                 ) : (
                   <div className="meta">Choose options</div>
                 )}
@@ -2019,6 +2070,8 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                 {editingLineKey ? "Update" : "Add"} {money(modifierTotal)}
               </button>
             </div>
+          )}
+          </>
           )}
         </section>
 
@@ -2093,7 +2146,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                       <button type="button" className="line-edit-hit" onClick={() => openLineEditor(line)}>
                         <span className="line-edit-name">{line.name}</span>
                         {line.modifiers.length > 0 && (
-                          <ModifierList mods={line.modifiers} groups={groupsForLine(line)} />
+                          <ModifierList mods={line.modifiers} groups={groupsForLine(line)} itemName={line.name} />
                         )}
                         <span className="line-edit-hint">Edit options</span>
                       </button>
@@ -2101,7 +2154,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                       <>
                         <div style={{ fontWeight: 600 }}>{line.name}</div>
                         {line.modifiers.length > 0 && (
-                          <ModifierList mods={line.modifiers} groups={groupsForLine(line)} />
+                          <ModifierList mods={line.modifiers} groups={groupsForLine(line)} itemName={line.name} />
                         )}
                       </>
                     )}
@@ -2759,7 +2812,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                 <li key={line.key}>
                   <strong>{quantity}×</strong> {line.name}
                   {line.modifiers.length > 0 && (
-                    <ModifierList mods={line.modifiers} groups={groupsForLine(line)} />
+                    <ModifierList mods={line.modifiers} groups={groupsForLine(line)} itemName={line.name} />
                   )}
                 </li>
               ))}

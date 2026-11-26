@@ -1,4 +1,4 @@
-import { groupModifierLines } from "@cloudtill/shared";
+import { displayModifierGroupLabel, groupModifierLines } from "@cloudtill/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, getToken } from "./api";
 import type { SessionStore, SessionUser } from "./App";
@@ -582,7 +582,11 @@ export function KitchenScreen({
                                 <span className="kds-mods">
                                   {groupModifierLines(mods).map((block, index) => (
                                     <span key={`${block.groupName ?? "mods"}-${index}`}>
-                                      {block.groupName && <span className="kds-mod-group">{block.groupName}</span>}
+                                      {block.groupName && (
+                                        <span className="kds-mod-group">
+                                          {displayModifierGroupLabel(l.name, block.groupName) ?? block.groupName}
+                                        </span>
+                                      )}
                                       {block.names.map((name, nameIndex) => (
                                         <span key={`${name}-${nameIndex}`} className="kds-mod-name">
                                           {name}

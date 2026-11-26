@@ -31,7 +31,10 @@ export function buildKitchenTicketText(opts: {
     ...opts.lines.map((line) => {
       let extra = "";
       try {
-        const mods = receiptModifierLines(JSON.parse(line.modifiersJson || "[]") as { name?: string; groupName?: string }[]);
+        const mods = receiptModifierLines(
+          JSON.parse(line.modifiersJson || "[]") as { name?: string; groupName?: string }[],
+          line.name
+        );
         extra = mods.length ? `\n${mods.join("\n")}` : "";
       } catch {
         extra = "";

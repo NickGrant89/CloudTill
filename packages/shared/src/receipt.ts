@@ -1,3 +1,5 @@
+import { displayModifierGroupLabel } from "./pizzaHalfAndHalfWizard.js";
+
 /** Print-friendly receipt builders: plain text, HTML, and ESC/POS byte pipeline */
 
 export interface ReceiptLine {
@@ -56,10 +58,14 @@ export function groupModifierLines(mods: { name?: string; groupName?: string }[]
 }
 
 /** Indented modifier lines for receipts / kitchen (group, then options under it). */
-export function receiptModifierLines(mods: { name?: string; groupName?: string }[]) {
+export function receiptModifierLines(
+  mods: { name?: string; groupName?: string }[],
+  itemName?: string
+) {
   const lines: string[] = [];
   for (const block of groupModifierLines(mods)) {
-    if (block.groupName) lines.push(`  ${block.groupName}`);
+    const heading = displayModifierGroupLabel(itemName, block.groupName);
+    if (heading) lines.push(`  ${heading}`);
     for (const name of block.names) lines.push(`    + ${name}`);
   }
   return lines;
