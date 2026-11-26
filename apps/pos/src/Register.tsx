@@ -1958,7 +1958,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
       ) : null}
       </header>
 
-      <div className={`register pane-${mobilePane}`}>
+      <div className={`register register-shell pane-${mobilePane}`}>
         <section
           className={`panel catalog-panel${modifierItem ? " catalog-panel--options" : ""}`}
         >

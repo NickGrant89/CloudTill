@@ -303,6 +303,20 @@ select:focus-visible {
 .catalog-panel {
   --catalog-topbar-h: 56px;
   --catalog-chips-h: 60px;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.catalog-panel > .grid,
+.catalog-panel > .menu-sections,
+.catalog-panel > .group-picker-grid {
+  flex: 1 1 0;
+  min-height: 1px;
+  min-width: 0;
 }
 
 .catalog-head {
@@ -311,6 +325,7 @@ select:focus-visible {
   display: flex;
   flex-direction: column;
   min-height: calc(var(--catalog-topbar-h) + var(--catalog-chips-h));
+  max-height: calc(var(--catalog-topbar-h) + var(--catalog-chips-h));
   border-bottom: 1px solid var(--line);
   background: #f6f1e8;
   z-index: 2;
@@ -1758,6 +1773,27 @@ select:focus-visible {
   color: var(--panel-ink);
   min-height: 40px;
   padding: 0 12px;
+}
+
+/* Tablet+ split: never use phone single-pane rules — catalog column must stay visible (iPad landscape). */
+@media (min-width: 700px) {
+  .register.register-shell {
+    display: grid !important;
+    flex-direction: unset !important;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr) !important;
+  }
+
+  .register.register-shell .catalog-panel,
+  .register.register-shell .ticket-panel {
+    display: flex !important;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .register.pane-items .ticket-panel,
+  .register.pane-ticket .catalog-panel {
+    display: flex !important;
+  }
 }
 
 /* iPad / tablet (incl. Pro landscape ~1180–1366): sale + ticket side-by-side */
