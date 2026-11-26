@@ -1334,6 +1334,13 @@ tr:last-child td {
   align-items: start;
 }
 
+/* Must follow .dash-grid base — earlier @media blocks were losing the cascade on phone. */
+@media (max-width: 1100px) {
+  .dash-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .dash-panel-head {
   display: flex;
   justify-content: space-between;
@@ -1452,13 +1459,32 @@ tr:last-child td {
   }
 
   .dash-today {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     gap: 10px;
     margin-bottom: 14px;
   }
 
+  .dash-today .stat {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
   .stat-hero {
-    grid-column: 1 / -1;
+    grid-column: auto;
+  }
+
+  .dash-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .dash-side,
+  .dash-kitchen {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
   }
 
   .stat-hero .value {
@@ -1483,6 +1509,8 @@ tr:last-child td {
   .dash-panel-head button {
     width: 100%;
     min-height: 44px;
+    white-space: nowrap;
+    text-align: center;
   }
 
   .dash-order-list li {
