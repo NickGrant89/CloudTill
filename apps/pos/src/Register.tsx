@@ -112,14 +112,45 @@ function ModifierList({
   mods,
   groups,
   itemName,
+  variant = "default",
 }: {
   mods: { name: string; groupName?: string }[];
   groups?: { name: string }[];
   itemName?: string;
+  /** Footer on H&H halves step: compact lines, no duplicate LEFT/RIGHT column headers. */
+  variant?: "default" | "halves-footer";
 }) {
   const ordered = groups?.length ? sortModsByItemGroups(mods, groups) : mods;
   const blocks = groupModifierLines(ordered);
   if (!blocks.length) return null;
+  if (variant === "halves-footer") {
+    return (
+      <ul className="mod-list mod-list--halves-footer">
+        {blocks.map((block, index) => {
+          const heading = displayModifierGroupLabel(itemName, block.groupName) ?? block.groupName;
+          const isHalfSide = heading === "LEFT" || heading === "RIGHT";
+          if (isHalfSide) {
+            return (
+              <li key={`${block.groupName ?? "mods"}-${index}`} className="mod-half-summary">
+                <span className="mod-side-tag">{heading}</span>
+                <span className="mod-side-picks">{block.names.join(" · ")}</span>
+              </li>
+            );
+          }
+          return (
+            <li key={`${block.groupName ?? "mods"}-${index}`}>
+              {heading && <div className="mod-group">{heading}</div>}
+              {block.names.map((name, nameIndex) => (
+                <div key={`${name}-${nameIndex}`} className="mod-name">
+                  {name}
+                </div>
+              ))}
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
   return (
     <ul className="mod-list">
       {blocks.map((block, index) => (
@@ -1859,13 +1890,14 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
               onSetMods={applySelectedMods}
               onClose={closeModifierPicker}
               onConfirm={() => void confirmModifiers()}
-              previewList={
+              renderPreview={(stepId) => (
                 <ModifierList
                   mods={modifierPreview}
                   groups={modifierItem.modifierGroups}
                   itemName={modifierItem.name}
+                  variant={stepId === "halves" ? "halves-footer" : "default"}
                 />
-              }
+              )}
             />
           ) : modifierItem ? (
             <div className="options-picker">
@@ -1942,7 +1974,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                     <p className="step-kicker">{editingLineKey ? "Edit options" : "Step 2 · Options"}</p>
                     <strong>{modifierItem.name}</strong>
                     {modifierPreview.length > 0 ? (
-                      <div className="options-preview-wrap">
+                      <div className="till-options-preview">
                         <ModifierList
                           mods={modifierPreview}
                           groups={modifierItem.modifierGroups}

@@ -112,7 +112,7 @@ export function HalfAndHalfWizard(props: {
   onSetMods: (next: Record<string, Modifier[]>) => void;
   onClose: () => void;
   onConfirm: () => void;
-  previewList: React.ReactNode;
+  renderPreview: (stepId: HalfAndHalfWizardStepId) => React.ReactNode;
 }) {
   const {
     item,
@@ -126,7 +126,7 @@ export function HalfAndHalfWizard(props: {
     onSetMods,
     onClose,
     onConfirm,
-    previewList,
+    renderPreview,
   } = props;
 
   const activeSteps = useMemo(() => {
@@ -351,16 +351,12 @@ export function HalfAndHalfWizard(props: {
           <div className="hh-modifier-summary">
             <p className="step-kicker">{editingLineKey ? "Edit options" : "Half & half"}</p>
             <strong>{item.name}</strong>
-            {currentStep.id === "halves" ? (
-              modifierPreview.length > 0 ? (
-                <div className="hh-preview-wrap hh-preview-compact">{previewList}</div>
-              ) : (
-                <div className="meta">Pick RIGHT and LEFT toppings</div>
-              )
-            ) : modifierPreview.length > 0 ? (
-              <div className="hh-preview-wrap">{previewList}</div>
+            {modifierPreview.length > 0 ? (
+              <div className="till-options-preview">{renderPreview(currentStep.id)}</div>
             ) : (
-              <div className="meta">Choose options</div>
+              <div className="meta">
+                {currentStep.id === "halves" ? "Pick RIGHT and LEFT toppings" : "Choose options"}
+              </div>
             )}
           </div>
           <button type="button" className="pay-btn hh-add-btn" onClick={onConfirm}>

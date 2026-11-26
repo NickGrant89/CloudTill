@@ -1146,11 +1146,27 @@ select:focus-visible {
 
 .hh-half-title {
   margin: 0;
-  font-size: 0.95rem;
+  padding: 8px 10px;
+  font-size: 0.78rem;
   font-weight: 800;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #fef3c7;
+  color: var(--panel-ink);
+  background: rgba(13, 148, 136, 0.1);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+}
+
+.hh-half-col > .hh-half-title + .grid {
+  margin-top: 2px;
+}
+
+.hh-halves .hh-tile .name,
+.hh-halves .hh-tile .price,
+.hh-half-grid .item-tile .name,
+.hh-half-grid .item-tile .price {
+  color: #f7f3eb;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
 
 .hh-nav {
@@ -1178,21 +1194,67 @@ select:focus-visible {
   border-top: none;
   position: relative;
   z-index: 1;
+  align-items: flex-start;
+}
+
+.hh-wizard-footer .hh-modifier-summary {
+  max-height: min(36vh, 10rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.hh-wizard-footer .till-options-preview {
+  max-height: none;
+  overflow: visible;
 }
 
 .hh-modifier-summary {
   min-width: 0;
   flex: 1;
+  min-height: 0;
 }
 
-.hh-preview-wrap {
-  max-height: 5.5rem;
-  overflow: auto;
+/* Shared scrollable footer preview (wizard + tabbed options) */
+.till-options-preview {
+  max-height: min(32vh, 9rem);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  margin-top: 4px;
+  padding-right: 4px;
 }
 
-.hh-preview-compact {
-  max-height: 3.5rem;
+.till-options-preview .mod-list {
+  margin: 0;
+}
+
+.mod-list--halves-footer .mod-half-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: baseline;
+  margin-top: 4px;
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.mod-side-tag {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+  background: rgba(13, 148, 136, 0.18);
+}
+
+.mod-side-picks {
+  color: var(--panel-ink);
+  min-width: 0;
 }
 
 .hh-add-btn {
@@ -1253,10 +1315,8 @@ select:focus-visible {
   flex: 1;
 }
 
-.options-preview-wrap {
-  max-height: 3.75rem;
-  overflow: auto;
-  -webkit-overflow-scrolling: touch;
+.options-picker-footer .till-options-preview {
+  max-height: min(28vh, 8rem);
 }
 
 .options-confirm-btn {
