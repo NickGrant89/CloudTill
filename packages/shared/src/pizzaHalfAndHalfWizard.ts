@@ -270,22 +270,22 @@ export function halfAndHalfMergedColumnOptions<
   return rows;
 }
 
-/** Sale / kitchen / receipt display order: always LEFT before RIGHT on half-and-half items. */
+/**
+ * Sale / kitchen / receipt display order for half-and-half:
+ * Size → Base → (removes) → Sauce left → Left half → Left extras → Sauce right → Right half → Right extras.
+ */
 export function halfAndHalfModifierDisplayRank(groupName: string): number {
   const role = normRole(groupName);
   if (role === "size") return 0;
   if (role === "pizza base") return 10;
+  if (isHalfAndHalfRemoveGroup(groupName)) return 12;
   if (role === "pizza sauce") return 20;
-  if (role === "pizza sauce 2") return 30;
-  if (isHalfAndHalfLeftGroup(groupName) && !isHalfAndHalfExtrasGroup(groupName)) return 40;
-  if (isHalfAndHalfRightGroup(groupName) && !isHalfAndHalfExtrasGroup(groupName)) return 50;
-  if (isHalfAndHalfRemoveGroup(groupName)) return 51;
-  if (isHalfAndHalfExtrasGroup(groupName)) {
-    const side = halfAndHalfColumnTailSide(groupName);
-    if (side === "left") return 52;
-    if (side === "right") return 54;
-    return 55;
-  }
+  if (isHalfAndHalfLeftGroup(groupName) && !isHalfAndHalfExtrasGroup(groupName)) return 30;
+  if (isHalfAndHalfExtrasGroup(groupName) && halfAndHalfColumnTailSide(groupName) === "left") return 40;
+  if (role === "pizza sauce 2") return 50;
+  if (isHalfAndHalfRightGroup(groupName) && !isHalfAndHalfExtrasGroup(groupName)) return 60;
+  if (isHalfAndHalfExtrasGroup(groupName) && halfAndHalfColumnTailSide(groupName) === "right") return 70;
+  if (isHalfAndHalfExtrasGroup(groupName)) return 45;
   return 100;
 }
 
