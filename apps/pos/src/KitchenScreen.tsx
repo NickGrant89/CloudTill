@@ -1,4 +1,4 @@
-import { displayModifierGroupLabel, groupModifierLines } from "@cloudtill/shared";
+import { displayModifierGroupLabel, groupModifierLines, prepareHalfAndHalfLineModifiers } from "@cloudtill/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, getToken } from "./api";
 import type { SessionStore, SessionUser } from "./App";
@@ -566,7 +566,8 @@ export function KitchenScreen({
                   {o.note && <p className="kds-note">{o.note}</p>}
                   <ul className="kds-lines">
                     {o.lines.map((l) => {
-                      const mods = parseMods(l.modifiersJson);
+                      const raw = parseMods(l.modifiersJson);
+                      const { mods, mirroredSauces } = prepareHalfAndHalfLineModifiers(l.name, raw);
                       return (
                         <li key={l.id}>
                           <button
@@ -584,7 +585,9 @@ export function KitchenScreen({
                                     <span key={`${block.groupName ?? "mods"}-${index}`}>
                                       {block.groupName && (
                                         <span className="kds-mod-group">
-                                          {displayModifierGroupLabel(l.name, block.groupName) ?? block.groupName}
+                                          {displayModifierGroupLabel(l.name, block.groupName, {
+                                            mirroredSauces,
+                                          }) ?? block.groupName}
                                         </span>
                                       )}
                                       {block.names.map((name, nameIndex) => (

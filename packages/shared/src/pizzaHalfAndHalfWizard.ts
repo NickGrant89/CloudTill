@@ -257,9 +257,78 @@ export function halfAndHalfMergedColumnOptions<
   return rows;
 }
 
-export function displayModifierGroupLabel(itemName: string | undefined, groupName: string | undefined): string | undefined {
+/** Sale / kitchen / receipt display order: always LEFT before RIGHT on half-and-half items. */
+export function halfAndHalfModifierDisplayRank(groupName: string): number {
+  const role = normRole(groupName);
+  if (role === "size") return 0;
+  if (role === "pizza base") return 10;
+  if (role === "pizza sauce") return 20;
+  if (role === "pizza sauce 2") return 30;
+  if (isHalfAndHalfRemoveGroup(groupName) && halfAndHalfColumnTailSide(groupName) === "shared") return 70;
+  if (isHalfAndHalfLeftGroup(groupName) && !isHalfAndHalfExtrasGroup(groupName)) return 40;
+  if (isHalfAndHalfRightGroup(groupName) && !isHalfAndHalfExtrasGroup(groupName)) return 50;
+  if (isHalfAndHalfExtrasGroup(groupName) || isHalfAndHalfRemoveGroup(groupName)) {
+    const side = halfAndHalfColumnTailSide(groupName);
+    if (side === "left") return 52;
+    if (side === "right") return 54;
+    return 68;
+  }
+  return 100;
+}
+
+export function sortHalfAndHalfModifiersForDisplay<T extends { groupName?: string }>(
+  mods: T[]
+): T[] {
+  return [...mods].sort((a, b) => {
+    const ra = halfAndHalfModifierDisplayRank(a.groupName ?? "");
+    const rb = halfAndHalfModifierDisplayRank(b.groupName ?? "");
+    if (ra !== rb) return ra - rb;
+    return (a.groupName ?? "").localeCompare(b.groupName ?? "", undefined, { sensitivity: "base" });
+  });
+}
+
+/** Kitchen / sale display order for modifiers on a line item. */
+export function orderModifiersForDisplay<T extends { name?: string; groupName?: string }>(
+  itemName: string | undefined,
+  mods: T[]
+): T[] {
+  if (!itemName || !isHalfAndHalfWizardItem(itemName)) return mods;
+  return sortHalfAndHalfModifiersForDisplay(mods);
+}
+
+export function halfAndHalfSaucesMirrored<T extends { name?: string; groupName?: string }>(mods: T[]): boolean {
+  const left = mods.find((m) => normRole(m.groupName ?? "") === "pizza sauce");
+  const right = mods.find((m) => normRole(m.groupName ?? "") === "pizza sauce 2");
+  if (!left?.name?.trim() || !right?.name?.trim()) return false;
+  return left.name.trim().toLowerCase() === right.name.trim().toLowerCase();
+}
+
+/** Sorted (L before R) modifiers for ticket/receipt/KDS; drops duplicate right sauce when mirrored. */
+export function prepareHalfAndHalfLineModifiers<T extends { name?: string; groupName?: string }>(
+  itemName: string | undefined,
+  mods: T[]
+): { mods: T[]; mirroredSauces: boolean } {
+  if (!itemName || !isHalfAndHalfWizardItem(itemName)) return { mods, mirroredSauces: false };
+  const mirroredSauces = halfAndHalfSaucesMirrored(mods);
+  let ordered = sortHalfAndHalfModifiersForDisplay(mods);
+  if (mirroredSauces) {
+    ordered = ordered.filter((m) => normRole(m.groupName ?? "") !== "pizza sauce 2");
+  }
+  return { mods: ordered, mirroredSauces };
+}
+
+export function displayModifierGroupLabel(
+  itemName: string | undefined,
+  groupName: string | undefined,
+  opts?: { mirroredSauces?: boolean }
+): string | undefined {
   if (!groupName?.trim()) return undefined;
-  if (itemName && isHalfAndHalfWizardItem(itemName)) return kitchenHalfAndHalfGroupLabel(groupName);
+  if (itemName && isHalfAndHalfWizardItem(itemName)) {
+    const role = normRole(groupName);
+    if (opts?.mirroredSauces && role === "pizza sauce") return "Sauce";
+    if (opts?.mirroredSauces && role === "pizza sauce 2") return undefined;
+    return kitchenHalfAndHalfGroupLabel(groupName);
+  }
   if (itemName && isConsolidatedPizzaItem(itemName)) return tillPizzaModGroupLabel(groupName);
   return groupName.trim();
 }

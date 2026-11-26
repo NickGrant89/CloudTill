@@ -1,4 +1,7 @@
-import { displayModifierGroupLabel } from "./pizzaHalfAndHalfWizard.js";
+import {
+  displayModifierGroupLabel,
+  prepareHalfAndHalfLineModifiers,
+} from "./pizzaHalfAndHalfWizard.js";
 
 /** Print-friendly receipt builders: plain text, HTML, and ESC/POS byte pipeline */
 
@@ -62,9 +65,10 @@ export function receiptModifierLines(
   mods: { name?: string; groupName?: string }[],
   itemName?: string
 ) {
+  const { mods: ordered, mirroredSauces } = prepareHalfAndHalfLineModifiers(itemName, mods);
   const lines: string[] = [];
-  for (const block of groupModifierLines(mods)) {
-    const heading = displayModifierGroupLabel(itemName, block.groupName);
+  for (const block of groupModifierLines(ordered)) {
+    const heading = displayModifierGroupLabel(itemName, block.groupName, { mirroredSauces });
     if (heading) lines.push(`  ${heading}`);
     for (const name of block.names) lines.push(`    + ${name}`);
   }

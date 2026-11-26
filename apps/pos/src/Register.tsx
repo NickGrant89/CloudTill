@@ -7,7 +7,9 @@ import {
   mirrorSauceModifier,
   modifierListPriceCents,
   pizzaSizeInchesFromSelection,
+  prepareHalfAndHalfLineModifiers,
   priceModifierPicks,
+  receiptModifierLines,
   buildTillMenuSections,
   sortItemGroups,
   sortTillFavoriteItems,
@@ -100,8 +102,15 @@ interface TicketLine {
   modifiers: { name: string; priceCents: number; modifierId?: string; groupName?: string }[];
 }
 
-/** Keep sale-line modifiers in the same order as modifier groups on the item (BO drag order). */
-function sortModsByItemGroups<T extends { groupName?: string }>(mods: T[], groups: { name: string }[]): T[] {
+/** Sale / ticket modifier order — H&H uses L-before-R; others follow BO group order. */
+function sortModsByItemGroups<T extends { groupName?: string }>(
+  mods: T[],
+  groups: { name: string }[],
+  itemName?: string
+): T[] {
+  if (itemName && isHalfAndHalfWizardItem(itemName)) {
+    return prepareHalfAndHalfLineModifiers(itemName, mods).mods;
+  }
   if (!groups.length || mods.length < 2) return mods;
   const rank = new Map(groups.map((group, index) => [group.name.toLowerCase(), index]));
   return [...mods].sort((a, b) => {
@@ -124,14 +133,21 @@ function ModifierList({
   /** Footer on H&H halves step: compact lines, no duplicate LEFT/RIGHT column headers. */
   variant?: "default" | "halves-footer";
 }) {
-  const ordered = groups?.length ? sortModsByItemGroups(mods, groups) : mods;
-  const blocks = groupModifierLines(ordered);
+  const { mods: ordered, mirroredSauces } = prepareHalfAndHalfLineModifiers(itemName, mods);
+  const sorted =
+    itemName && isHalfAndHalfWizardItem(itemName)
+      ? ordered
+      : groups?.length
+        ? sortModsByItemGroups(mods, groups, itemName)
+        : mods;
+  const blocks = groupModifierLines(sorted);
   if (!blocks.length) return null;
   if (variant === "halves-footer") {
     return (
       <ul className="mod-list mod-list--halves-footer">
         {blocks.map((block, index) => {
-          const heading = displayModifierGroupLabel(itemName, block.groupName) ?? block.groupName;
+          const heading =
+            displayModifierGroupLabel(itemName, block.groupName, { mirroredSauces }) ?? block.groupName;
           const isHalfSide = heading === "LEFT" || heading === "RIGHT";
           if (isHalfSide) {
             return (
@@ -160,7 +176,9 @@ function ModifierList({
       {blocks.map((block, index) => (
         <li key={`${block.groupName ?? "mods"}-${index}`}>
           {block.groupName && (
-            <div className="mod-group">{displayModifierGroupLabel(itemName, block.groupName) ?? block.groupName}</div>
+            <div className="mod-group">
+              {displayModifierGroupLabel(itemName, block.groupName, { mirroredSauces }) ?? block.groupName}
+            </div>
           )}
           {block.names.map((name, nameIndex) => (
             <div key={`${name}-${nameIndex}`} className="mod-name">
@@ -875,7 +893,8 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
     }
     const mods = sortModsByItemGroups(
       priceSelectedModifiers(modifierItem, pickedByGroup).map(({ groupId: _g, ...mod }) => mod),
-      modifierItem.modifierGroups
+      modifierItem.modifierGroups,
+      modifierItem.name
     );
     if (editingLineKey) {
       await saveLineModifiers(editingLineKey, mods);
@@ -1545,11 +1564,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
         .map((l, index) => {
           const head = `${l.quantity} x ${l.name}`.padEnd(28) + money(l.totalCents);
           const lineItemName = ticket.lines[index]?.name;
-          const blocks = groupModifierLines(ticket.lines[index]?.modifiers ?? []);
-          const modLines = blocks.flatMap((block) => {
-            const heading = displayModifierGroupLabel(lineItemName, block.groupName);
-            return [...(heading ? [`  ${heading}`] : []), ...block.names.map((name) => `    + ${name}`)];
-          });
+          const modLines = receiptModifierLines(ticket.lines[index]?.modifiers ?? [], lineItemName);
           return [head, ...modLines].join("\n");
         })
         .join("\n");
@@ -1739,7 +1754,8 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
         visibleModifierGroups.flatMap((group) =>
           (selectedMods[group.id] ?? []).map((option) => ({ name: option.name, groupName: group.name }))
         ),
-        modifierItem.modifierGroups
+        modifierItem.modifierGroups,
+        modifierItem.name
       )
     : [];
   const showHalfAndHalfWizard = Boolean(modifierItem && isHalfAndHalfWizardItem(modifierItem.name));
