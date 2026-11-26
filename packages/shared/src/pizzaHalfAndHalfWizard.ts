@@ -66,9 +66,29 @@ export function isHalfAndHalfHalvesColumnGroup(groupName: string): boolean {
 export function halfAndHalfSauceGroups<T extends { id: string; name: string }>(
   groups: T[]
 ): { left?: T; right?: T } {
-  const left = groups.find((g) => normRole(g.name) === "pizza sauce");
-  const right = groups.find((g) => normRole(g.name) === "pizza sauce 2");
+  const sauces = groups.filter((g) => isHalfAndHalfSauceGroup(g.name));
+  const left = sauces.find((g) => normRole(g.name) === "pizza sauce") ?? sauces[0];
+  const right =
+    sauces.find((g) => normRole(g.name) === "pizza sauce 2") ??
+    (sauces.length > 1 ? sauces.find((g) => g !== left) ?? sauces[1] : undefined);
   return { left, right };
+}
+
+/** Mirror left sauce pick into right group (modifier ids differ; match by name). */
+export function withLinkedHalfAndHalfSauces<
+  G extends { id: string; name: string; modifiers: M[] },
+  M extends { id: string; name: string }
+>(visibleGroups: G[], selected: Record<string, M[]>, sauceLinked: boolean): Record<string, M[]> {
+  if (!sauceLinked) return selected;
+  const { left, right } = halfAndHalfSauceGroups(visibleGroups);
+  if (!left || !right) return selected;
+  const pick = selected[left.id]?.[0] ?? selected[right.id]?.[0];
+  if (!pick) return selected;
+  const leftMod = mirrorSauceModifier(left, pick);
+  const rightMod = mirrorSauceModifier(right, pick);
+  const curRight = selected[right.id]?.[0];
+  if (selected[left.id]?.[0]?.id === leftMod.id && curRight?.id === rightMod.id) return selected;
+  return { ...selected, [left.id]: [leftMod], [right.id]: [rightMod] };
 }
 
 export function mirrorSauceModifier<T extends { id: string; name: string }>(
@@ -96,11 +116,14 @@ export function halfAndHalfStepSatisfied(check: HalfAndHalfStepCheck): boolean {
 
   if (stepId === "sauce" && sauceLinked) {
     const { left, right } = halfAndHalfSauceGroups(groups);
-    if (left && right) {
-      const leftOk = (selected[left.id] ?? []).length >= left.minSelect;
-      const rightOk = (selected[right.id] ?? []).length >= right.minSelect;
-      return leftOk && rightOk;
-    }
+    if (!left) return groups.every((g) => (selected[g.id] ?? []).length >= g.minSelect);
+    const leftSel = selected[left.id] ?? [];
+    if (leftSel.length < left.minSelect) return false;
+    if (!right || right.minSelect <= 0) return true;
+    const rightSel = selected[right.id] ?? [];
+    if (rightSel.length >= right.minSelect) return true;
+    // Apply-both: one visible pick is enough — right is mirrored by name in state sync
+    return leftSel.length > 0;
   }
 
   if (stepId === "halves") {

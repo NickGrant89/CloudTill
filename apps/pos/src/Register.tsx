@@ -14,6 +14,7 @@ import {
   sortTillMenuItems,
   tillPizzaModGroupLabel,
   visiblePizzaModifierGroups,
+  withLinkedHalfAndHalfSauces,
 } from "@cloudtill/shared";
 import { HalfAndHalfWizard } from "./HalfAndHalfWizard";
 import { ModifierOptionButton } from "./ModifierOptionButton";
@@ -338,6 +339,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
   >([]);
   const [mobilePane, setMobilePane] = useState<"items" | "ticket">("items");
   const [modifierItem, setModifierItem] = useState<Item | null>(null);
+  const [hhSauceLinked, setHhSauceLinked] = useState(true);
   const [editingLineKey, setEditingLineKey] = useState<string | null>(null);
   const [modifierGroupId, setModifierGroupId] = useState("");
   const [offline, setOffline] = useState<OfflineStatus>({
@@ -644,6 +646,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
     setSelectedMods(initial);
     setModifierGroupId(groups[0]?.id ?? "");
     setModifierItem(item);
+    setHhSauceLinked(true);
     setMobilePane("items");
   }
 
@@ -854,8 +857,13 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
   async function confirmModifiers() {
     if (!modifierItem) return;
     const groups = visiblePizzaModifierGroups(modifierItem.name, modifierItem.modifierGroups, selectedMods);
+    const pickedByGroup =
+      isHalfAndHalfWizardItem(modifierItem.name) && hhSauceLinked
+        ? withLinkedHalfAndHalfSauces(groups, selectedMods, true)
+        : selectedMods;
+    if (pickedByGroup !== selectedMods) setSelectedMods(pickedByGroup);
     for (const group of groups) {
-      const picked = selectedMods[group.id] ?? [];
+      const picked = pickedByGroup[group.id] ?? [];
       if (picked.length < group.minSelect) {
         setModifierGroupId(group.id);
         fail(
@@ -866,7 +874,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
       }
     }
     const mods = sortModsByItemGroups(
-      priceSelectedModifiers(modifierItem, selectedMods).map(({ groupId: _g, ...mod }) => mod),
+      priceSelectedModifiers(modifierItem, pickedByGroup).map(({ groupId: _g, ...mod }) => mod),
       modifierItem.modifierGroups
     );
     if (editingLineKey) {
@@ -1900,6 +1908,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
               onSetMods={applySelectedMods}
               onClose={closeModifierPicker}
               onConfirm={() => void confirmModifiers()}
+              onSauceLinkedChange={setHhSauceLinked}
               renderPreview={(stepId) => (
                 <ModifierList
                   mods={modifierPreview}

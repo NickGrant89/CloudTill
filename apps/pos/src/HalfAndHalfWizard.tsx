@@ -12,9 +12,10 @@ import {
   isHalfAndHalfSauceGroup,
   isHalfAndHalfWizardItem,
   isConsolidatedPizzaItem,
-  mirrorSauceModifier,
   modifierListPriceCents,
   pizzaSizeInchesFromSelection,
+  visiblePizzaModifierGroups,
+  withLinkedHalfAndHalfSauces,
   type HalfAndHalfWizardStepId,
 } from "@cloudtill/shared";
 import { useEffect, useMemo, useState } from "react";
@@ -91,6 +92,7 @@ export function HalfAndHalfWizard(props: {
   onSetMods: (next: Record<string, Modifier[]>) => void;
   onClose: () => void;
   onConfirm: () => void;
+  onSauceLinkedChange?: (linked: boolean) => void;
   renderPreview: (stepId: HalfAndHalfWizardStepId) => React.ReactNode;
 }) {
   const {
@@ -105,6 +107,7 @@ export function HalfAndHalfWizard(props: {
     onSetMods,
     onClose,
     onConfirm,
+    onSauceLinkedChange,
     renderPreview,
   } = props;
 
@@ -121,9 +124,18 @@ export function HalfAndHalfWizard(props: {
   );
   const [sauceLinked, setSauceLinked] = useState(true);
 
+  useEffect(() => {
+    onSauceLinkedChange?.(sauceLinked);
+  }, [sauceLinked, onSauceLinkedChange]);
+
+  const sauceVisibleGroups = useMemo(
+    () => visiblePizzaModifierGroups(item.name, item.modifierGroups, selectedMods),
+    [item.modifierGroups, item.name, selectedMods]
+  );
+
   const { left: sauceLeft, right: sauceRight } = useMemo(
-    () => halfAndHalfSauceGroups(visibleGroups),
-    [visibleGroups]
+    () => halfAndHalfSauceGroups(sauceVisibleGroups),
+    [sauceVisibleGroups]
   );
 
   useEffect(() => {
@@ -168,42 +180,23 @@ export function HalfAndHalfWizard(props: {
     : null;
 
   useEffect(() => {
-    if (!sauceLinked || !sauceLeft || !sauceRight) return;
-    const left = selectedMods[sauceLeft.id]?.[0];
-    if (!left) return;
-    const right = selectedMods[sauceRight.id]?.[0];
-    const mirrored = mirrorSauceModifier(sauceRight, left);
-    if (right?.id === mirrored.id) return;
-    onSetMods({
-      ...selectedMods,
-      [sauceRight.id]: [mirrored],
-    });
-  }, [sauceLinked, sauceLeft, sauceRight, selectedMods, onSetMods]);
+    if (!sauceLinked) return;
+    const synced = withLinkedHalfAndHalfSauces(sauceVisibleGroups, selectedMods, true);
+    if (synced !== selectedMods) onSetMods(synced);
+  }, [sauceLinked, sauceVisibleGroups, selectedMods, onSetMods]);
 
   function pickSauce(group: ModGroup, modifier: Modifier) {
-    let next: Record<string, Modifier[]> = { ...selectedMods, [group.id]: [modifier] };
-    if (sauceLinked && sauceLeft && sauceRight) {
-      next = {
-        ...next,
-        [sauceLeft.id]: [mirrorSauceModifier(sauceLeft, modifier)],
-        [sauceRight.id]: [mirrorSauceModifier(sauceRight, modifier)],
-      };
-    }
-    onSetMods(next);
+    const base: Record<string, Modifier[]> = { ...selectedMods, [group.id]: [modifier] };
+    const visible = visiblePizzaModifierGroups(item.name, item.modifierGroups, base);
+    onSetMods(withLinkedHalfAndHalfSauces(visible, base, sauceLinked));
   }
 
   function toggleSauceLinked(next: boolean) {
     setSauceLinked(next);
-    if (next && sauceLeft && sauceRight) {
-      const picked = selectedMods[sauceLeft.id]?.[0] ?? selectedMods[sauceRight.id]?.[0];
-      if (picked) {
-        onSetMods({
-          ...selectedMods,
-          [sauceLeft.id]: [mirrorSauceModifier(sauceLeft, picked)],
-          [sauceRight.id]: [mirrorSauceModifier(sauceRight, picked)],
-        });
-      }
-    }
+    onSauceLinkedChange?.(next);
+    if (!next) return;
+    const synced = withLinkedHalfAndHalfSauces(sauceVisibleGroups, selectedMods, true);
+    onSetMods(synced);
   }
 
   function renderOptionTiles(
