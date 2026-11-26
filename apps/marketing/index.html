@@ -352,6 +352,92 @@
       .plan-compare .mark-no {
         color: var(--muted);
       }
+      .features-all-wrap {
+        margin-top: 2.25rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid var(--line);
+      }
+      .features-all-title {
+        font-family: Fraunces, Georgia, serif;
+        margin: 0 0 0.35rem;
+        font-size: 1.35rem;
+      }
+      .features-all-lede {
+        margin: 0 0 1.25rem;
+        color: var(--muted);
+        font-size: 0.92rem;
+        line-height: 1.5;
+        max-width: 42rem;
+      }
+      .feature-module {
+        margin-bottom: 1.5rem;
+      }
+      .feature-module h4 {
+        margin: 0 0 0.55rem;
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent-deep);
+      }
+      .feature-bullets {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
+        gap: 0.4rem 0.85rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .feature-bullets li {
+        position: relative;
+        padding-left: 1.1rem;
+        font-size: 0.88rem;
+        line-height: 1.4;
+        color: var(--ink);
+      }
+      .feature-bullets li::before {
+        content: "•";
+        position: absolute;
+        left: 0;
+        color: var(--accent);
+        font-weight: 800;
+      }
+      .features-tier-wrap {
+        margin-top: 2rem;
+        padding: 1.25rem 1.1rem;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.65);
+      }
+      .features-tier-wrap h3 {
+        font-family: Fraunces, Georgia, serif;
+        margin: 0 0 0.35rem;
+        font-size: 1.2rem;
+      }
+      .features-tier-grid {
+        display: grid;
+        gap: 1.25rem;
+        margin-top: 1rem;
+      }
+      @media (min-width: 640px) {
+        .features-tier-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      .pricing-footnote {
+        margin-top: 1.5rem;
+        padding: 1rem 1.1rem;
+        border-radius: 12px;
+        background: rgba(13, 148, 136, 0.07);
+        border: 1px solid var(--line);
+        font-size: 0.86rem;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+      .pricing-footnote strong {
+        color: var(--ink);
+        font-weight: 700;
+      }
       .tier .price-note { margin: -0.2rem 0 0; color: var(--muted); font-size: 0.8rem; }
       .tier > p { margin: 0; color: var(--muted); line-height: 1.4; }
       .tier .btn { width: 100%; }
@@ -695,6 +781,97 @@
             </table>
           </div>
         </div>
+
+        <div class="features-all-wrap">
+          <h3 class="features-all-title">On every plan</h3>
+          <p class="features-all-lede">
+            Essential, Complete and Multi include the core till and back office while your trial is active or your plan is paid — same product modules, no hardware lock-in.
+          </p>
+          <div class="feature-module">
+            <h4>Cloud till</h4>
+            <ul class="feature-bullets">
+              <li>Charge &amp; split payments</li>
+              <li>Hold &amp; recall tickets</li>
+              <li>Refunds &amp; voids</li>
+              <li>Receipts in £</li>
+              <li>Send to kitchen printer</li>
+              <li>Phone / counter orders</li>
+              <li>Offline queue &amp; sync</li>
+              <li>Live open-ticket sync</li>
+            </ul>
+          </div>
+          <div class="feature-module">
+            <h4>Back office</h4>
+            <ul class="feature-bullets">
+              <li>Items, groups &amp; modifiers</li>
+              <li>Customers</li>
+              <li>Employees &amp; roles</li>
+              <li>Sales history</li>
+              <li>Inventory &amp; stocktake</li>
+              <li>Shifts</li>
+              <li>Gift cards</li>
+              <li>Time clock</li>
+              <li>Kitchen display settings</li>
+              <li>Printers &amp; labels</li>
+              <li>End-of-day summary</li>
+              <li>Sales &amp; tax reports</li>
+              <li>Store backup &amp; restore</li>
+              <li>Billing &amp; licence</li>
+              <li>Multiple tills per site</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="features-tier-wrap">
+          <h3>Complete &amp; Multi</h3>
+          <p class="features-all-lede" style="margin-bottom:0.75rem;">
+            Unlocks on <strong>Complete</strong> or <strong>Multi</strong> when the trial is live or the plan is paid.
+          </p>
+          <div class="features-tier-grid">
+            <div class="feature-module">
+              <h4>Kitchen &amp; ordering</h4>
+              <ul class="feature-bullets">
+                <li>Customer online ordering</li>
+                <li>Kitchen board (web orders)</li>
+                <li>Pickup · dine-in · delivery</li>
+              </ul>
+            </div>
+            <div class="feature-module">
+              <h4>UK delivery apps</h4>
+              <ul class="feature-bullets">
+                <li>Just Eat</li>
+                <li>Deliveroo</li>
+                <li>Uber Eats</li>
+                <li>HungryPanda</li>
+                <li>Foodhub</li>
+                <li>Middleware ingest to kitchen</li>
+              </ul>
+            </div>
+            <div class="feature-module">
+              <h4>Operations</h4>
+              <ul class="feature-bullets">
+                <li>CSV import</li>
+                <li>Loyverse-style data import</li>
+                <li>Richer reports &amp; full EOD</li>
+              </ul>
+            </div>
+            <div class="feature-module">
+              <h4>Multi only</h4>
+              <ul class="feature-bullets">
+                <li>Extra branches (sites)</li>
+                <li>Stock transfers between branches</li>
+                <li>Assign items to branches</li>
+                <li>Shared catalogue across sites</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <p class="pricing-footnote">
+          <strong>Payments:</strong> In-person card payments use your own reader (SumUp, Zettle, Square, etc.) — PurePOS does not force proprietary hardware.
+          Subscription billing uses Stripe Checkout once env vars are set on Railway; until then, trial plus licence key in Settings → Billing.
+          Text-to-pay links need Twilio and Stripe configured for your business.
+        </p>
       </section>
 
       <section id="try">
