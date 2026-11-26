@@ -1164,6 +1164,36 @@ select:focus-visible {
   touch-action: manipulation;
 }
 
+/* H&H wizard: flex column keeps head on top — sticky lets the scroll body steal taps on iOS. */
+.options-picker--hh .options-picker-head.till-options-head {
+  position: relative;
+  top: auto;
+  z-index: 50;
+  isolation: isolate;
+}
+
+.options-picker--hh .options-picker-head .topbar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  position: relative;
+  z-index: 2;
+}
+
+.options-picker--hh .options-picker-head .brand-mini {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.options-picker--hh .options-picker-body {
+  z-index: 0;
+  min-height: 0;
+}
+
 .till-options-back,
 .catalog-head .topbar .chip-back:not(.is-reserved) {
   position: relative;

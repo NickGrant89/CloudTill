@@ -143,10 +143,11 @@ export function HalfAndHalfWizard(props: {
     if (stepIndex >= activeSteps.length) setStepIndex(Math.max(0, activeSteps.length - 1));
   }, [activeSteps.length, stepIndex]);
 
+  /* Advance when picks change only — do not depend on stepIndex or taps to earlier steps snap forward. */
   useEffect(() => {
     const need = firstIncompleteStep(stepIds, visibleGroups, selectedMods, sauceLinked);
-    if (need > stepIndex) setStepIndex(need);
-  }, [visibleGroups, selectedMods, stepIds, stepIndex, sauceLinked]);
+    setStepIndex((i) => (need > i ? need : i));
+  }, [visibleGroups, selectedMods, stepIds, sauceLinked]);
 
   const currentStep = activeSteps[stepIndex];
 
@@ -297,7 +298,11 @@ export function HalfAndHalfWizard(props: {
               role="tab"
               aria-selected={index === stepIndex}
               className={`chip ${index === stepIndex ? "active" : ""}`}
-              onClick={() => setStepIndex(index)}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setStepIndex(index);
+              }}
             >
               {step.title}
               {stepTabHint(step.id)}
