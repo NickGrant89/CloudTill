@@ -5,11 +5,11 @@ import {
   halfAndHalfExtrasRowLabel,
   halfAndHalfSharedTailGroups,
   halfAndHalfMergedColumnOptions,
+  halfAndHalfMergedSauceOptions,
   halfAndHalfSauceGroups,
+  mirrorSauceModifier,
   halfAndHalfStepSatisfied,
-  halfAndHalfWizardGroupLabel,
   halfAndHalfWizardStepForGroup,
-  isHalfAndHalfSauceGroup,
   isHalfAndHalfWizardItem,
   isConsolidatedPizzaItem,
   modifierListPriceCents,
@@ -123,6 +123,7 @@ export function HalfAndHalfWizard(props: {
     firstIncompleteStep(stepIds, visibleGroups, selectedMods, true)
   );
   const [sauceLinked, setSauceLinked] = useState(true);
+  const [sauceEditSide, setSauceEditSide] = useState<"left" | "right" | null>(null);
 
   useEffect(() => {
     onSauceLinkedChange?.(sauceLinked);
@@ -148,6 +149,11 @@ export function HalfAndHalfWizard(props: {
   }, [visibleGroups, selectedMods, stepIds, stepIndex, sauceLinked]);
 
   const currentStep = activeSteps[stepIndex];
+
+  useEffect(() => {
+    if (currentStep?.id !== "sauce") setSauceEditSide(null);
+  }, [currentStep?.id]);
+
   const stepGroups = useMemo(() => {
     if (!currentStep) return [];
     return visibleGroups.filter((g) => halfAndHalfWizardStepForGroup(g.name) === currentStep.id);
@@ -167,9 +173,23 @@ export function HalfAndHalfWizard(props: {
     });
   }
 
+  const mergedSauceOptions = useMemo(
+    () => halfAndHalfMergedSauceOptions<ModGroup, Modifier>(sauceVisibleGroups),
+    [sauceVisibleGroups]
+  );
+
+  const sauceActiveSide = useMemo((): "left" | "right" => {
+    if (sauceLinked || !sauceLeft || !sauceRight) return "left";
+    if (sauceEditSide) return sauceEditSide;
+    const leftOk = (selectedMods[sauceLeft.id] ?? []).length >= sauceLeft.minSelect;
+    const rightOk = (selectedMods[sauceRight.id] ?? []).length >= sauceRight.minSelect;
+    if (!leftOk) return "left";
+    if (!rightOk) return "right";
+    return "left";
+  }, [sauceLinked, sauceLeft, sauceRight, selectedMods, sauceEditSide]);
+
   useEffect(() => {
     if (!currentStep || currentStep.id === "halves") return;
-    if (currentStep.id === "sauce" && !sauceLinked) return;
     if (!stepComplete(currentStep.id) || stepIndex >= activeSteps.length - 1) return;
     const timer = window.setTimeout(() => setStepIndex((i) => Math.min(activeSteps.length - 1, i + 1)), 150);
     return () => window.clearTimeout(timer);
@@ -185,18 +205,45 @@ export function HalfAndHalfWizard(props: {
     if (synced !== selectedMods) onSetMods(synced);
   }, [sauceLinked, sauceVisibleGroups, selectedMods, onSetMods]);
 
-  function pickSauce(group: ModGroup, modifier: Modifier) {
-    const base: Record<string, Modifier[]> = { ...selectedMods, [group.id]: [modifier] };
-    const visible = visiblePizzaModifierGroups(item.name, item.modifierGroups, base);
-    onSetMods(withLinkedHalfAndHalfSauces(visible, base, sauceLinked));
+  function pickSauce(modifier: Modifier, sourceGroup: ModGroup) {
+    if (sauceLinked) {
+      const base: Record<string, Modifier[]> = { ...selectedMods, [sourceGroup.id]: [modifier] };
+      const visible = visiblePizzaModifierGroups(item.name, item.modifierGroups, base);
+      onSetMods(withLinkedHalfAndHalfSauces(visible, base, true));
+      return;
+    }
+    const target = sauceActiveSide === "left" ? sauceLeft : sauceRight;
+    if (!target) return;
+    const mirrored = mirrorSauceModifier(target, modifier);
+    const next: Record<string, Modifier[]> = { ...selectedMods, [target.id]: [mirrored] };
+    onSetMods(next);
+    if (sauceActiveSide === "left" && sauceRight) {
+      const rightOk = (next[sauceRight.id] ?? []).length >= sauceRight.minSelect;
+      if (!rightOk) setSauceEditSide("right");
+    }
   }
 
   function toggleSauceLinked(next: boolean) {
     setSauceLinked(next);
+    setSauceEditSide(null);
     onSauceLinkedChange?.(next);
     if (!next) return;
     const synced = withLinkedHalfAndHalfSauces(sauceVisibleGroups, selectedMods, true);
     onSetMods(synced);
+  }
+
+  function sauceTileSelected(optionName: string): boolean {
+    const leftP = sauceLeft ? selectedMods[sauceLeft.id]?.[0] : undefined;
+    const rightP = sauceRight ? selectedMods[sauceRight.id]?.[0] : undefined;
+    const key = optionName.trim().toLowerCase();
+    if (!sauceLinked) {
+      const activeP = sauceActiveSide === "left" ? leftP : rightP;
+      if (activeP?.name.trim().toLowerCase() === key) return true;
+      return (
+        leftP?.name.trim().toLowerCase() === key || rightP?.name.trim().toLowerCase() === key
+      );
+    }
+    return leftP?.name.trim().toLowerCase() === key || rightP?.name.trim().toLowerCase() === key;
   }
 
   function renderOptionTiles(
@@ -330,30 +377,66 @@ export function HalfAndHalfWizard(props: {
               </>
             )}
           </div>
-        ) : (
+        ) : currentStep.id === "sauce" ? (
           <>
-            {currentStep.id === "sauce" &&
-              !sauceLinked &&
-              stepGroups.map(
-                (group) =>
-                  isHalfAndHalfSauceGroup(group.name) && (
-                    <h3 key={group.id} className="hh-half-title hh-sauce-heading">
-                      {halfAndHalfWizardGroupLabel(group.name)}
-                    </h3>
-                  )
-              )}
+            {!sauceLinked && sauceLeft && sauceRight ? (
+              <div className="hh-sauce-split-bar">
+                <p className="hh-sauce-prompt">
+                  {sauceActiveSide === "left"
+                    ? "Tap sauce for LEFT half"
+                    : "Tap sauce for RIGHT half"}
+                </p>
+                <div className="hh-sauce-side-switch" role="group" aria-label="Which half to sauce">
+                  <button
+                    type="button"
+                    className={`chip ${sauceActiveSide === "left" ? "active" : ""}`}
+                    onClick={() => setSauceEditSide("left")}
+                  >
+                    LEFT
+                  </button>
+                  <button
+                    type="button"
+                    className={`chip ${sauceActiveSide === "right" ? "active" : ""}`}
+                    onClick={() => setSauceEditSide("right")}
+                  >
+                    RIGHT
+                  </button>
+                </div>
+              </div>
+            ) : null}
             <div className="grid modifier-options-grid">
-              {(currentStep.id === "sauce" && sauceLinked && sauceLeft ? [sauceLeft] : stepGroups).flatMap((group) =>
-                group
-                  ? group.modifiers.map((option) =>
-                      renderOptionTiles(group, option, () =>
-                        currentStep.id === "sauce" ? pickSauce(group, option) : onChoose(group, option)
-                      )
-                    )
-                  : []
-              )}
+              {mergedSauceOptions.map(({ group, modifier }) => {
+                const selected = sauceTileSelected(modifier.name);
+                const listPrice = modifierListPriceCents(
+                  modifier.priceCents,
+                  group.name,
+                  item.name,
+                  sizeInches
+                );
+                return (
+                  <ModifierOptionButton
+                    key={`sauce-${group.id}-${modifier.id}`}
+                    name={modifier.name}
+                    selected={selected}
+                    priceLabel={modifierPriceLabel(
+                      selected,
+                      listPrice,
+                      chargedByModifierId.get(modifier.id)
+                    )}
+                    onPick={() => pickSauce(modifier, group)}
+                  />
+                );
+              })}
             </div>
           </>
+        ) : (
+          <div className="grid modifier-options-grid">
+            {stepGroups.flatMap((group) =>
+              group.modifiers.map((option) =>
+                renderOptionTiles(group, option, () => onChoose(group, option))
+              )
+            )}
+          </div>
         )}
       </div>
 

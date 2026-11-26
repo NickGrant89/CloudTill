@@ -74,6 +74,25 @@ export function halfAndHalfSauceGroups<T extends { id: string; name: string }>(
   return { left, right };
 }
 
+/** One sauce tile list — options deduped by name from Pizza Sauce + Pizza Sauce 2. */
+export function halfAndHalfMergedSauceOptions<
+  G extends { id: string; name: string; modifiers: M[] },
+  M extends { id: string; name: string }
+>(groups: G[]): { group: G; modifier: M }[] {
+  const { left, right } = halfAndHalfSauceGroups(groups);
+  const seen = new Set<string>();
+  const rows: { group: G; modifier: M }[] = [];
+  for (const group of [left, right].filter(Boolean) as G[]) {
+    for (const modifier of group.modifiers) {
+      const key = modifier.name.trim().toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push({ group, modifier });
+    }
+  }
+  return rows;
+}
+
 /** Mirror left sauce pick into right group (modifier ids differ; match by name). */
 export function withLinkedHalfAndHalfSauces<
   G extends { id: string; name: string; modifiers: M[] },
