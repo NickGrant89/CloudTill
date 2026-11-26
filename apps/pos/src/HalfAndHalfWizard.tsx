@@ -1,12 +1,17 @@
 import {
   HALF_AND_HALF_WIZARD_STEPS,
+  halfAndHalfColumnGroupsForSide,
+  halfAndHalfExtrasGroups,
+  halfAndHalfExtrasRowLabel,
+  halfAndHalfMergedColumnOptions,
+  halfAndHalfSauceGroups,
+  halfAndHalfStepSatisfied,
   halfAndHalfWizardGroupLabel,
   halfAndHalfWizardStepForGroup,
-  isHalfAndHalfLeftGroup,
-  isHalfAndHalfRightGroup,
   isHalfAndHalfSauceGroup,
   isHalfAndHalfWizardItem,
   isConsolidatedPizzaItem,
+  mirrorSauceModifier,
   modifierListPriceCents,
   pizzaSizeInchesFromSelection,
   type HalfAndHalfWizardStepId,
@@ -42,31 +47,23 @@ type ModifierPreview = { name: string; groupName: string };
 function firstIncompleteStep(
   steps: HalfAndHalfWizardStepId[],
   visibleGroups: ModGroup[],
-  selected: Record<string, Modifier[]>
+  selected: Record<string, Modifier[]>,
+  sauceLinked: boolean
 ): number {
   for (let i = 0; i < steps.length; i++) {
     const stepId = steps[i]!;
-    const stepGroups = visibleGroups.filter((g) => halfAndHalfWizardStepForGroup(g.name) === stepId);
-    for (const group of stepGroups) {
-      const picked = selected[group.id] ?? [];
-      if (picked.length < group.minSelect) return i;
+    if (
+      !halfAndHalfStepSatisfied({
+        stepId,
+        visibleGroups,
+        selected,
+        sauceLinked,
+      })
+    ) {
+      return i;
     }
   }
   return Math.max(0, steps.length - 1);
-}
-
-function sauceGroups(groups: ModGroup[]): { left?: ModGroup; right?: ModGroup } {
-  const left = groups.find((g) => g.name.trim().toLowerCase() === "pizza sauce");
-  const right = groups.find((g) => g.name.trim().toLowerCase() === "pizza sauce 2");
-  return { left, right };
-}
-
-function sortHalvesGroups(groups: ModGroup[]): ModGroup[] {
-  return [...groups].sort((a, b) => {
-    const ar = isHalfAndHalfRightGroup(a.name) ? 0 : 1;
-    const br = isHalfAndHalfRightGroup(b.name) ? 0 : 1;
-    return ar - br;
-  });
 }
 
 function OptionTile(props: {
@@ -137,29 +134,43 @@ export function HalfAndHalfWizard(props: {
 
   const stepIds = useMemo(() => activeSteps.map((s) => s.id), [activeSteps]);
 
-  const [stepIndex, setStepIndex] = useState(() => firstIncompleteStep(stepIds, visibleGroups, selectedMods));
+  const [stepIndex, setStepIndex] = useState(() =>
+    firstIncompleteStep(stepIds, visibleGroups, selectedMods, true)
+  );
   const [sauceLinked, setSauceLinked] = useState(true);
+
+  const { left: sauceLeft, right: sauceRight } = useMemo(
+    () => halfAndHalfSauceGroups(visibleGroups),
+    [visibleGroups]
+  );
 
   useEffect(() => {
     if (stepIndex >= activeSteps.length) setStepIndex(Math.max(0, activeSteps.length - 1));
   }, [activeSteps.length, stepIndex]);
 
   useEffect(() => {
-    const need = firstIncompleteStep(stepIds, visibleGroups, selectedMods);
+    const need = firstIncompleteStep(stepIds, visibleGroups, selectedMods, sauceLinked);
     if (need > stepIndex) setStepIndex(need);
-  }, [visibleGroups, selectedMods, stepIds, stepIndex]);
+  }, [visibleGroups, selectedMods, stepIds, stepIndex, sauceLinked]);
 
   const currentStep = activeSteps[stepIndex];
   const stepGroups = useMemo(() => {
     if (!currentStep) return [];
-    const matched = visibleGroups.filter((g) => halfAndHalfWizardStepForGroup(g.name) === currentStep.id);
-    if (currentStep.id === "halves") return sortHalvesGroups(matched);
-    return matched;
+    return visibleGroups.filter((g) => halfAndHalfWizardStepForGroup(g.name) === currentStep.id);
   }, [visibleGroups, currentStep]);
 
+  const halvesExtras = useMemo(
+    () => (currentStep?.id === "halves" ? halfAndHalfExtrasGroups(stepGroups) : []),
+    [currentStep, stepGroups]
+  );
+
   function stepComplete(stepId: HalfAndHalfWizardStepId): boolean {
-    const groups = visibleGroups.filter((g) => halfAndHalfWizardStepForGroup(g.name) === stepId);
-    return groups.every((g) => (selectedMods[g.id] ?? []).length >= g.minSelect);
+    return halfAndHalfStepSatisfied({
+      stepId,
+      visibleGroups,
+      selected: selectedMods,
+      sauceLinked,
+    });
   }
 
   useEffect(() => {
@@ -174,12 +185,27 @@ export function HalfAndHalfWizard(props: {
     ? pizzaSizeInchesFromSelection(item.modifierGroups, selectedMods)
     : null;
 
-  const { left: sauceLeft, right: sauceRight } = sauceGroups(item.modifierGroups);
+  useEffect(() => {
+    if (!sauceLinked || !sauceLeft || !sauceRight) return;
+    const left = selectedMods[sauceLeft.id]?.[0];
+    if (!left) return;
+    const right = selectedMods[sauceRight.id]?.[0];
+    const mirrored = mirrorSauceModifier(sauceRight, left);
+    if (right?.id === mirrored.id) return;
+    onSetMods({
+      ...selectedMods,
+      [sauceRight.id]: [mirrored],
+    });
+  }, [sauceLinked, sauceLeft, sauceRight, selectedMods, onSetMods]);
 
   function pickSauce(group: ModGroup, modifier: Modifier) {
     let next: Record<string, Modifier[]> = { ...selectedMods, [group.id]: [modifier] };
     if (sauceLinked && sauceLeft && sauceRight) {
-      next = { ...next, [sauceLeft.id]: [modifier], [sauceRight.id]: [modifier] };
+      next = {
+        ...next,
+        [sauceLeft.id]: [mirrorSauceModifier(sauceLeft, modifier)],
+        [sauceRight.id]: [mirrorSauceModifier(sauceRight, modifier)],
+      };
     }
     onSetMods(next);
   }
@@ -191,11 +217,32 @@ export function HalfAndHalfWizard(props: {
       if (picked) {
         onSetMods({
           ...selectedMods,
-          [sauceLeft.id]: [picked],
-          [sauceRight.id]: [picked],
+          [sauceLeft.id]: [mirrorSauceModifier(sauceLeft, picked)],
+          [sauceRight.id]: [mirrorSauceModifier(sauceRight, picked)],
         });
       }
     }
+  }
+
+  function renderOptionTiles(
+    group: ModGroup,
+    option: Modifier,
+    onPick: () => void
+  ) {
+    const selected = (selectedMods[group.id] ?? []).some((p) => p.id === option.id);
+    const listPrice = modifierListPriceCents(option.priceCents, group.name, item.name, sizeInches);
+    return (
+      <OptionTile
+        key={`${group.id}-${option.id}`}
+        item={item}
+        group={group}
+        option={option}
+        selected={selected}
+        listPrice={listPrice}
+        chargedCents={chargedByModifierId.get(option.id)}
+        onPick={onPick}
+      />
+    );
   }
 
   const canNext = currentStep ? stepComplete(currentStep.id) : false;
@@ -242,42 +289,49 @@ export function HalfAndHalfWizard(props: {
 
       <div className="hh-wizard-body">
         {currentStep.id === "halves" ? (
-          <div className="hh-halves">
+          <div className="hh-halves-layout">
             {stepGroups.length === 0 ? (
-              <p className="empty">Choose a size first — topping groups appear for 9″, 12″ or 16″.</p>
+              <p className="empty">Choose a size first — half options appear for 9″, 12″ or 16″.</p>
             ) : (
-              stepGroups.map((group) => (
-                <section key={group.id} className="hh-half-col" aria-label={halfAndHalfWizardGroupLabel(group.name)}>
-                  <h3 className="hh-half-title">
-                    {halfAndHalfWizardGroupLabel(group.name)}
-                    {group.minSelect > 0 ? " *" : ""}
-                    {(group.freeSelect ?? 0) > 0 ? ` · ${group.freeSelect} free` : ""}
-                  </h3>
-                  <div className="grid hh-half-grid">
-                    {group.modifiers.map((option) => {
-                      const selected = (selectedMods[group.id] ?? []).some((p) => p.id === option.id);
-                      const listPrice = modifierListPriceCents(
-                        option.priceCents,
-                        group.name,
-                        item.name,
-                        sizeInches
-                      );
-                      return (
-                        <OptionTile
-                          key={option.id}
-                          item={item}
-                          group={group}
-                          option={option}
-                          selected={selected}
-                          listPrice={listPrice}
-                          chargedCents={chargedByModifierId.get(option.id)}
-                          onPick={() => onChoose(group, option)}
-                        />
-                      );
-                    })}
-                  </div>
-                </section>
-              ))
+              <>
+                <div className="hh-halves-columns">
+                  {(["right", "left"] as const).map((side) => {
+                    const columnGroups = halfAndHalfColumnGroupsForSide(stepGroups, side);
+                    const merged = halfAndHalfMergedColumnOptions(columnGroups);
+                    if (!merged.length) return null;
+                    const freeSelect = Math.max(0, ...columnGroups.map((g) => g.freeSelect ?? 0));
+                    const minSelect = Math.max(0, ...columnGroups.map((g) => g.minSelect));
+                    return (
+                      <section
+                        key={side}
+                        className="hh-half-col"
+                        aria-label={side === "right" ? "RIGHT" : "LEFT"}
+                      >
+                        <h3 className="hh-half-title">
+                          {side === "right" ? "RIGHT" : "LEFT"}
+                          {minSelect > 0 ? " *" : ""}
+                          {freeSelect > 0 ? ` · ${freeSelect} free` : ""}
+                        </h3>
+                        <div className="grid hh-half-grid">
+                          {merged.map(({ group, modifier }) =>
+                            renderOptionTiles(group, modifier, () => onChoose(group, modifier))
+                          )}
+                        </div>
+                      </section>
+                    );
+                  })}
+                </div>
+                {halvesExtras.map((group) => (
+                  <section key={group.id} className="hh-extras-row">
+                    <h3 className="hh-half-title hh-extras-title">{halfAndHalfExtrasRowLabel(group.name)}</h3>
+                    <div className="grid hh-extras-grid">
+                      {group.modifiers.map((option) =>
+                        renderOptionTiles(group, option, () => onChoose(group, option))
+                      )}
+                    </div>
+                  </section>
+                ))}
+              </>
             )}
           </div>
         ) : (
@@ -295,29 +349,11 @@ export function HalfAndHalfWizard(props: {
             <div className="grid hh-step-grid">
               {(currentStep.id === "sauce" && sauceLinked && sauceLeft ? [sauceLeft] : stepGroups).flatMap((group) =>
                 group
-                  ? group.modifiers.map((option) => {
-                      const selected = (selectedMods[group.id] ?? []).some((p) => p.id === option.id);
-                      const listPrice = modifierListPriceCents(
-                        option.priceCents,
-                        group.name,
-                        item.name,
-                        sizeInches
-                      );
-                      return (
-                        <OptionTile
-                          key={`${group.id}-${option.id}`}
-                          item={item}
-                          group={group}
-                          option={option}
-                          selected={selected}
-                          listPrice={listPrice}
-                          chargedCents={chargedByModifierId.get(option.id)}
-                          onPick={() =>
-                            currentStep.id === "sauce" ? pickSauce(group, option) : onChoose(group, option)
-                          }
-                        />
-                      );
-                    })
+                  ? group.modifiers.map((option) =>
+                      renderOptionTiles(group, option, () =>
+                        currentStep.id === "sauce" ? pickSauce(group, option) : onChoose(group, option)
+                      )
+                    )
                   : []
               )}
             </div>

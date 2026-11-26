@@ -1107,14 +1107,32 @@ select:focus-visible {
   cursor: pointer;
 }
 
-.hh-halves {
+.hh-halves-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1 1 auto;
+  min-height: min-content;
+  padding: 0 2px 8px;
+}
+
+.hh-halves-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
-  flex: 1 1 auto;
-  min-height: min-content;
   align-content: start;
-  padding: 0 2px 8px;
+}
+
+.hh-extras-row {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hh-extras-grid {
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  grid-auto-rows: minmax(104px, auto);
 }
 
 .hh-step-grid.grid,
@@ -1353,7 +1371,7 @@ select:focus-visible {
 }
 
 @media (max-width: 768px) {
-  .hh-halves {
+  .hh-halves-columns {
     grid-template-columns: 1fr;
   }
 }

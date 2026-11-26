@@ -2,7 +2,9 @@ import {
   displayModifierGroupLabel,
   groupModifierLines,
   isConsolidatedPizzaItem,
+  halfAndHalfSauceGroups,
   isHalfAndHalfWizardItem,
+  mirrorSauceModifier,
   modifierListPriceCents,
   pizzaSizeInchesFromSelection,
   priceModifierPicks,
@@ -629,6 +631,13 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
     const groups = visiblePizzaModifierGroups(item.name, item.modifierGroups, initial);
     for (const group of groups) {
       initial[group.id] = group.minSelect > 0 && group.modifiers[0] ? [group.modifiers[0]] : [];
+    }
+  if (isHalfAndHalfWizardItem(item.name)) {
+      const { left, right } = halfAndHalfSauceGroups(groups);
+      const picked = left ? initial[left.id]?.[0] : undefined;
+      if (left && right && picked) {
+        initial[right.id] = [mirrorSauceModifier(right, picked)];
+      }
     }
     setEditingLineKey(null);
     setSelectedMods(initial);
