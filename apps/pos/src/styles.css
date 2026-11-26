@@ -1790,6 +1790,11 @@ select:focus-visible {
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr) !important;
   }
 
+  /* Half-and-half / modifier wizard: full-width picker must not stay in 60% catalog column (0.10.99 regression). */
+  .app-shell.till-options .register.register-shell {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
   .register.register-shell .catalog-panel,
   .register.register-shell .ticket-panel {
     display: flex !important;
@@ -1797,9 +1802,19 @@ select:focus-visible {
     min-height: 0;
   }
 
+  .app-shell.till-options .register.register-shell .catalog-panel {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
   .register.pane-items .ticket-panel,
   .register.pane-ticket .catalog-panel {
     display: flex !important;
+  }
+
+  .app-shell.till-options .register.pane-items .ticket-panel,
+  .app-shell.till-options .register.pane-ticket .catalog-panel {
+    display: none !important;
   }
 
   /* Tablet: always show filter chip row (Quick keys, All groups, category chips). */
