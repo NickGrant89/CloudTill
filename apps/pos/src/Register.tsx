@@ -1922,7 +1922,14 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
             <div className="options-picker">
               <div className="options-picker-head till-options-head">
                 <div className="topbar">
-                  <button type="button" className="chip" onClick={() => closeModifierPicker()}>
+                  <button
+                    type="button"
+                    className="chip chip-back till-options-back"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeModifierPicker();
+                    }}
+                  >
                     ← {editingLineKey ? "Sale" : "Menu"}
                   </button>
                   <div className="brand-mini">{editingLineKey ? `Edit · ${modifierItem.name}` : modifierItem.name}</div>

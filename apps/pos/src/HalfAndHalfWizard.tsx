@@ -233,7 +233,14 @@ export function HalfAndHalfWizard(props: {
     <div className="options-picker options-picker--hh">
       <div className="options-picker-head till-options-head">
         <div className="topbar">
-          <button type="button" className="chip" onClick={onClose}>
+          <button
+            type="button"
+            className="chip chip-back till-options-back"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+          >
             ← {editingLineKey ? "Sale" : "Menu"}
           </button>
           <div className="brand-mini">{editingLineKey ? `Edit · ${item.name}` : item.name}</div>
