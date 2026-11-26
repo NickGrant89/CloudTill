@@ -3,7 +3,6 @@ import {
   halfAndHalfColumnGroupsForSide,
   halfAndHalfColumnTailGroupsForSide,
   halfAndHalfExtrasRowLabel,
-  halfAndHalfSharedTailGroups,
   halfAndHalfMergedColumnOptions,
   halfAndHalfMergedSauceOptions,
   halfAndHalfSauceGroups,
@@ -159,10 +158,6 @@ export function HalfAndHalfWizard(props: {
     return visibleGroups.filter((g) => halfAndHalfWizardStepForGroup(g.name) === currentStep.id);
   }, [visibleGroups, currentStep]);
 
-  const halvesSharedTail = useMemo(
-    () => (currentStep?.id === "halves" ? halfAndHalfSharedTailGroups(stepGroups) : []),
-    [currentStep, stepGroups]
-  );
 
   function stepComplete(stepId: HalfAndHalfWizardStepId): boolean {
     return halfAndHalfStepSatisfied({
@@ -189,7 +184,7 @@ export function HalfAndHalfWizard(props: {
   }, [sauceLinked, sauceLeft, sauceRight, selectedMods, sauceEditSide]);
 
   useEffect(() => {
-    if (!currentStep || currentStep.id === "halves") return;
+    if (!currentStep || currentStep.id === "halves" || currentStep.id === "extras") return;
     if (!stepComplete(currentStep.id) || stepIndex >= activeSteps.length - 1) return;
     const timer = window.setTimeout(() => setStepIndex((i) => Math.min(activeSteps.length - 1, i + 1)), 150);
     return () => window.clearTimeout(timer);
@@ -318,65 +313,71 @@ export function HalfAndHalfWizard(props: {
       </div>
 
       <div className="options-picker-body">
-        {currentStep.id === "halves" ? (
+        {currentStep.id === "halves" || currentStep.id === "extras" ? (
           <div className="hh-halves-layout">
             {stepGroups.length === 0 ? (
               <p className="empty">Choose a size first — half options appear for 9″, 12″ or 16″.</p>
             ) : (
-              <>
-                <div className="hh-halves-columns">
-                  {(["right", "left"] as const).map((side) => {
-                    const columnGroups = halfAndHalfColumnGroupsForSide(stepGroups, side);
-                    const columnTail = halfAndHalfColumnTailGroupsForSide(stepGroups, side);
-                    const merged = halfAndHalfMergedColumnOptions(columnGroups);
-                    if (!merged.length && !columnTail.length) return null;
-                    const freeSelect = Math.max(0, ...columnGroups.map((g) => g.freeSelect ?? 0));
-                    const minSelect = Math.max(0, ...columnGroups.map((g) => g.minSelect));
-                    return (
-                      <section
-                        key={side}
-                        className="hh-half-col"
-                        aria-label={side === "right" ? "RIGHT" : "LEFT"}
-                      >
-                        <h3 className="hh-half-title">
-                          {side === "right" ? "RIGHT" : "LEFT"}
-                          {minSelect > 0 ? " *" : ""}
-                          {freeSelect > 0 ? ` · ${freeSelect} free` : ""}
-                        </h3>
-                        {merged.length > 0 ? (
+              <div className="hh-halves-columns">
+                {(["right", "left"] as const).map((side) => {
+                  const columnGroups =
+                    currentStep.id === "halves"
+                      ? halfAndHalfColumnGroupsForSide(stepGroups, side)
+                      : [];
+                  const columnTail =
+                    currentStep.id === "extras"
+                      ? halfAndHalfColumnTailGroupsForSide(stepGroups, side)
+                      : [];
+                  const merged = halfAndHalfMergedColumnOptions(columnGroups);
+                  if (!merged.length && !columnTail.length) return null;
+                  const freeSelect = Math.max(0, ...columnGroups.map((g) => g.freeSelect ?? 0));
+                  const minSelect = Math.max(0, ...columnGroups.map((g) => g.minSelect));
+                  return (
+                    <section
+                      key={side}
+                      className="hh-half-col"
+                      aria-label={side === "right" ? "RIGHT" : "LEFT"}
+                    >
+                      <h3 className="hh-half-title">
+                        {side === "right" ? "RIGHT" : "LEFT"}
+                        {currentStep.id === "halves" && minSelect > 0 ? " *" : ""}
+                        {currentStep.id === "halves" && freeSelect > 0 ? ` · ${freeSelect} free` : ""}
+                      </h3>
+                      {merged.length > 0 ? (
+                        <div className="grid modifier-options-grid hh-half-grid">
+                          {merged.map(({ group, modifier }) =>
+                            renderOptionTiles(group, modifier, () => onChoose(group, modifier))
+                          )}
+                        </div>
+                      ) : null}
+                      {columnTail.map((group) => (
+                        <section key={group.id} className="hh-column-extras">
+                          <h3 className="hh-half-title hh-extras-title">{halfAndHalfExtrasRowLabel(group.name)}</h3>
                           <div className="grid modifier-options-grid hh-half-grid">
-                            {merged.map(({ group, modifier }) =>
-                              renderOptionTiles(group, modifier, () => onChoose(group, modifier))
+                            {group.modifiers.map((option) =>
+                              renderOptionTiles(group, option, () => onChoose(group, option))
                             )}
                           </div>
-                        ) : null}
-                        {columnTail.map((group) => (
-                          <section key={group.id} className="hh-column-extras">
-                            <h3 className="hh-half-title hh-extras-title">{halfAndHalfExtrasRowLabel(group.name)}</h3>
-                            <div className="grid modifier-options-grid hh-half-grid">
-                              {group.modifiers.map((option) =>
-                                renderOptionTiles(group, option, () => onChoose(group, option))
-                              )}
-                            </div>
-                          </section>
-                        ))}
-                      </section>
-                    );
-                  })}
-                </div>
-                {halvesSharedTail.map((group) => (
-                  <section key={group.id} className="hh-shared-tail">
-                    <h3 className="hh-half-title hh-extras-title">{halfAndHalfExtrasRowLabel(group.name)}</h3>
-                    <div className="grid modifier-options-grid">
-                      {group.modifiers.map((option) =>
-                        renderOptionTiles(group, option, () => onChoose(group, option))
-                      )}
-                    </div>
-                  </section>
-                ))}
-              </>
+                        </section>
+                      ))}
+                    </section>
+                  );
+                })}
+              </div>
             )}
           </div>
+        ) : currentStep.id === "removes" ? (
+          stepGroups.length === 0 ? (
+            <p className="empty">No remove lists for this size.</p>
+          ) : (
+            <div className="grid modifier-options-grid">
+              {stepGroups.flatMap((group) =>
+                group.modifiers.map((option) =>
+                  renderOptionTiles(group, option, () => onChoose(group, option))
+                )
+              )}
+            </div>
+          )
         ) : currentStep.id === "sauce" ? (
           <>
             {!sauceLinked && sauceLeft && sauceRight ? (
@@ -449,7 +450,13 @@ export function HalfAndHalfWizard(props: {
               <div className="till-options-preview">{renderPreview(currentStep.id)}</div>
             ) : (
               <div className="meta">
-                {currentStep.id === "halves" ? "Pick RIGHT and LEFT toppings" : "Choose options"}
+                {currentStep.id === "halves"
+                  ? "Pick RIGHT and LEFT toppings"
+                  : currentStep.id === "removes"
+                    ? "Optional — tap toppings to remove"
+                    : currentStep.id === "extras"
+                      ? "Paid extras per half"
+                      : "Choose options"}
               </div>
             )}
           </div>

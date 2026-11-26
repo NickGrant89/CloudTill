@@ -1981,7 +1981,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                   mods={modifierPreview}
                   groups={modifierItem.modifierGroups}
                   itemName={modifierItem.name}
-                  variant={stepId === "halves" ? "halves-footer" : "default"}
+                  variant={stepId === "halves" || stepId === "extras" ? "halves-footer" : "default"}
                 />
               )}
             />
