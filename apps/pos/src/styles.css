@@ -99,6 +99,8 @@ select:focus-visible {
 }
 
 .till-chrome {
+  position: relative;
+  z-index: 5;
   flex: 0 0 auto;
   flex-shrink: 0;
   display: flex;
@@ -107,6 +109,7 @@ select:focus-visible {
   min-height: 0;
   min-width: 0;
   padding: 0 0 6px;
+  background: var(--bg);
 }
 
 /* Login */
@@ -296,6 +299,28 @@ select:focus-visible {
   min-height: 0;
 }
 
+/* Layout contract: catalog-head height is fixed across Quick keys / All groups / one group. */
+.catalog-panel {
+  --catalog-topbar-h: 56px;
+  --catalog-chips-h: 60px;
+}
+
+.catalog-head {
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(var(--catalog-topbar-h) + var(--catalog-chips-h));
+  border-bottom: 1px solid var(--line);
+  background: #f6f1e8;
+  z-index: 2;
+}
+
+.catalog-banner {
+  margin: 0;
+  flex-shrink: 0;
+}
+
 /* Sale column: header/totals/actions fixed; ticket-body fills middle and scrolls lines only */
 .ticket-panel > .ticket-head,
 .ticket-panel > .ticket-body,
@@ -333,9 +358,38 @@ select:focus-visible {
   flex-shrink: 0;
   align-items: center;
   gap: 10px;
-  padding: 12px 14px;
+  padding: 8px 14px;
   border-bottom: 1px solid var(--line);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.topbar.catalog-nav {
+  display: grid;
+  grid-template-columns: auto minmax(0, 11rem) minmax(0, 1fr);
+  grid-template-rows: 1fr;
+  flex: 0 0 var(--catalog-topbar-h);
+  min-height: var(--catalog-topbar-h);
+  max-height: var(--catalog-topbar-h);
+}
+
+.topbar.catalog-nav .chip-back {
+  grid-column: 1;
+}
+
+.topbar.catalog-nav .catalog-title {
+  grid-column: 2;
+}
+
+.topbar.catalog-nav .search {
+  grid-column: 3;
+  min-width: 0;
+}
+
+.chip-back.is-reserved {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .brand-mini {
@@ -358,8 +412,9 @@ select:focus-visible {
   display: flex;
   /* Safari collapses a column-flex child whose overflow isn't visible, even with
      flex-shrink: 0, which sliced these buttons down to a sliver on iPhone. */
-  flex: 0 0 auto;
-  min-height: 60px;
+  flex: 0 0 var(--catalog-chips-h);
+  min-height: var(--catalog-chips-h);
+  max-height: var(--catalog-chips-h);
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
@@ -402,7 +457,14 @@ select:focus-visible {
 }
 
 .chip-row--home .chip-row-extra {
-  display: none;
+  flex: 0 0 auto;
+  width: 0;
+  max-width: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .catalog-title {
@@ -597,6 +659,12 @@ select:focus-visible {
   background: #f6ddd7;
   color: var(--danger);
   font-size: 0.9rem;
+}
+
+.catalog-head .catalog-banner {
+  margin: 0;
+  border-radius: 0;
+  padding: 8px 14px;
 }
 
 /* Ticket */
@@ -1792,6 +1860,17 @@ select:focus-visible {
     padding: 8px;
   }
 
+  .catalog-panel {
+    --catalog-topbar-h: 54px;
+    --catalog-chips-h: 56px;
+  }
+
+  .topbar.catalog-nav {
+    grid-template-columns: auto minmax(0, 10rem) minmax(0, 1fr);
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
   .grid {
     grid-template-columns: repeat(auto-fill, minmax(min(108px, 100%), 1fr));
     grid-auto-rows: 116px;
@@ -1939,12 +2018,13 @@ select:focus-visible {
     padding: 8px 10px;
   }
 
-  .chip-row {
-    padding: 6px 10px;
+  .catalog-panel {
+    --catalog-topbar-h: 52px;
+    --catalog-chips-h: 54px;
   }
 
-  .chip-row-extra {
-    display: none;
+  .chip-row {
+    padding: 6px 10px;
   }
 
   .chip {
@@ -2219,9 +2299,15 @@ select:focus-visible {
     display: none !important;
   }
 
+  .catalog-panel {
+    --catalog-topbar-h: 52px;
+    --catalog-chips-h: 52px;
+  }
+
   .topbar {
     padding: 8px 10px;
     gap: 8px;
+    grid-template-columns: auto minmax(0, 8.5rem) minmax(0, 1fr);
   }
 
   .brand-mini {

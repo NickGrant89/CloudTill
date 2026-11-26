@@ -2088,72 +2088,75 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
             </div>
           ) : (
           <>
-          <div className="topbar">
-              <>
-                {!showGroupHome && (
-                  <button type="button" className="chip chip-back" onClick={() => openGroupHome()}>
-                    ← Groups
+          <header className="catalog-head">
+            <div className="topbar catalog-nav">
+              <button
+                type="button"
+                className={`chip chip-back${showGroupHome ? " is-reserved" : ""}`}
+                onClick={() => openGroupHome()}
+                disabled={showGroupHome}
+                tabIndex={showGroupHome ? -1 : 0}
+                aria-hidden={showGroupHome}
+              >
+                ← Groups
+              </button>
+              <div className="brand-mini catalog-title">
+                {showFavorites
+                  ? "Quick keys"
+                  : categoryId === "all"
+                    ? "All groups"
+                    : categoryId === "home"
+                      ? "PurePOS"
+                      : categoryId === "__none__"
+                        ? "Ungrouped"
+                        : categories.find((c) => c.id === categoryId)?.name ?? "PurePOS"}
+              </div>
+              <input
+                className="search"
+                placeholder="Search or scan barcode / SKU"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => void onSearchKey(e)}
+              />
+            </div>
+            <div
+              className={`chip-row catalog-filters${showGroupHome ? " chip-row--home" : ""}`}
+              role="tablist"
+              aria-label="Item groups"
+            >
+              <button
+                type="button"
+                className={`chip ${showFavorites ? "active" : ""}`}
+                onClick={() => {
+                  setShowFavorites(true);
+                  setCategoryId("home");
+                  setQuery("");
+                }}
+              >
+                ★ Quick keys
+              </button>
+              <button
+                type="button"
+                className={`chip ${!showFavorites && categoryId === "all" ? "active" : ""}`}
+                onClick={() => openAllGroupsMenu()}
+              >
+                All groups
+              </button>
+              <div className="chip-row-extra" aria-hidden={showGroupHome}>
+                {categories.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className={`chip ${!showFavorites && categoryId === c.id ? "active" : ""}`}
+                    onClick={() => openCategory(c.id)}
+                  >
+                    {c.name}
                   </button>
-                )}
-                <div className="brand-mini catalog-title">
-                  {showFavorites
-                    ? "Quick keys"
-                    : categoryId === "all"
-                      ? "All groups"
-                      : categoryId === "home"
-                        ? "PurePOS"
-                        : categoryId === "__none__"
-                          ? "Ungrouped"
-                          : categories.find((c) => c.id === categoryId)?.name ?? "PurePOS"}
-                </div>
-                <input
-                  className="search"
-                  placeholder="Search or scan barcode / SKU"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => void onSearchKey(e)}
-                />
-              </>
-          </div>
-          <div
-            className={`chip-row${showGroupHome ? " chip-row--home" : ""}`}
-            role="tablist"
-            aria-label="Item groups"
-          >
-              <>
-                <button
-                  type="button"
-                  className={`chip ${showFavorites ? "active" : ""}`}
-                  onClick={() => {
-                    setShowFavorites(true);
-                    setCategoryId("home");
-                    setQuery("");
-                  }}
-                >
-                  ★ Quick keys
-                </button>
-                <button
-                  type="button"
-                  className={`chip ${!showFavorites && categoryId === "all" ? "active" : ""}`}
-                  onClick={() => openAllGroupsMenu()}
-                >
-                  All groups
-                </button>
-                <div className="chip-row-extra" aria-hidden={showGroupHome}>
-                  {categories.map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      className={`chip ${!showFavorites && categoryId === c.id ? "active" : ""}`}
-                      onClick={() => openCategory(c.id)}
-                    >
-                      {c.name}
-                    </button>
-                  ))}
-                </div>
-              </>
-          </div>
-          {catalogError && <p className="banner">{catalogError}</p>}
+                ))}
+              </div>
+            </div>
+            {catalogError ? <p className="banner catalog-banner">{catalogError}</p> : null}
+          </header>
           {showGroupHome ? (
             <div className="grid group-picker-grid">
               {!menuReady && <p className="empty">Loading menu…</p>}
