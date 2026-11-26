@@ -1,10 +1,21 @@
-import { Router } from "express";
+import { Router, type NextFunction, type Response } from "express";
 import { prisma } from "../db.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
+import { storeAllowsFeature } from "./billing.js";
 
 export const reportsRouter = Router();
 reportsRouter.use(requireAuth);
 reportsRouter.use(requireRole("owner", "manager", "cashier"));
+
+async function requireAdvancedReports(req: AuthedRequest, res: Response, next: NextFunction) {
+  if (!(await storeAllowsFeature(req.user!.storeId, "advanced_reports"))) {
+    return res.status(402).json({
+      error: "Richer reports need an active Shop or Group plan. Upgrade in Settings → Billing.",
+      feature: "advanced_reports",
+    });
+  }
+  next();
+}
 
 function dateRange(req: { query: Record<string, unknown> }) {
   const from = typeof req.query.from === "string" ? new Date(req.query.from) : new Date(Date.now() - 7 * 86400000);
@@ -43,7 +54,7 @@ reportsRouter.get("/summary", async (req: AuthedRequest, res) => {
   });
 });
 
-reportsRouter.get("/by-item", async (req: AuthedRequest, res) => {
+reportsRouter.get("/by-item", requireAdvancedReports, async (req: AuthedRequest, res) => {
   const { from, to } = dateRange(req);
   const sales = await prisma.sale.findMany({
     where: {
@@ -65,7 +76,7 @@ reportsRouter.get("/by-item", async (req: AuthedRequest, res) => {
   res.json([...map.values()].sort((a, b) => b.salesCents - a.salesCents));
 });
 
-reportsRouter.get("/by-category", async (req: AuthedRequest, res) => {
+reportsRouter.get("/by-category", requireAdvancedReports, async (req: AuthedRequest, res) => {
   const { from, to } = dateRange(req);
   const sales = await prisma.sale.findMany({
     where: {
@@ -88,7 +99,7 @@ reportsRouter.get("/by-category", async (req: AuthedRequest, res) => {
   res.json([...map.values()].sort((a, b) => b.salesCents - a.salesCents));
 });
 
-reportsRouter.get("/by-employee", async (req: AuthedRequest, res) => {
+reportsRouter.get("/by-employee", requireAdvancedReports, async (req: AuthedRequest, res) => {
   const { from, to } = dateRange(req);
   const sales = await prisma.sale.findMany({
     where: {
@@ -108,7 +119,7 @@ reportsRouter.get("/by-employee", async (req: AuthedRequest, res) => {
   res.json([...map.values()].sort((a, b) => b.salesCents - a.salesCents));
 });
 
-reportsRouter.get("/payments", async (req: AuthedRequest, res) => {
+reportsRouter.get("/payments", requireAdvancedReports, async (req: AuthedRequest, res) => {
   const { from, to } = dateRange(req);
   const sales = await prisma.sale.findMany({
     where: {
@@ -130,7 +141,7 @@ reportsRouter.get("/payments", async (req: AuthedRequest, res) => {
   res.json([...map.values()]);
 });
 
-reportsRouter.get("/taxes", async (req: AuthedRequest, res) => {
+reportsRouter.get("/taxes", requireAdvancedReports, async (req: AuthedRequest, res) => {
   const { from, to } = dateRange(req);
   const sales = await prisma.sale.findMany({
     where: {
@@ -148,7 +159,7 @@ reportsRouter.get("/taxes", async (req: AuthedRequest, res) => {
   });
 });
 
-reportsRouter.get("/dashboard", async (req: AuthedRequest, res) => {
+reportsRouter.get("/dashboard", requireAdvancedReports, async (req: AuthedRequest, res) => {
   const storeId = req.user!.storeId;
   const now = new Date();
   const startOfToday = new Date(now);
@@ -251,7 +262,7 @@ reportsRouter.get("/dashboard", async (req: AuthedRequest, res) => {
   });
 });
 
-reportsRouter.get("/shifts", async (req: AuthedRequest, res) => {
+reportsRouter.get("/shifts", requireAdvancedReports, async (req: AuthedRequest, res) => {
   const { from, to } = dateRange(req);
   const shifts = await prisma.shift.findMany({
     where: {

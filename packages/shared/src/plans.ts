@@ -32,7 +32,7 @@ export const PLANS: PlanDefinition[] = [
     name: "Solo",
     tagline: "One till that keeps selling when the Wi‑Fi doesn’t.",
     audience: "Independent counters, pop-ups, market traders",
-    monthlyGbp: 29,
+    monthlyGbp: 19,
     trialDays: 14,
     features: ["pos", "backoffice", "offline_sync"],
     highlights: [
@@ -49,7 +49,7 @@ export const PLANS: PlanDefinition[] = [
     name: "Shop",
     tagline: "The UK high-street package — till, kitchen, ordering, and delivery apps.",
     audience: "Cafés, delis, bars, and single-site retail",
-    monthlyGbp: 59,
+    monthlyGbp: 35,
     trialDays: 14,
     badge: "Most UK shops",
     features: ["pos", "backoffice", "offline_sync", "online_ordering", "csv_import", "kitchen", "advanced_reports"],
@@ -66,7 +66,7 @@ export const PLANS: PlanDefinition[] = [
     name: "Group",
     tagline: "One cloud for every site — stock and items that move with you.",
     audience: "Multi-site groups and growing brands",
-    monthlyGbp: 99,
+    monthlyGbp: 59,
     trialDays: 14,
     features: [
       "pos",

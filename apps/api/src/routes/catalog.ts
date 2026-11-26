@@ -4,6 +4,7 @@ import { prisma } from "../db.js";
 import { owned, rejectForeign } from "../tenant.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 import { companyStoreIds, sameCompany } from "../company.js";
+import { storeAllowsFeature } from "./billing.js";
 import { ensurePizzaMenu } from "../pizzaMenu.js";
 import { cleanupPizzaModifierLibrary, consolidatePizzaTill, repairPizzaTillLayout } from "../pizzaTillConsolidate.js";
 import {
@@ -333,6 +334,12 @@ catalogRouter.post("/items/assign-stores", requireRole("owner", "manager"), asyn
   if (!body.success) return res.status(400).json({ error: "itemIds and storeIds required" });
 
   const sourceStoreId = req.user!.storeId;
+  if (!(await storeAllowsFeature(sourceStoreId, "multi_store"))) {
+    return res.status(402).json({
+      error: "Assigning items to branches needs an active Group plan. Upgrade in Settings → Billing.",
+      feature: "multi_store",
+    });
+  }
   const targetIds = body.data.storeIds.filter((id) => id !== sourceStoreId);
   if (!targetIds.length) return res.status(400).json({ error: "Pick at least one other branch/store" });
 

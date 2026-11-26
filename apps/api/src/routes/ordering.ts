@@ -521,6 +521,18 @@ publicOrderingRouter.get("/orders/:token", async (req, res) => {
 });
 
 kitchenRouter.use(requireAuth);
+kitchenRouter.use(async (req: AuthedRequest, res, next) => {
+  const storeId = req.user!.storeId;
+  const kitchen = await storeAllowsFeature(storeId, "kitchen");
+  const ordering = await storeAllowsFeature(storeId, "online_ordering");
+  if (!kitchen && !ordering) {
+    return res.status(402).json({
+      error: "Kitchen screen needs an active Shop or Group plan. Upgrade in Settings → Billing.",
+      feature: "kitchen",
+    });
+  }
+  next();
+});
 
 kitchenRouter.get("/orders", async (req: AuthedRequest, res) => {
   const status = typeof req.query.status === "string" ? req.query.status : undefined;

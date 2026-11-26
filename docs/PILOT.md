@@ -73,13 +73,13 @@ Still true: clearing site data, or wiping the device *before* sync/export, can l
 
 | Package | £/mo | Cloud features |
 | --- | --- | --- |
-| Solo (`starter`) | 29 | Till · BO · Items/groups · live ticket sync · offline queue · backup |
-| Shop (`pro`) | 59 | + web ordering · kitchen · UK delivery apps · CSV · richer reports |
-| Group (`multi`) | 99 | + multi-store transfers · assign items to branches |
+| Solo (`starter`) | 19 | Till · BO · Items/groups · live ticket sync · offline queue · backup |
+| Shop (`pro`) | 35 | + web ordering · kitchen · UK delivery apps · CSV · richer reports |
+| Group (`multi`) | 59 | + multi-store transfers · assign items to branches |
 
 - Public page: https://purepos.co.uk/pricing (cards from `/api/public/plans`)
 - BO **Settings → Billing** to switch package / activate license
-- Gates: CSV / ordering / delivery → Shop+; transfers / branch assign → Group
+- Gates: CSV / ordering / delivery / kitchen / richer reports → Shop+; transfers / branch assign → Group
 
 ## Smoke checklist
 
