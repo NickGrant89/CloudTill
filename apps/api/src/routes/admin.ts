@@ -18,6 +18,7 @@ import {
 
 import { companyStoreIds, DEMO_COMPANY } from "../company.js";
 import { tidyGaPizzaCatalog } from "../gaPizzaCatalogTidy.js";
+import { repairPizzaTillLayout } from "../pizzaTillConsolidate.js";
 
 export const adminRouter = Router();
 
@@ -138,6 +139,13 @@ adminRouter.get("/overview", async (_req, res) => {
     recentEvents: events.slice(0, 40),
     plans: (["starter", "pro", "multi"] as PlanId[]).map((id) => getPlan(id)),
   });
+});
+
+adminRouter.post("/stores/:storeId/pizza-till-repair", async (req, res) => {
+  const store = await prisma.store.findUnique({ where: { id: req.params.storeId } });
+  if (!store) return res.status(404).json({ error: "Store not found" });
+  const result = await repairPizzaTillLayout(store.id);
+  res.json({ ok: true, ...result });
 });
 
 adminRouter.post("/stores/:storeId/ga-pizza-catalog-tidy", async (req, res) => {

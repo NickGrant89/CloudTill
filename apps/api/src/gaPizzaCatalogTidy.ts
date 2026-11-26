@@ -1,4 +1,6 @@
+import { HALF_AND_HALF_PRESET_ITEM } from "@cloudtill/shared";
 import { prisma } from "./db.js";
+import { TILL_LAYOUT } from "./pizzaTillLayout.js";
 
 export const GENERIC_PIZZA_HIDE = [
   "Single pizza",
@@ -14,6 +16,19 @@ function nameVariants(name: string): string[] {
 function isLoyverseHalfAndHalfItem(name: string): boolean {
   if (!/half\s*&\s*half/i.test(name) || /cyo/i.test(name)) return false;
   return /(\d+)\s*(?:”|")/.test(name);
+}
+
+function isHalfAndHalfTidyTarget(name: string): boolean {
+  if (name.trim() === HALF_AND_HALF_PRESET_ITEM) return true;
+  return isLoyverseHalfAndHalfItem(name);
+}
+
+function shouldUnassignGroup(itemName: string, groupName: string): boolean {
+  if (itemName.trim() === HALF_AND_HALF_PRESET_ITEM) {
+    const rule = TILL_LAYOUT[HALF_AND_HALF_PRESET_ITEM];
+    return rule ? rule.drop(groupName) : false;
+  }
+  return shouldUnassignFromHalfAndHalf(groupName);
 }
 
 export function shouldUnassignFromHalfAndHalf(groupName: string): boolean {
@@ -81,12 +96,12 @@ export async function tidyGaPizzaCatalog(storeId: string, dryRun = false): Promi
   });
 
   for (const item of hhItems) {
-    if (!isLoyverseHalfAndHalfItem(item.name)) continue;
+    if (!isHalfAndHalfTidyTarget(item.name)) continue;
     const before = item.modifierGroups.length;
     const removed: string[] = [];
     const kept: string[] = [];
     for (const group of item.modifierGroups) {
-      if (shouldUnassignFromHalfAndHalf(group.name)) {
+      if (shouldUnassignGroup(item.name, group.name)) {
         removed.push(group.name);
         if (!dryRun) {
           await prisma.modifier.deleteMany({ where: { groupId: group.id } });
