@@ -10,7 +10,7 @@ reportsRouter.use(requireRole("owner", "manager", "cashier"));
 async function requireAdvancedReports(req: AuthedRequest, res: Response, next: NextFunction) {
   if (!(await storeAllowsFeature(req.user!.storeId, "advanced_reports"))) {
     return res.status(402).json({
-      error: "Richer reports need an active Shop or Group plan. Upgrade in Settings → Billing.",
+      error: "Richer reports need an active Venue or Multi-site plan. Upgrade in Settings → Billing.",
       feature: "advanced_reports",
     });
   }

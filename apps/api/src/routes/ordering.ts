@@ -117,7 +117,7 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
   const store = await resolveStore(req.params.slug);
   if (!store) return res.status(404).json({ error: "Store not found" });
   if (!(await storeAllowsFeature(store.id, "online_ordering"))) {
-    return res.status(402).json({ error: "Online ordering needs an active Shop or Group plan. Upgrade in Settings → Billing." });
+    return res.status(402).json({ error: "Online ordering needs an active Venue or Multi-site plan. Upgrade in Settings → Billing." });
   }
 
   const body = z
@@ -527,7 +527,7 @@ kitchenRouter.use(async (req: AuthedRequest, res, next) => {
   const ordering = await storeAllowsFeature(storeId, "online_ordering");
   if (!kitchen && !ordering) {
     return res.status(402).json({
-      error: "Kitchen screen needs an active Shop or Group plan. Upgrade in Settings → Billing.",
+      error: "Kitchen screen needs an active Venue or Multi-site plan. Upgrade in Settings → Billing.",
       feature: "kitchen",
     });
   }

@@ -24,13 +24,13 @@ export interface PlanDefinition {
 
 /**
  * UK SaaS packages — priced in GBP, built for British high-street retail & hospitality.
- * IDs stay starter/pro/multi for API compatibility; display names are Solo / Shop / Group.
+ * IDs stay starter/pro/multi for API compatibility; display names are Counter / Venue / Multi-site.
  */
 export const PLANS: PlanDefinition[] = [
   {
     id: "starter",
-    name: "Solo",
-    tagline: "One till that keeps selling when the Wi‑Fi doesn’t.",
+    name: "Counter",
+    tagline: "One till + cloud back office when Wi‑Fi drops.",
     audience: "Independent counters, pop-ups, market traders",
     monthlyGbp: 19,
     trialDays: 14,
@@ -46,15 +46,15 @@ export const PLANS: PlanDefinition[] = [
   },
   {
     id: "pro",
-    name: "Shop",
-    tagline: "The UK high-street package — till, kitchen, ordering, and delivery apps.",
+    name: "Venue",
+    tagline: "Till, kitchen, online ordering & UK delivery apps.",
     audience: "Cafés, delis, bars, and single-site retail",
     monthlyGbp: 35,
     trialDays: 14,
-    badge: "Most UK shops",
+    badge: "Most UK venues",
     features: ["pos", "backoffice", "offline_sync", "online_ordering", "csv_import", "kitchen", "advanced_reports"],
     highlights: [
-      "Everything in Solo",
+      "Everything in Counter",
       "Customer online ordering (pickup, dine-in, delivery)",
       "Kitchen board for web + Just Eat, Deliveroo, Uber Eats & more",
       "CSV import · end-of-day & richer reports",
@@ -63,8 +63,8 @@ export const PLANS: PlanDefinition[] = [
   },
   {
     id: "multi",
-    name: "Group",
-    tagline: "One cloud for every site — stock and items that move with you.",
+    name: "Multi-site",
+    tagline: "One cloud across branches — stock & catalogue.",
     audience: "Multi-site groups and growing brands",
     monthlyGbp: 59,
     trialDays: 14,
@@ -79,7 +79,7 @@ export const PLANS: PlanDefinition[] = [
       "multi_store",
     ],
     highlights: [
-      "Everything in Shop",
+      "Everything in Venue",
       "Multi-store stock transfers",
       "Assign items to branches from Items",
       "Shared catalogue ops across sites",

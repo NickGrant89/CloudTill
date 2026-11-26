@@ -465,7 +465,7 @@ billingRouter.get("/features/:feature", async (req: AuthedRequest, res) => {
 /**
  * One-off per store: before entitlements, signup minted a self-activating key and any owner could pick any plan.
  * Paid (active) stores keep their current plan as the licensed ceiling; trial-signup keys are dropped; the demo is
- * an active Shop plan so it never expires.
+ * an active Venue (`pro`) plan so it never expires.
  */
 function paidByAdmin(audit: unknown[]) {
   return audit.some((raw) => {

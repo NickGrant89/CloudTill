@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, getToken, money, setToken } from "./api";
-import { sortItemGroups, sortTillMenuItems } from "@cloudtill/shared";
+import { getPlan, sortItemGroups, sortTillMenuItems } from "@cloudtill/shared";
 import { BoEditSheet } from "./BoEditSheet";
 import { applyReorder, DragGrip, GiftCardsPage, ModifierEditor, ModifierLibrary, TimeClockPage } from "./MorePages";
 import { KitchenPage, PrintersPage } from "./KitchenPrinters";
@@ -2518,7 +2518,7 @@ function StoresPage() {
             </>
           ) : (
             <p style={{ color: "var(--muted)", marginTop: 0 }}>
-              Branches are part of the <strong>Group</strong> plan. Upgrade in Settings → Billing to add more sites.
+              Branches are part of the <strong>Multi-site</strong> plan. Upgrade in Settings → Billing to add more sites.
             </p>
           )}
           {branchMsg && <p style={{ marginBottom: 0 }}>{branchMsg}</p>}
@@ -3293,7 +3293,7 @@ function SettingsPage() {
                           .catch((err) => setBillingMsg(err instanceof Error ? err.message : "Could not change plan"));
                       }}
                     >
-                      {planId === "starter" ? "Solo" : planId === "pro" ? "Shop" : "Group"}
+                      {getPlan(planId).name}
                     </button>
                   ))}
               </div>
@@ -3332,8 +3332,8 @@ function SettingsPage() {
           </form>
           {billingMsg && <p style={{ marginBottom: 0 }}>{billingMsg}</p>}
           <p style={{ marginTop: 10, fontSize: "0.88rem", color: "var(--muted)" }}>
-            Solo: the till, items, live sync and backups. Shop adds online ordering, kitchen screens, delivery
-            apps (Just Eat, Deliveroo, Uber Eats), spreadsheet import and fuller reports. Group adds extra
+            Counter: the till, items, live sync and backups. Venue adds online ordering, kitchen screens, delivery
+            apps (Just Eat, Deliveroo, Uber Eats), spreadsheet import and fuller reports. Multi-site adds extra
             branches, stock transfers between them and choosing which items each branch sells.
           </p>
         </div>
