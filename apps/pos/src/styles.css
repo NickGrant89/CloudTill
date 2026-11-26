@@ -1850,7 +1850,12 @@ select:focus-visible {
   }
 
   .toolbar-dark {
-    --till-chrome-toolbar-h: 50px;
+    --till-chrome-toolbar-h: auto;
+    max-height: none;
+    height: auto;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    overflow-y: visible;
   }
 
   .toolbar-identity {
@@ -1913,11 +1918,13 @@ select:focus-visible {
   }
 
   .toolbar-actions {
-    flex: 0 0 auto;
+    flex: 1 1 auto;
     justify-content: flex-end;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     margin-left: auto;
     gap: 6px;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .toolbar-actions button {
@@ -2629,6 +2636,48 @@ select:focus-visible {
   /* Phone-order link lives on the dedicated Phone order flow; keep pay sheet short */
   .pay-text-to-pay {
     display: none;
+  }
+}
+
+/*
+ * iPad toolbar: the phone block above also matches (max-width: 920px) and (max-height: 480px)
+ * on some iPad / Split View / Safari chrome sizes and cascades later than min-width: 700px.
+ * Re-assert full desk row + wrapping for any tablet-width viewport.
+ */
+@media (min-width: 700px) {
+  .app-shell {
+    --till-chrome-toolbar-h: auto;
+  }
+
+  .till-chrome .toolbar-dark {
+    flex: 0 0 auto;
+    max-height: none;
+    height: auto;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    overflow-x: auto;
+    overflow-y: visible;
+  }
+
+  .till-chrome .toolbar-actions {
+    display: flex !important;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    min-width: 0;
+    max-width: 100%;
+    margin-left: auto;
+    gap: 6px;
+  }
+
+  .till-chrome .toolbar-actions .toolbar-desk,
+  .till-chrome .toolbar-actions .toolbar-aux,
+  .till-chrome .toolbar-actions .toolbar-keep,
+  .till-chrome .toolbar-actions .toolbar-hint-restore {
+    display: inline-flex !important;
+  }
+
+  .till-chrome .toolbar-phone-more {
+    display: none !important;
   }
 }
 
