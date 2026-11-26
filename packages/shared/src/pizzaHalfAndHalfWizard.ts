@@ -249,15 +249,16 @@ export function halfAndHalfColumnTailGroupsForSide<T extends { name: string }>(
   return halfAndHalfWizardExtrasGroups(groups).filter((g) => halfAndHalfColumnTailSide(g.name) === side);
 }
 
-/** Remove lists per column: shared Loyverse list on LEFT only; right-named lists on RIGHT (wizard — no duplicate grids). */
+/** Remove lists per Options column — shared `Remove Toppings` menus appear on both sides; L/R-named lists on matching side. */
 export function halfAndHalfRemoveGroupsForSide<T extends { name: string }>(
   groups: T[],
   side: "right" | "left"
 ): T[] {
   return halfAndHalfWizardRemoveGroups(groups).filter((g) => {
     const tail = halfAndHalfColumnTailSide(g.name);
-    if (side === "left") return tail === "left" || tail === "shared";
-    return tail === "right";
+    if (tail === "left") return side === "left";
+    if (tail === "right") return side === "right";
+    return tail === "shared";
   });
 }
 
