@@ -53,18 +53,27 @@ export function pizzaSizedToppingPriceCents(sizeInches: number): number {
   return 90;
 }
 
+function pizzaGroupRole(groupName: string): string {
+  return groupName
+    .replace(/^(\d+)\s*(?:”|")\s*/i, "")
+    .trim()
+    .toLowerCase();
+}
+
+/** Till tab / receipt labels for consolidated pizza (not half-and-half — use kitchenHalfAndHalfGroupLabel there). */
 export function tillPizzaModGroupLabel(groupName: string): string {
   const n = groupName.trim();
-  const lower = n.toLowerCase();
-  if (lower === "size") return "Size";
-  if (lower === "pizza base") return "Base";
-  if (lower === "pizza sauce") return "Sauce (left)";
-  if (lower === "pizza sauce 2") return "Sauce (right)";
-  if (lower.startsWith("right cyo")) return "Right toppings";
-  if (lower.startsWith("left cyo")) return "Left toppings";
-  if (lower.startsWith("right half & half pizza")) return "Right pizza";
-  if (lower.startsWith("left half & half")) return "Left pizza";
-  if (lower.includes("create your own")) return "Toppings";
+  const role = pizzaGroupRole(n);
+  if (role === "size") return "Size";
+  if (role === "pizza base") return "Base";
+  if (role === "pizza sauce" || role === "pizza sauce 2") return "Sauce";
+  if (role.startsWith("right cyo")) return "Right toppings";
+  if (role.startsWith("left cyo")) return "Left toppings";
+  if (role.startsWith("right half & half pizza")) return "Right pizza";
+  if (role.startsWith("left half & half")) return "Left pizza";
+  if (role.includes("create your own")) return "Toppings";
+  if (role === "pizza options") return "Options";
+  if (/remove topping/.test(role)) return "Remove";
   const stripped = n.replace(/^(\d+)\s*(?:”|")\s*/i, "").trim();
   return stripped || n;
 }

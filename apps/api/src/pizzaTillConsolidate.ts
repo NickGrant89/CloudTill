@@ -6,6 +6,14 @@ import {
   TILL_LAYOUT,
 } from "./pizzaTillLayout.js";
 
+function pizzaModifierRole(groupName: string): string {
+  return groupName
+    .replace(/^(\d+)\s*(?:”|")\s*/i, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
 const SIZE_GROUP = "Size";
 const PIZZA_SIZES = [
   { name: '9"', priceCents: 800 },
@@ -311,11 +319,36 @@ export async function repairPizzaTillLayout(storeId: string) {
     if (!item) continue;
 
     const removed: string[] = [];
-    for (const group of item.modifierGroups) {
-      if (!rule.drop(group.name)) continue;
-      await prisma.modifier.deleteMany({ where: { groupId: group.id } });
-      await prisma.modifierGroup.delete({ where: { id: group.id } });
-      removed.push(group.name);
+    const orderKeys = new Set(rule.order.map((name) => name.toLowerCase()));
+    const singlePizza =
+      itemName === "Pizza — Single" || itemName === "Pizza — Create your own";
+
+    for (const group of [...item.modifierGroups]) {
+      if (rule.drop(group.name)) {
+        await prisma.modifier.deleteMany({ where: { groupId: group.id } });
+        await prisma.modifierGroup.delete({ where: { id: group.id } });
+        removed.push(group.name);
+        continue;
+      }
+      const role = pizzaModifierRole(group.name);
+      if (singlePizza) {
+        if (role === "pizza sauce 2" || (/half/i.test(group.name) && /left|right/i.test(group.name))) {
+          await prisma.modifier.deleteMany({ where: { groupId: group.id } });
+          await prisma.modifierGroup.delete({ where: { id: group.id } });
+          removed.push(group.name);
+          continue;
+        }
+      }
+      if (
+        !singlePizza &&
+        role === "pizza sauce 2" &&
+        !orderKeys.has("pizza sauce 2") &&
+        !itemName.includes("Half")
+      ) {
+        await prisma.modifier.deleteMany({ where: { groupId: group.id } });
+        await prisma.modifierGroup.delete({ where: { id: group.id } });
+        removed.push(group.name);
+      }
     }
 
     if (rule.freeSelect) {

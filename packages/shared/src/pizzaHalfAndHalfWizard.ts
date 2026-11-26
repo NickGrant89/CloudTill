@@ -130,13 +130,13 @@ export function isHalfAndHalfLeftGroup(groupName: string): boolean {
 
 /** Kitchen / ticket heading for a modifier group on half-and-half items. */
 export function kitchenHalfAndHalfGroupLabel(groupName: string): string {
-  const lower = groupName.trim().toLowerCase();
-  if (isHalfAndHalfLeftGroup(groupName)) return "LEFT";
-  if (isHalfAndHalfRightGroup(groupName)) return "RIGHT";
-  if (lower === "pizza sauce") return "Sauce (left)";
-  if (lower === "pizza sauce 2") return "Sauce (right)";
-  if (lower === "size") return "Size";
-  if (lower === "pizza base") return "Base";
+  const role = normRole(groupName);
+  if (isHalfAndHalfLeftGroup(groupName) && !isHalfAndHalfExtrasGroup(groupName)) return "LEFT";
+  if (isHalfAndHalfRightGroup(groupName) && !isHalfAndHalfExtrasGroup(groupName)) return "RIGHT";
+  if (role === "pizza sauce") return "Sauce (left)";
+  if (role === "pizza sauce 2") return "Sauce (right)";
+  if (role === "size") return "Size";
+  if (role === "pizza base") return "Base";
   return tillPizzaModGroupLabel(groupName);
 }
 
@@ -144,7 +144,9 @@ export function kitchenHalfAndHalfGroupLabel(groupName: string): string {
 export function halfAndHalfWizardGroupLabel(groupName: string): string {
   if (isHalfAndHalfRightGroup(groupName) && !isHalfAndHalfExtrasGroup(groupName)) return "RIGHT";
   if (isHalfAndHalfLeftGroup(groupName) && !isHalfAndHalfExtrasGroup(groupName)) return "LEFT";
-  if (isHalfAndHalfSauceGroup(groupName)) return tillPizzaModGroupLabel(groupName);
+  if (isHalfAndHalfSauceGroup(groupName)) {
+    return normRole(groupName) === "pizza sauce 2" ? "Sauce (right)" : "Sauce (left)";
+  }
   return tillPizzaModGroupLabel(groupName);
 }
 
