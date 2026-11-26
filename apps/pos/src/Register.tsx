@@ -38,7 +38,15 @@ import {
   withTotals,
 } from "./offline/ticket";
 import { readLocalTicket, type LocalTicket } from "./offline/db";
-import { readPinnedTill, registerTone, registerToneIndex, writePinnedTill } from "./pinnedTill";
+import {
+  readPinnedTill,
+  readTillHintLevel,
+  registerTone,
+  registerToneIndex,
+  writePinnedTill,
+  writeTillHintLevel,
+  type TillHintLevel,
+} from "./pinnedTill";
 
 interface Category {
   id: string;
@@ -295,6 +303,12 @@ interface KitchenOrder {
 
 export function Register({ user, store, registers, registerId, onLogout }: Props) {
   const [pinnedId, setPinnedId] = useState(() => readPinnedTill(store.id)?.registerId ?? "");
+  const [hintLevel, setHintLevel] = useState<TillHintLevel>(() => {
+    const saved = readTillHintLevel();
+    if (saved !== "full") return saved;
+    const pinned = readPinnedTill(store.id)?.registerId;
+    return pinned && pinned === registerId ? "compact" : "full";
+  });
   const [fullScreen, setFullScreen] = useState(false);
   useEffect(() => {
     const sync = () => setFullScreen(Boolean(document.fullscreenElement));
@@ -1777,6 +1791,18 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
       toneIndex: registerToneIndex(currentRegister.id, registers),
     });
     setPinnedId(currentRegister.id);
+    setHintLevel("compact");
+    writeTillHintLevel("compact");
+  }
+
+  function dismissTillHint() {
+    setHintLevel("hidden");
+    writeTillHintLevel("hidden");
+  }
+
+  function showTillHintAgain() {
+    setHintLevel("compact");
+    writeTillHintLevel("compact");
   }
 
   useEffect(() => {
@@ -1814,8 +1840,14 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
     }
   }
 
+  const needsPinBanner = Boolean(currentRegister && pinnedId !== registerId);
+  const showHintRow = hintLevel !== "hidden";
+
   return (
-    <div className={`app-shell till-${tillPhase}`}>
+    <div
+      className={`app-shell till-${tillPhase} till-hint-${hintLevel}${needsPinBanner ? " till-hint-pinning" : ""}`}
+    >
+      <header className="till-chrome">
       <div className="toolbar-dark">
         <div className="toolbar-identity">
           {currentRegister ? (
@@ -1871,41 +1903,60 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
         <button type="button" className="toolbar-keep" onClick={() => void openTicketsBoard()}>
           Tickets{openTickets.length ? ` · ${openTickets.length}` : ""}
         </button>
-        <button type="button" className="toolbar-desk" onClick={() => void openRecentSales()}>
+        <button type="button" className="toolbar-desk toolbar-aux" onClick={() => void openRecentSales()}>
           Receipts
         </button>
-        <button type="button" className="toolbar-desk" onClick={() => void openKitchenBoard()}>
+        <button type="button" className="toolbar-desk toolbar-aux" onClick={() => void openKitchenBoard()}>
           Kitchen
         </button>
-        <button type="button" className={`toolbar-desk${clockedIn ? " is-live" : ""}`} onClick={() => void toggleClock()}>
+        <button type="button" className={`toolbar-desk toolbar-aux${clockedIn ? " is-live" : ""}`} onClick={() => void toggleClock()}>
           {clockedIn ? "Clock out" : "Clock in"}
         </button>
         <button type="button" className={`toolbar-desk${shift ? " is-live" : ""}`} onClick={() => setModal({ type: "shift" })}>
           {shift ? "Close shift" : "Open shift"}
         </button>
-        <button type="button" className="toolbar-desk" onClick={() => void openDrawer()}>
+        <button type="button" className="toolbar-desk toolbar-aux" onClick={() => void openDrawer()}>
           Drawer
         </button>
+        {hintLevel === "hidden" ? (
+          <button type="button" className="toolbar-desk toolbar-hint-restore" onClick={showTillHintAgain}>
+            Tips
+          </button>
+        ) : null}
         <button type="button" className="toolbar-phone-more" onClick={() => setModal({ type: "more" })}>
           More
         </button>
         </div>
       </div>
-      <p className={`guided-note${pinnedId !== registerId && currentRegister ? " is-pinning" : ""}`}>
-        {pinnedId !== registerId && currentRegister && (
-          <button type="button" className="pin-till-btn" onClick={pinThisIpad}>
-            Use this iPad as {currentRegister.name}
-          </button>
-        )}
-        <button type="button" className="fullscreen-btn" onClick={() => void toggleFullScreen()}>
-          {fullScreen ? "Exit full screen" : "Full screen"}
-        </button>
-        <span>
-          {pinnedId !== registerId && currentRegister
-            ? `Tap Use this iPad as ${currentRegister.name} to pin this device. Change till from Lock → Change till. Guided Access keeps Safari on this page.`
-            : "Full screen only fills this window. To keep an iPad on this till, use Guided Access: Settings, Accessibility, Guided Access, then triple-click the side button."}
-        </span>
-      </p>
+      {showHintRow ? (
+        <div className="guided-note-slot">
+          <p
+            className={`guided-note${needsPinBanner ? " is-pinning" : ""}${hintLevel === "compact" ? " is-compact" : ""}`}
+          >
+            {needsPinBanner && currentRegister && (
+              <button type="button" className="pin-till-btn" onClick={pinThisIpad}>
+                Use this iPad as {currentRegister.name}
+              </button>
+            )}
+            <button type="button" className="fullscreen-btn" onClick={() => void toggleFullScreen()}>
+              {fullScreen ? "Exit full screen" : "Full screen"}
+            </button>
+            <span className="guided-note-copy">
+              {needsPinBanner && currentRegister
+                ? hintLevel === "compact"
+                  ? `Pin this iPad to ${currentRegister.name}. Lock → Change till to swap.`
+                  : `Tap Use this iPad as ${currentRegister.name} to pin this device. Change till from Lock → Change till. Guided Access keeps Safari on this page.`
+                : hintLevel === "compact"
+                  ? "Full screen fills this window. Pin the iPad with Guided Access (Settings → Accessibility → triple-click side button)."
+                  : "Full screen only fills this window. To keep an iPad on this till, use Guided Access: Settings, Accessibility, Guided Access, then triple-click the side button."}
+            </span>
+            <button type="button" className="hint-dismiss" onClick={dismissTillHint} title="Hide till tips">
+              Hide
+            </button>
+          </p>
+        </div>
+      ) : null}
+      </header>
 
       <div className={`register pane-${mobilePane}`}>
         <section
@@ -2411,6 +2462,17 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
               >
                 Drawer
               </button>
+              {hintLevel === "hidden" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    showTillHintAgain();
+                    setModal(null);
+                  }}
+                >
+                  Show iPad tips
+                </button>
+              ) : null}
               <button
                 type="button"
                 disabled={!ticket}

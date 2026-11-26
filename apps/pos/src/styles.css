@@ -70,7 +70,10 @@ select:focus-visible {
   outline-offset: 2px;
 }
 
+/* Layout contract: till chrome uses fixed row heights so .register always gets a stable flex:1 catalog band (see till-mobile.md svh/dvh). */
 .app-shell {
+  --till-chrome-toolbar-h: 52px;
+  --till-chrome-hint-h: 40px;
   height: 100%;
   height: 100svh;
   height: 100dvh;
@@ -85,6 +88,25 @@ select:focus-visible {
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+.app-shell.till-hint-compact {
+  --till-chrome-hint-h: 34px;
+}
+
+.app-shell.till-hint-hidden {
+  --till-chrome-hint-h: 0px;
+}
+
+.till-chrome {
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+  min-width: 0;
+  padding: 0 0 6px;
 }
 
 /* Login */
@@ -464,10 +486,11 @@ select:focus-visible {
   min-height: 0;
   height: 100%;
   border-radius: 16px;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
+  padding: 12px 12px 10px;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 4px;
+  align-content: stretch;
   text-align: left;
   color: #f7f3eb;
   background-image:
@@ -527,9 +550,13 @@ select:focus-visible {
 }
 
 .item-tile .name {
+  align-self: end;
+  min-height: 0;
+  max-height: 100%;
   font-weight: 600;
-  font-size: 0.98rem;
-  line-height: 1.2;
+  font-size: 0.96rem;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -542,10 +569,10 @@ select:focus-visible {
 }
 
 .item-tile .price {
+  align-self: stretch;
   font-size: 0.9rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  margin-top: 4px;
 }
 
 .empty {
@@ -963,15 +990,26 @@ select:focus-visible {
 
 .toolbar-dark {
   display: flex;
+  flex: 0 0 var(--till-chrome-toolbar-h);
+  max-height: var(--till-chrome-toolbar-h);
   gap: 8px;
   align-items: center;
-  margin: 12px 14px 0;
-  padding: 8px;
+  margin: 8px 8px 0;
+  padding: 6px 8px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
   color: #d7e0da;
   font-size: 0.9rem;
   background: rgba(255, 248, 238, 0.07);
   border: 1px solid rgba(255, 248, 238, 0.1);
   border-radius: 16px;
+}
+
+.toolbar-dark::-webkit-scrollbar {
+  display: none;
 }
 
 .toolbar-actions.is-quiet {
@@ -1404,6 +1442,11 @@ select:focus-visible {
   display: none;
 }
 
+.toolbar-hint-restore {
+  font-size: 0.78rem;
+  opacity: 0.85;
+}
+
 .more-sheet {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1471,18 +1514,66 @@ select:focus-visible {
   white-space: nowrap;
 }
 
+.guided-note-slot {
+  flex: 0 0 var(--till-chrome-hint-h);
+  max-height: var(--till-chrome-hint-h);
+  min-height: 0;
+  margin: 6px 8px 0;
+  overflow: hidden;
+}
+
 .guided-note {
-  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: 8px 14px 0;
-  padding: 6px 8px 6px 6px;
+  gap: 8px;
+  height: 100%;
+  max-height: 100%;
+  margin: 0;
+  padding: 0 8px 0 6px;
   border-radius: 12px;
   background: rgba(244, 240, 232, 0.1);
   color: #f4f0e8;
   font-size: 0.78rem;
-  line-height: 1.35;
+  line-height: 1.25;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.guided-note::-webkit-scrollbar {
+  display: none;
+}
+
+.guided-note-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.guided-note.is-compact .guided-note-copy {
+  font-size: 0.74rem;
+}
+
+.guided-note:not(.is-compact):not(.is-pinning) .guided-note-copy {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.hint-dismiss {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: rgba(244, 240, 232, 0.14);
+  color: #f4f0e8;
+  font-size: 0.72rem;
+  font-weight: 700;
 }
 
 .guided-note.is-pinning {
@@ -1504,10 +1595,12 @@ select:focus-visible {
 }
 
 .toolbar-dark button {
+  flex: 0 0 auto;
   background: rgba(244, 240, 232, 0.1);
   color: #f4f0e8;
-  min-height: 40px;
+  min-height: 38px;
   padding: 0 12px;
+  white-space: nowrap;
 }
 
 .toolbar-dark button.is-live {
@@ -1609,18 +1702,7 @@ select:focus-visible {
   }
 
   .toolbar-dark {
-    flex-wrap: nowrap;
-    align-items: center;
-    gap: 8px;
-    margin: 8px 8px 0;
-    padding: 6px 8px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-
-  .toolbar-dark::-webkit-scrollbar {
-    display: none;
+    --till-chrome-toolbar-h: 50px;
   }
 
   .toolbar-identity {
@@ -1656,15 +1738,30 @@ select:focus-visible {
     display: none;
   }
 
+  .app-shell {
+    --till-chrome-hint-h: 36px;
+  }
+
+  .app-shell.till-hint-compact {
+    --till-chrome-hint-h: 32px;
+  }
+
   .guided-note {
-    margin: 6px 8px 0;
     font-size: 0.72rem;
-    flex-wrap: wrap;
   }
 
   .guided-note .pin-till-btn {
-    min-height: 36px;
-    font-size: 0.85rem;
+    min-height: 32px;
+    font-size: 0.82rem;
+    max-width: min(46vw, 220px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  @media (max-width: 1180px) {
+    .toolbar-actions .toolbar-aux {
+      display: none;
+    }
   }
 
   .offline-badge,
@@ -1697,7 +1794,7 @@ select:focus-visible {
 
   .grid {
     grid-template-columns: repeat(auto-fill, minmax(min(108px, 100%), 1fr));
-    grid-auto-rows: 108px;
+    grid-auto-rows: 116px;
     gap: 8px;
     padding: 8px 10px 12px;
   }
@@ -1713,7 +1810,7 @@ select:focus-visible {
 
   .menu-section-grid {
     grid-template-columns: repeat(auto-fill, minmax(min(108px, 100%), 1fr));
-    grid-auto-rows: 108px;
+    grid-auto-rows: 116px;
     gap: 8px;
   }
 
@@ -1721,11 +1818,12 @@ select:focus-visible {
     aspect-ratio: auto;
     height: 100%;
     min-height: 0;
-    padding: 10px;
+    padding: 10px 10px 8px;
   }
 
   .item-tile .name {
-    font-size: 0.88rem;
+    font-size: 0.84rem;
+    line-height: 1.16;
   }
 
   .qty-controls button {
@@ -1792,6 +1890,20 @@ select:focus-visible {
 
 /* Short Safari chrome (tabs + toolbar): reclaim vertical space, keep Charge on screen */
 @media (max-height: 820px) and (min-width: 700px) {
+  .app-shell {
+    --till-chrome-toolbar-h: 46px;
+    --till-chrome-hint-h: 0px;
+  }
+
+  .app-shell.till-hint-full,
+  .app-shell.till-hint-compact {
+    --till-chrome-hint-h: 30px;
+  }
+
+  .till-chrome {
+    padding-bottom: 4px;
+  }
+
   .toolbar-dark {
     margin: 4px 6px 0;
     padding: 4px 6px;
@@ -1803,16 +1915,19 @@ select:focus-visible {
     min-height: 32px;
   }
 
-  .guided-note {
+  .guided-note-slot {
     margin: 4px 6px 0;
-    padding: 4px 6px;
+  }
+
+  .guided-note {
+    padding: 0 6px;
     font-size: 0.68rem;
   }
 
   .guided-note .fullscreen-btn,
   .pin-till-btn,
   .register-badge {
-    min-height: 32px;
+    min-height: 30px;
   }
 
   .register {
@@ -1837,18 +1952,23 @@ select:focus-visible {
   }
 
   .grid {
-    grid-auto-rows: 92px;
+    grid-auto-rows: 100px;
     gap: 6px;
     padding: 6px 8px 10px;
   }
 
   .menu-section-grid {
-    grid-auto-rows: 92px;
+    grid-auto-rows: 100px;
     gap: 6px;
   }
 
   .item-tile {
-    padding: 8px;
+    padding: 8px 8px 6px;
+  }
+
+  .item-tile .name {
+    font-size: 0.8rem;
+    line-height: 1.14;
   }
 
   .open-tickets-chips {
@@ -1895,11 +2015,16 @@ select:focus-visible {
   }
 
   .grid {
-    grid-auto-rows: 84px;
+    grid-auto-rows: 92px;
   }
 
   .menu-section-grid {
-    grid-auto-rows: 84px;
+    grid-auto-rows: 92px;
+  }
+
+  .item-tile .name {
+    font-size: 0.76rem;
+    line-height: 1.12;
   }
 }
 
@@ -2127,16 +2252,27 @@ select:focus-visible {
 
   .grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-auto-rows: minmax(108px, 22vw);
+    grid-auto-rows: minmax(112px, 23vw);
     gap: 8px;
     padding: 8px 10px 14px;
+  }
+
+  .menu-section-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: minmax(112px, 23vw);
+    gap: 8px;
   }
 
   .item-tile {
     aspect-ratio: auto;
     height: 100%;
     min-height: 0;
-    padding: 10px;
+    padding: 10px 10px 8px;
+  }
+
+  .item-tile .name {
+    font-size: 0.84rem;
+    line-height: 1.17;
   }
 
   .ticket-head {
