@@ -13,7 +13,7 @@ type BoEditSheetProps = {
 function usePhoneLayout() {
   const [phone, setPhone] = useState(false);
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 700px)");
+    const mq = window.matchMedia("(max-width: 768px)");
     const sync = () => setPhone(mq.matches);
     sync();
     mq.addEventListener("change", sync);

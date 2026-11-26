@@ -1,4 +1,7 @@
+/* Responsive: 768px phone/small tablet, 1100px drawer layout */
 :root {
+  --bo-bp-phone: 768px;
+  --bo-bp-drawer: 1100px;
   --bg: #eef6f4;
   --ink: #0b1c24;
   --muted: #5a6f7a;
@@ -635,7 +638,7 @@ tr:last-child td {
 }
 
 /* Phone: every list table stacks as cards (labels injected in stackTables.ts) */
-@media (max-width: 700px) {
+@media (max-width: 768px) {
   .table-wrap.stack-cards {
     background: transparent;
     border: none;
@@ -785,9 +788,9 @@ tr:last-child td {
   }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 768px) {
   .reports-cards {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .reports-cards .stat {
@@ -1339,6 +1342,14 @@ tr:last-child td {
   .dash-grid {
     grid-template-columns: 1fr;
   }
+
+  .dash-today {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dash-today .stat-hero {
+    grid-column: 1 / -1;
+  }
 }
 
 .dash-panel-head {
@@ -1432,7 +1443,7 @@ tr:last-child td {
   min-width: 0;
 }
 
-@media (max-width: 700px) {
+@media (max-width: 768px) {
   .items-group-filter-mobile {
     display: block;
   }
@@ -1597,6 +1608,38 @@ tr:last-child td {
 
   textarea {
     max-width: 100%;
+  }
+
+  .page-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .page-head .toolbar {
+    width: 100%;
+    margin: 0;
+    flex-wrap: wrap;
+  }
+
+  .page-head .toolbar > * {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .field input,
+  .field select,
+  .field textarea {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .panel-box {
+    overflow-x: auto;
+  }
+
+  .dash-actions {
+    grid-template-columns: 1fr;
   }
 }
 

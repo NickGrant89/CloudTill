@@ -1277,7 +1277,7 @@ select:focus-visible {
 }
 
 /* iPad / tablet (incl. Pro landscape ~1180–1366): sale + ticket side-by-side */
-@media (max-width: 1366px) and (min-width: 700px) {
+@media (max-width: 1366px) and (min-width: 769px) {
   .search,
   .field input,
   .field select,
