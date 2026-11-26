@@ -748,7 +748,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
         );
         for (const key of Object.keys(next)) {
           if (isHalfAndHalfRemoveSelectionKey(key)) {
-            const groupId = key.replace(/:hh-remove-(left|right)$/, "");
+            const groupId = halfAndHalfRemoveSelectionGroupId(key);
             if (!visibleIds.has(groupId)) delete next[key];
             continue;
           }
