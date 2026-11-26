@@ -1202,6 +1202,74 @@ select:focus-visible {
   touch-action: manipulation;
 }
 
+/* Classic tabbed modifier picker (add + edit line) */
+.options-picker {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.options-picker-head {
+  flex-shrink: 0;
+}
+
+.options-picker-body {
+  flex: 1 1 0;
+  min-height: 140px;
+  min-width: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+}
+
+.options-picker-body .modifier-options-grid {
+  flex: 1 1 auto;
+  min-height: 120px;
+}
+
+.options-picker-footer {
+  flex-shrink: 0;
+  position: sticky;
+  bottom: 0;
+  z-index: 12;
+  background: #fffdf8;
+  border-top: 1px solid var(--line);
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+  box-shadow: 0 -8px 24px rgba(26, 36, 32, 0.12);
+  pointer-events: auto;
+}
+
+.modifier-bar--options {
+  border-top: none;
+  margin-top: 0;
+}
+
+.modifier-bar-summary {
+  min-width: 0;
+  flex: 1;
+}
+
+.options-preview-wrap {
+  max-height: 3.75rem;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.options-confirm-btn {
+  position: relative;
+  z-index: 2;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+.catalog-panel--options .options-picker {
+  isolation: isolate;
+}
+
 /* Options / wizard: sale column must not sit on top of the picker (phone + tablet) */
 @media (max-width: 1366px) {
   .app-shell.till-options .register {
@@ -1249,6 +1317,21 @@ select:focus-visible {
     width: 100%;
     margin-left: 0;
     min-height: 52px;
+  }
+
+  .catalog-panel--options .modifier-bar--options {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .catalog-panel--options .options-confirm-btn {
+    width: 100%;
+    margin-left: 0;
+    min-height: 52px;
+  }
+
+  .catalog-panel--options .options-picker-footer {
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
   }
 }
 

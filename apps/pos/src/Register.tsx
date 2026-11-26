@@ -1867,17 +1867,105 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                 />
               }
             />
+          ) : modifierItem ? (
+            <div className="options-picker">
+              <div className="options-picker-head">
+                <div className="topbar">
+                  <button type="button" className="chip" onClick={() => closeModifierPicker()}>
+                    ← {editingLineKey ? "Sale" : "Menu"}
+                  </button>
+                  <div className="brand-mini">{editingLineKey ? `Edit · ${modifierItem.name}` : modifierItem.name}</div>
+                </div>
+                <div className="chip-row" role="tablist" aria-label="Modifier options">
+                  {visibleModifierGroups.map((group) => (
+                    <button
+                      key={group.id}
+                      type="button"
+                      className={`chip ${activeModGroup?.id === group.id ? "active" : ""}`}
+                      onClick={() => setModifierGroupId(group.id)}
+                    >
+                      {isConsolidatedPizzaItem(modifierItem.name)
+                        ? tillPizzaModGroupLabel(group.name)
+                        : group.name.replace(/^(\d+)\s*(?:”|")\s*/gi, "").trim() || group.name}
+                      {group.minSelect > 0 ? " *" : ""}
+                      {(group.freeSelect ?? 0) > 0 ? ` · ${group.freeSelect} free` : ""}
+                    </button>
+                  ))}
+                </div>
+                {catalogError && <p className="banner">{catalogError}</p>}
+              </div>
+              <div className="options-picker-body">
+                {activeModGroup ? (
+                  <div className="grid modifier-options-grid">
+                    {activeModGroup.modifiers.map((option) => {
+                      const selected = (selectedMods[activeModGroup.id] ?? []).some((picked) => picked.id === option.id);
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          className={`item-tile ${selected ? "is-selected" : ""}`}
+                          style={{ backgroundColor: modifierItem.color }}
+                          onClick={() => chooseModifier(activeModGroup, option)}
+                        >
+                          <span className="name">{option.name}</span>
+                          <span className="price">
+                            {(() => {
+                              const sizeInches = isConsolidatedPizzaItem(modifierItem.name)
+                                ? pizzaSizeInchesFromSelection(modifierItem.modifierGroups, selectedMods)
+                                : null;
+                              const listPrice = modifierListPriceCents(
+                                option.priceCents,
+                                activeModGroup.name,
+                                modifierItem.name,
+                                sizeInches
+                              );
+                              if (!listPrice) return "Included";
+                              if (selected) {
+                                const charged = chargedByModifierId.get(option.id);
+                                if (charged === 0) return "Included";
+                                if (charged !== undefined) return `+${money(charged)}`;
+                              }
+                              return `+${money(listPrice)}`;
+                            })()}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="empty">Loading options…</p>
+                )}
+              </div>
+              <div className="options-picker-footer">
+                <div className="modifier-bar modifier-bar--options">
+                  <div className="modifier-bar-summary">
+                    <p className="step-kicker">{editingLineKey ? "Edit options" : "Step 2 · Options"}</p>
+                    <strong>{modifierItem.name}</strong>
+                    {modifierPreview.length > 0 ? (
+                      <div className="options-preview-wrap">
+                        <ModifierList
+                          mods={modifierPreview}
+                          groups={modifierItem.modifierGroups}
+                          itemName={modifierItem.name}
+                        />
+                      </div>
+                    ) : (
+                      <div className="meta">Choose options</div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="pay-btn options-confirm-btn"
+                    onClick={() => void confirmModifiers()}
+                  >
+                    {editingLineKey ? "Update" : "Add"} {money(modifierTotal)}
+                  </button>
+                </div>
+              </div>
+            </div>
           ) : (
           <>
           <div className="topbar">
-            {modifierItem ? (
-              <>
-                <button type="button" className="chip" onClick={() => closeModifierPicker()}>
-                  ← {editingLineKey ? "Sale" : "Menu"}
-                </button>
-                <div className="brand-mini">{editingLineKey ? `Edit · ${modifierItem.name}` : modifierItem.name}</div>
-              </>
-            ) : (
               <>
                 {!showGroupHome && (
                   <button type="button" className="chip chip-back" onClick={() => openGroupHome()}>
@@ -1903,29 +1991,12 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                   onKeyDown={(e) => void onSearchKey(e)}
                 />
               </>
-            )}
           </div>
           <div
             className={`chip-row${showGroupHome ? " chip-row--home" : ""}`}
             role="tablist"
-            aria-label={modifierItem ? "Modifier options" : "Item groups"}
+            aria-label="Item groups"
           >
-            {modifierItem ? (
-              visibleModifierGroups.map((group) => (
-                <button
-                  key={group.id}
-                  type="button"
-                  className={`chip ${activeModGroup?.id === group.id ? "active" : ""}`}
-                  onClick={() => setModifierGroupId(group.id)}
-                >
-                  {isConsolidatedPizzaItem(modifierItem.name)
-                    ? tillPizzaModGroupLabel(group.name)
-                    : group.name.replace(/^(\d+)\s*(?:”|")\s*/gi, "").trim() || group.name}
-                  {group.minSelect > 0 ? " *" : ""}
-                  {(group.freeSelect ?? 0) > 0 ? ` · ${group.freeSelect} free` : ""}
-                </button>
-              ))
-            ) : (
               <>
                 <button
                   type="button"
@@ -1958,48 +2029,9 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                   ))}
                 </div>
               </>
-            )}
           </div>
           {catalogError && <p className="banner">{catalogError}</p>}
-          {modifierItem && activeModGroup && !showHalfAndHalfWizard ? (
-          <div className="grid">
-              {activeModGroup.modifiers.map((option) => {
-                const selected = (selectedMods[activeModGroup.id] ?? []).some((picked) => picked.id === option.id);
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    className={`item-tile ${selected ? "is-selected" : ""}`}
-                    style={{ backgroundColor: modifierItem.color }}
-                    onClick={() => chooseModifier(activeModGroup, option)}
-                  >
-                    <span className="name">{option.name}</span>
-                    <span className="price">
-                      {(() => {
-                        const sizeInches =
-                          modifierItem && isConsolidatedPizzaItem(modifierItem.name)
-                            ? pizzaSizeInchesFromSelection(modifierItem.modifierGroups, selectedMods)
-                            : null;
-                        const listPrice = modifierListPriceCents(
-                          option.priceCents,
-                          activeModGroup.name,
-                          modifierItem.name,
-                          sizeInches
-                        );
-                        if (!listPrice) return "Included";
-                        if (selected) {
-                          const charged = chargedByModifierId.get(option.id);
-                          if (charged === 0) return "Included";
-                          if (charged !== undefined) return `+${money(charged)}`;
-                        }
-                        return `+${money(listPrice)}`;
-                      })()}
-                    </span>
-                  </button>
-                );
-              })}
-          </div>
-          ) : showGroupHome ? (
+          {showGroupHome ? (
             <div className="grid group-picker-grid">
               {!menuReady && <p className="empty">Loading menu…</p>}
               {menuReady &&
@@ -2051,26 +2083,6 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
               {!menuReady && <p className="empty">Loading menu…</p>}
               {menuReady && visibleItems.length === 0 && <p className="empty">Nothing in this group.</p>}
               {visibleItems.map((item) => renderItemTile(item))}
-            </div>
-          )}
-          {modifierItem && (
-            <div className="modifier-bar">
-              <div>
-                <p className="step-kicker">{editingLineKey ? "Edit options" : "Step 2 · Options"}</p>
-                <strong>{modifierItem.name}</strong>
-                {modifierPreview.length > 0 ? (
-                  <ModifierList
-                    mods={modifierPreview}
-                    groups={modifierItem?.modifierGroups}
-                    itemName={modifierItem?.name}
-                  />
-                ) : (
-                  <div className="meta">Choose options</div>
-                )}
-              </div>
-              <button type="button" className="pay-btn" onClick={() => void confirmModifiers()}>
-                {editingLineKey ? "Update" : "Add"} {money(modifierTotal)}
-              </button>
             </div>
           )}
           </>
