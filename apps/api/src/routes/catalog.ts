@@ -7,6 +7,7 @@ import { companyStoreIds, sameCompany } from "../company.js";
 import { storeAllowsFeature } from "./billing.js";
 import { ensurePizzaMenu } from "../pizzaMenu.js";
 import { cleanupPizzaModifierLibrary, consolidatePizzaTill, repairPizzaTillLayout } from "../pizzaTillConsolidate.js";
+import { tidyGaPizzaCatalog } from "../gaPizzaCatalogTidy.js";
 import {
   defaultModifierFolder,
   deleteModifierFolder,
@@ -769,6 +770,12 @@ catalogRouter.post("/pizza-consolidate", requireRole("owner", "manager"), async 
 
 catalogRouter.post("/pizza-till-repair", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
   const result = await repairPizzaTillLayout(req.user!.storeId);
+  res.json({ ok: true, ...result });
+});
+
+catalogRouter.post("/ga-pizza-catalog-tidy", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+  const body = z.object({ dryRun: z.boolean().optional() }).safeParse(req.body ?? {});
+  const result = await tidyGaPizzaCatalog(req.user!.storeId, body.success ? Boolean(body.data.dryRun) : false);
   res.json({ ok: true, ...result });
 });
 
