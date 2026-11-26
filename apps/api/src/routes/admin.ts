@@ -17,6 +17,7 @@ import {
 } from "./billing.js";
 
 import { companyStoreIds, DEMO_COMPANY } from "../company.js";
+import { tidyGaPizzaCatalog } from "../gaPizzaCatalogTidy.js";
 
 export const adminRouter = Router();
 
@@ -137,6 +138,15 @@ adminRouter.get("/overview", async (_req, res) => {
     recentEvents: events.slice(0, 40),
     plans: (["starter", "pro", "multi"] as PlanId[]).map((id) => getPlan(id)),
   });
+});
+
+adminRouter.post("/stores/:storeId/ga-pizza-catalog-tidy", async (req, res) => {
+  const body = z.object({ dryRun: z.boolean().optional() }).safeParse(req.body ?? {});
+  if (!body.success) return res.status(400).json({ error: body.error.flatten() });
+  const store = await prisma.store.findUnique({ where: { id: req.params.storeId } });
+  if (!store) return res.status(404).json({ error: "Store not found" });
+  const result = await tidyGaPizzaCatalog(store.id, Boolean(body.data.dryRun));
+  res.json({ ok: true, ...result });
 });
 
 adminRouter.get("/stores/:storeId", async (req, res) => {
