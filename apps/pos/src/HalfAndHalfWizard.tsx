@@ -2,9 +2,8 @@ import {
   HALF_AND_HALF_WIZARD_STEPS,
   halfAndHalfColumnGroupsForSide,
   halfAndHalfColumnTailGroupsForSide,
-  halfAndHalfExtrasRowLabel,
-  halfAndHalfWizardExtrasGroups,
   halfAndHalfRemoveGroupsForSide,
+  halfAndHalfWizardOptionsSectionTitle,
   halfAndHalfMergedColumnOptions,
   halfAndHalfMergedSauceOptions,
   halfAndHalfSauceGroups,
@@ -358,7 +357,7 @@ export function HalfAndHalfWizard(props: {
             halfAndHalfColumnTailGroupsForSide(stepGroups, "right").length === 0 ? (
               <p className="empty">Choose a size first — remove toppings and extras appear for 9″, 12″ or 16″.</p>
             ) : (
-              <div className="hh-halves-columns">
+              <div className="hh-halves-columns hh-halves-columns--options">
                 {(["left", "right"] as const).map((side) => {
                   const removeGroups = halfAndHalfRemoveGroupsForSide(stepGroups, side);
                   const columnTail = halfAndHalfColumnTailGroupsForSide(stepGroups, side);
@@ -366,13 +365,14 @@ export function HalfAndHalfWizard(props: {
                   return (
                     <section
                       key={side}
-                      className="hh-half-col"
-                      aria-label={side === "right" ? "RIGHT options" : "LEFT options"}
+                      className={`hh-half-col hh-half-col--${side}`}
+                      aria-label={`${side === "left" ? "Left" : "Right"} options`}
                     >
-                      <h3 className="hh-half-title">{side === "right" ? "RIGHT" : "LEFT"}</h3>
                       {removeGroups.length > 0 ? (
-                        <section className="hh-column-extras" aria-label="Remove toppings">
-                          <h3 className="hh-half-title hh-extras-title">Remove toppings</h3>
+                        <section className="hh-column-extras">
+                          <h3 className="hh-half-title hh-extras-title">
+                            {halfAndHalfWizardOptionsSectionTitle(side, "remove")}
+                          </h3>
                           <div className="grid modifier-options-grid hh-half-grid">
                             {removeGroups.flatMap((group) =>
                               group.modifiers.map((option) =>
@@ -382,16 +382,20 @@ export function HalfAndHalfWizard(props: {
                           </div>
                         </section>
                       ) : null}
-                      {columnTail.map((group) => (
-                        <section key={group.id} className="hh-column-extras">
-                          <h3 className="hh-half-title hh-extras-title">{halfAndHalfExtrasRowLabel(group.name)}</h3>
+                      {columnTail.length > 0 ? (
+                        <section className="hh-column-extras">
+                          <h3 className="hh-half-title hh-extras-title">
+                            {halfAndHalfWizardOptionsSectionTitle(side, "extras")}
+                          </h3>
                           <div className="grid modifier-options-grid hh-half-grid">
-                            {group.modifiers.map((option) =>
-                              renderOptionTiles(group, option, () => onChoose(group, option))
+                            {columnTail.flatMap((group) =>
+                              group.modifiers.map((option) =>
+                                renderOptionTiles(group, option, () => onChoose(group, option))
+                              )
                             )}
                           </div>
                         </section>
-                      ))}
+                      ) : null}
                     </section>
                   );
                 })}

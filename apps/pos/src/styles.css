@@ -1240,6 +1240,19 @@ select:focus-visible {
   align-content: start;
 }
 
+/* Options step: always left column on the left (same order as kitchen). */
+.hh-halves-columns--options {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.hh-halves-columns--options .hh-half-col--left {
+  grid-column: 1;
+}
+
+.hh-halves-columns--options .hh-half-col--right {
+  grid-column: 2;
+}
+
 .hh-column-extras {
   display: flex;
   flex-direction: column;

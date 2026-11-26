@@ -249,15 +249,25 @@ export function halfAndHalfColumnTailGroupsForSide<T extends { name: string }>(
   return halfAndHalfWizardExtrasGroups(groups).filter((g) => halfAndHalfColumnTailSide(g.name) === side);
 }
 
-/** Remove lists shown under each half (L/R in name, or shared catalog list on both sides). */
+/** Remove lists per column: shared Loyverse list on LEFT only; right-named lists on RIGHT (wizard — no duplicate grids). */
 export function halfAndHalfRemoveGroupsForSide<T extends { name: string }>(
   groups: T[],
   side: "right" | "left"
 ): T[] {
   return halfAndHalfWizardRemoveGroups(groups).filter((g) => {
     const tail = halfAndHalfColumnTailSide(g.name);
-    return tail === side || tail === "shared";
+    if (side === "left") return tail === "left" || tail === "shared";
+    return tail === "right";
   });
+}
+
+/** Till Options step section headings (one line per side). */
+export function halfAndHalfWizardOptionsSectionTitle(
+  side: "left" | "right",
+  section: "remove" | "extras"
+): string {
+  const half = side === "left" ? "Left" : "Right";
+  return section === "remove" ? `${half} remove` : `${half} extras`;
 }
 
 /** @deprecated full-width removes — use per-side columns */
