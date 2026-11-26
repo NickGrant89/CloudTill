@@ -2155,8 +2155,8 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                 ))}
               </div>
             </div>
-            {catalogError ? <p className="banner catalog-banner">{catalogError}</p> : null}
           </header>
+          {catalogError ? <p className="banner catalog-banner">{catalogError}</p> : null}
           {showGroupHome ? (
             <div className="grid group-picker-grid">
               {!menuReady && <p className="empty">Loading menu…</p>}

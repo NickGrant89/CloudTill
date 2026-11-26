@@ -299,7 +299,8 @@ select:focus-visible {
   min-height: 0;
 }
 
-/* Layout contract: catalog-head height is fixed across Quick keys / All groups / one group. */
+/* Layout contract (tablet+): catalog-head = group nav (search row) + filter chips (Quick keys, All groups, categories).
+   Phone-only: extra category chips hide via @media (max-width: 699px) — not on iPad (768–1366). */
 .catalog-panel {
   --catalog-topbar-h: 56px;
   --catalog-chips-h: 60px;
@@ -325,10 +326,15 @@ select:focus-visible {
   display: flex;
   flex-direction: column;
   min-height: calc(var(--catalog-topbar-h) + var(--catalog-chips-h));
-  max-height: calc(var(--catalog-topbar-h) + var(--catalog-chips-h));
   border-bottom: 1px solid var(--line);
   background: #f6f1e8;
   z-index: 2;
+  overflow: visible;
+}
+
+.catalog-head .catalog-filters {
+  flex-shrink: 0;
+  visibility: visible;
 }
 
 .catalog-banner {
@@ -676,7 +682,8 @@ select:focus-visible {
   font-size: 0.9rem;
 }
 
-.catalog-head .catalog-banner {
+.catalog-banner {
+  flex-shrink: 0;
   margin: 0;
   border-radius: 0;
   padding: 8px 14px;
@@ -1794,10 +1801,24 @@ select:focus-visible {
   .register.pane-ticket .catalog-panel {
     display: flex !important;
   }
+
+  /* Tablet: always show filter chip row (Quick keys, All groups, category chips). */
+  .catalog-head .catalog-filters,
+  .catalog-head .chip-row-extra {
+    display: flex !important;
+  }
+
+  .chip-row--home .chip-row-extra {
+    width: 0;
+    max-width: 0;
+    opacity: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
 }
 
-/* iPad / tablet (incl. Pro landscape ~1180–1366): sale + ticket side-by-side */
-@media (max-width: 1366px) and (min-width: 769px) {
+/* iPad / tablet (incl. portrait 768px, landscape ~1180–1366): sale + ticket side-by-side */
+@media (max-width: 1366px) and (min-width: 700px) {
   .search,
   .field input,
   .field select,
@@ -2362,8 +2383,9 @@ select:focus-visible {
     -webkit-overflow-scrolling: touch;
   }
 
-  .chip-row-extra {
-    display: none;
+  /* Phone: hide per-category chips; Quick keys + All groups stay on .chip-row (see CT-112). */
+  .catalog-filters .chip-row-extra {
+    display: none !important;
   }
 
   .chip {
