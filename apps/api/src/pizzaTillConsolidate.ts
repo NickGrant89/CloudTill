@@ -1,5 +1,6 @@
 import { prisma } from "./db.js";
 import { readModifierLayout, saveModifierLayout, syncModifierGroupSortOrders } from "./modifierFolders.js";
+import { isPizzaRemoveToppingGroup } from "@cloudtill/shared";
 import {
   comparePizzaModifierGroups,
   PIZZA_MODIFIER_MENU_ORDER,
@@ -220,7 +221,53 @@ async function buildConsolidatedItem(storeId: string, categoryId: string, spec: 
     }
   }
 
+  if (spec.name.includes("Half & half")) {
+    await attachRemoveToppingMenusFromSingle(storeId, item.id, sortOrder);
+  }
+
   return { name: spec.name, itemId: item.id, created: true };
+}
+
+function groupNameKey(name: string): string {
+  return pizzaModifierRole(name);
+}
+
+async function attachRemoveToppingMenusFromSingle(storeId: string, targetItemId: string, startSortOrder: number) {
+  const targetGroups = await prisma.modifierGroup.findMany({ where: { itemId: targetItemId } });
+  const haveRemoveKeys = new Set(
+    targetGroups.filter((g) => isPizzaRemoveToppingGroup(g.name)).map((g) => groupNameKey(g.name))
+  );
+
+  const sources: { id: string; name: string }[] = [];
+  const single = await loadItem(storeId, "Pizza — Single");
+  for (const g of single?.modifierGroups ?? []) {
+    if (isPizzaRemoveToppingGroup(g.name)) sources.push({ id: g.id, name: g.name });
+  }
+  for (const label of ['9" Single Pizza', '12" Single Pizza', '16" Single Pizza']) {
+    const row = await loadItem(storeId, label);
+    for (const g of row?.modifierGroups ?? []) {
+      if (isPizzaRemoveToppingGroup(g.name)) sources.push({ id: g.id, name: g.name });
+    }
+  }
+  for (const label of CONSOLIDATED.filter((c) => c.name.includes("Half")).flatMap((c) => c.sizes)) {
+    const row = await loadItem(storeId, label);
+    for (const g of row?.modifierGroups ?? []) {
+      if (isPizzaRemoveToppingGroup(g.name)) sources.push({ id: g.id, name: g.name });
+    }
+  }
+
+  const seen = new Set<string>();
+  let sortOrder = startSortOrder;
+  let attached = 0;
+  for (const src of sources) {
+    const key = groupNameKey(src.name);
+    if (seen.has(key)) continue;
+    if (haveRemoveKeys.has(key)) continue;
+    seen.add(key);
+    await copyModifierGroup(src.id, targetItemId, sortOrder++);
+    attached += 1;
+  }
+  return attached;
 }
 
 async function applyMenuFreeSelect(storeId: string, menuName: string, freeSelect: number) {
@@ -303,7 +350,7 @@ export async function cleanupPizzaModifierLibrary(storeId: string) {
 
 export async function repairPizzaTillLayout(storeId: string) {
   const itemNames = Object.keys(TILL_LAYOUT);
-  const changed: { item: string; removed: string[]; order: string[] }[] = [];
+  const changed: { item: string; removed: string[]; attachedRemoves?: number; order: string[] }[] = [];
 
   for (const itemName of itemNames) {
     const rule = TILL_LAYOUT[itemName]!;
@@ -368,7 +415,36 @@ export async function repairPizzaTillLayout(storeId: string) {
       await prisma.modifierGroup.update({ where: { id: group.id }, data: { sortOrder: index } });
     }
 
-    changed.push({ item: itemName, removed, order: sorted.map((g) => g.name) });
+    const attachedRemoves =
+      itemName === "Pizza — Half & half" || itemName === "Pizza — Half & half (CYO)"
+        ? await attachRemoveToppingMenusFromSingle(storeId, item.id, sorted.length)
+        : 0;
+
+    const afterAttach =
+      attachedRemoves > 0
+        ? await prisma.modifierGroup.findMany({
+            where: { itemId: item.id },
+            orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+          })
+        : sorted;
+    const finalOrder =
+      attachedRemoves > 0
+        ? [...afterAttach].sort((a, b) => comparePizzaModifierGroups(itemName, a.name, b.name))
+        : sorted;
+    if (attachedRemoves > 0) {
+      for (let index = 0; index < finalOrder.length; index += 1) {
+        const group = finalOrder[index]!;
+        if (group.sortOrder === index) continue;
+        await prisma.modifierGroup.update({ where: { id: group.id }, data: { sortOrder: index } });
+      }
+    }
+
+  changed.push({
+      item: itemName,
+      removed,
+      attachedRemoves,
+      order: finalOrder.map((g) => g.name),
+    });
   }
 
   const layout = await readModifierLayout(storeId);

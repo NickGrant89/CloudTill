@@ -15,8 +15,21 @@ export const PIZZA_CONSOLIDATED_ITEM_NAMES = [
 
 export const TILL_LAYOUT: Record<string, TillLayoutRule> = {
   "Pizza — Half & half (CYO)": {
-    order: ["Size", "Pizza Base", "Pizza Sauce", "Pizza Sauce 2", "Right CYO Half & Half", "Left CYO Half & Half"],
-    drop: (name) => /extras/i.test(name) || /extra toppings/i.test(name) || /remove/i.test(name),
+    order: [
+      "Size",
+      "Pizza Base",
+      "Pizza Sauce",
+      "Pizza Sauce 2",
+      "Right CYO Half & Half",
+      "Left CYO Half & Half",
+      "Remove Toppings",
+    ],
+    drop: (name) => {
+      const n = name.toLowerCase();
+      if (/extra toppings/i.test(n) && !/half/.test(n)) return true;
+      if (/extras/i.test(n) && !/half\s*&\s*half/i.test(n)) return true;
+      return false;
+    },
     freeSelect: { "Right CYO Half & Half": 4, "Left CYO Half & Half": 4 },
   },
   "Pizza — Create your own": {
@@ -29,10 +42,19 @@ export const TILL_LAYOUT: Record<string, TillLayoutRule> = {
     drop: (name) => /extra toppings/i.test(name),
   },
   "Pizza — Half & half": {
-    order: ["Size", "Pizza Base", "Pizza Sauce", "Right Half & Half Pizza", "Pizza Sauce 2", "Left Half & Half"],
+    order: [
+      "Size",
+      "Pizza Base",
+      "Pizza Sauce",
+      "Right Half & Half Pizza",
+      "Pizza Sauce 2",
+      "Left Half & Half",
+      "Remove Toppings",
+    ],
     drop: (name) => {
       const n = name.toLowerCase();
       if (n.includes("extra toppings") && !n.includes("half")) return true;
+      if (/extras/i.test(n) && !/half\s*&\s*half/i.test(n)) return true;
       return false;
     },
   },

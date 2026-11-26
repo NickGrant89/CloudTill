@@ -56,8 +56,19 @@ export function isHalfAndHalfExtrasGroup(groupName: string): boolean {
   return false;
 }
 
+/** Loyverse remove lists: `Remove Toppings`, `12" Remove Toppings`, half-specific names — not extras. */
+export function isPizzaRemoveToppingGroup(groupName: string): boolean {
+  if (isHalfAndHalfExtrasGroup(groupName)) return false;
+  const role = normRole(groupName);
+  const lower = groupName.trim().toLowerCase();
+  if (/remove\s+topping/.test(role)) return true;
+  if (/\bremove\b/.test(lower) && !/half\s*&\s*half\s*extras/i.test(lower)) return true;
+  if (/^no\s+/.test(role)) return true;
+  return false;
+}
+
 export function isHalfAndHalfRemoveGroup(groupName: string): boolean {
-  return /remove/i.test(normRole(groupName)) && /half/i.test(groupName.toLowerCase());
+  return isPizzaRemoveToppingGroup(groupName);
 }
 
 export function isHalfAndHalfHalvesColumnGroup(groupName: string): boolean {
