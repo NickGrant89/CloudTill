@@ -2,7 +2,15 @@ import {
   displayModifierGroupLabel,
   groupModifierLines,
   isConsolidatedPizzaItem,
+  halfAndHalfColumnTailSide,
+  halfAndHalfRemoveCatalogGroupName,
+  halfAndHalfRemoveSelectionGroupId,
+  halfAndHalfRemoveSelectionKey,
+  halfAndHalfRemoveTicketSideFromGroupName,
+  halfAndHalfSelectedModifierPicks,
   halfAndHalfSauceGroups,
+  isHalfAndHalfRemoveGroup,
+  isHalfAndHalfRemoveSelectionKey,
   isHalfAndHalfWizardItem,
   mirrorSauceModifier,
   modifierListPriceCents,
@@ -71,14 +79,16 @@ interface ModGroup {
 }
 
 function priceSelectedModifiers(item: Item, selectedMods: Record<string, Modifier[]>) {
-  const picks = item.modifierGroups.flatMap((group) =>
-    (selectedMods[group.id] ?? []).map((option) => ({
-      modifierId: option.id,
-      name: option.name,
-      groupId: group.id,
-      groupName: group.name,
-    }))
-  );
+  const picks = isHalfAndHalfWizardItem(item.name)
+    ? halfAndHalfSelectedModifierPicks(item.name, item.modifierGroups, selectedMods)
+    : item.modifierGroups.flatMap((group) =>
+        (selectedMods[group.id] ?? []).map((option) => ({
+          modifierId: option.id,
+          name: option.name,
+          groupId: group.id,
+          groupName: group.name,
+        }))
+      );
   return priceModifierPicks(item.name, item.modifierGroups, picks);
 }
 
@@ -692,9 +702,34 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
     );
     const cleaned = { ...next };
     for (const key of Object.keys(cleaned)) {
+      if (isHalfAndHalfRemoveSelectionKey(key)) {
+        const groupId = halfAndHalfRemoveSelectionGroupId(key);
+        if (!visibleIds.has(groupId)) delete cleaned[key];
+        continue;
+      }
       if (!visibleIds.has(key)) delete cleaned[key];
     }
     setSelectedMods(cleaned);
+  }
+
+  function chooseHalfAndHalfRemove(group: ModGroup, modifier: Modifier, side: "left" | "right") {
+    const key = halfAndHalfRemoveSelectionKey(group.id, side);
+    setSelectedMods((prev) => {
+      const current = prev[key] ?? [];
+      let nextSelection: Modifier[];
+      if (group.maxSelect <= 1) {
+        nextSelection = current.some((option) => option.id === modifier.id) ? [] : [modifier];
+      } else if (current.some((option) => option.id === modifier.id)) {
+        nextSelection = current.filter((option) => option.id !== modifier.id);
+      } else if (current.length >= group.maxSelect) {
+        return prev;
+      } else {
+        nextSelection = [...current, modifier];
+      }
+      const next = { ...prev, [key]: nextSelection };
+      delete next[group.id];
+      return next;
+    });
   }
 
   function chooseModifier(group: ModGroup, modifier: Modifier) {
@@ -712,6 +747,11 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
           visiblePizzaModifierGroups(modifierItem.name, modifierItem.modifierGroups, next).map((g) => g.id)
         );
         for (const key of Object.keys(next)) {
+          if (isHalfAndHalfRemoveSelectionKey(key)) {
+            const groupId = key.replace(/:hh-remove-(left|right)$/, "");
+            if (!visibleIds.has(groupId)) delete next[key];
+            continue;
+          }
           if (!visibleIds.has(key)) delete next[key];
         }
       }
@@ -815,6 +855,10 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
     }
     const initial: Record<string, Modifier[]> = {};
     for (const group of item.modifierGroups) {
+      if (isHalfAndHalfWizardItem(item.name) && isHalfAndHalfRemoveGroup(group.name)) {
+        initial[group.id] = [];
+        continue;
+      }
       initial[group.id] = group.modifiers.filter((option) =>
         line.modifiers.some(
           (picked) =>
@@ -822,6 +866,28 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
             (!picked.modifierId && picked.name === option.name)
         )
       );
+    }
+    if (isHalfAndHalfWizardItem(item.name)) {
+      for (const picked of line.modifiers) {
+        const gn = picked.groupName;
+        if (!gn || !isHalfAndHalfRemoveGroup(gn)) continue;
+        const catalog = halfAndHalfRemoveCatalogGroupName(gn);
+        const group = item.modifierGroups.find((g) => halfAndHalfRemoveCatalogGroupName(g.name) === catalog);
+        if (!group) continue;
+        const option = group.modifiers.find(
+          (m) => (picked.modifierId && m.id === picked.modifierId) || m.name === picked.name
+        );
+        if (!option) continue;
+        let side = halfAndHalfRemoveTicketSideFromGroupName(gn);
+        if (!side) {
+          const tail = halfAndHalfColumnTailSide(catalog);
+          side = tail === "right" ? "right" : "left";
+        }
+        const key = halfAndHalfRemoveSelectionKey(group.id, side);
+        const list = initial[key] ?? [];
+        if (!list.some((m) => m.id === option.id)) list.push(option);
+        initial[key] = list;
+      }
     }
     setEditingLineKey(line.key);
     setSelectedMods(initial);
@@ -905,7 +971,13 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
         : selectedMods;
     if (pickedByGroup !== selectedMods) setSelectedMods(pickedByGroup);
     for (const group of groups) {
-      const picked = pickedByGroup[group.id] ?? [];
+      const picked =
+        isHalfAndHalfWizardItem(modifierItem.name) && isHalfAndHalfRemoveGroup(group.name)
+          ? [
+              ...(pickedByGroup[halfAndHalfRemoveSelectionKey(group.id, "left")] ?? []),
+              ...(pickedByGroup[halfAndHalfRemoveSelectionKey(group.id, "right")] ?? []),
+            ]
+          : (pickedByGroup[group.id] ?? []);
       if (picked.length < group.minSelect) {
         setModifierGroupId(group.id);
         fail(
@@ -1775,9 +1847,18 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
   const modifierTotal = (modifierItem?.variants[0]?.priceCents ?? 0) + modifierExtra;
   const modifierPreview = modifierItem
     ? sortModsByItemGroups(
-        visibleModifierGroups.flatMap((group) =>
-          (selectedMods[group.id] ?? []).map((option) => ({ name: option.name, groupName: group.name }))
-        ),
+        isHalfAndHalfWizardItem(modifierItem.name)
+          ? halfAndHalfSelectedModifierPicks(
+              modifierItem.name,
+              visibleModifierGroups,
+              selectedMods
+            ).map((row) => ({ name: row.name, groupName: row.groupName }))
+          : visibleModifierGroups.flatMap((group) =>
+              (selectedMods[group.id] ?? []).map((option) => ({
+                name: option.name,
+                groupName: group.name,
+              }))
+            ),
         modifierItem.modifierGroups,
         modifierItem.name
       )
@@ -1982,6 +2063,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
               editingLineKey={editingLineKey}
               chargedByModifierId={chargedByModifierId}
               onChoose={chooseModifier}
+              onChooseRemove={chooseHalfAndHalfRemove}
               onSetMods={applySelectedMods}
               onClose={leavePizzaOptionsToGroups}
               onConfirm={() => void confirmModifiers()}

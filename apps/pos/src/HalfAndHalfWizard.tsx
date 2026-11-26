@@ -3,6 +3,7 @@ import {
   halfAndHalfColumnGroupsForSide,
   halfAndHalfColumnTailGroupsForSide,
   halfAndHalfRemoveGroupsForSide,
+  halfAndHalfRemoveSelectionKey,
   halfAndHalfWizardOptionsSectionTitle,
   halfAndHalfMergedColumnOptions,
   halfAndHalfMergedSauceOptions,
@@ -89,6 +90,7 @@ export function HalfAndHalfWizard(props: {
   editingLineKey: string | null;
   chargedByModifierId: Map<string, number>;
   onChoose: (group: ModGroup, modifier: Modifier) => void;
+  onChooseRemove: (group: ModGroup, modifier: Modifier, side: "left" | "right") => void;
   onSetMods: (next: Record<string, Modifier[]>) => void;
   onClose: () => void;
   onConfirm: () => void;
@@ -104,6 +106,7 @@ export function HalfAndHalfWizard(props: {
     editingLineKey,
     chargedByModifierId,
     onChoose,
+    onChooseRemove,
     onSetMods,
     onClose,
     onConfirm,
@@ -246,9 +249,11 @@ export function HalfAndHalfWizard(props: {
   function renderOptionTiles(
     group: ModGroup,
     option: Modifier,
-    onPick: () => void
+    onPick: () => void,
+    selectedOverride?: boolean
   ) {
-    const selected = (selectedMods[group.id] ?? []).some((p) => p.id === option.id);
+    const selected =
+      selectedOverride ?? (selectedMods[group.id] ?? []).some((p) => p.id === option.id);
     const listPrice = modifierListPriceCents(option.priceCents, group.name, item.name, sizeInches);
     return (
       <ModifierOptionButton
@@ -380,9 +385,16 @@ export function HalfAndHalfWizard(props: {
                           </h3>
                           <div className="grid modifier-options-grid hh-half-grid">
                             {removeGroups.flatMap((group) =>
-                              group.modifiers.map((option) =>
-                                renderOptionTiles(group, option, () => onChoose(group, option))
-                              )
+                              group.modifiers.map((option) => {
+                                const sideKey = halfAndHalfRemoveSelectionKey(group.id, side);
+                                const picked = (selectedMods[sideKey] ?? []).some((p) => p.id === option.id);
+                                return renderOptionTiles(
+                                  group,
+                                  option,
+                                  () => onChooseRemove(group, option, side),
+                                  picked
+                                );
+                              })
                             )}
                           </div>
                         </section>

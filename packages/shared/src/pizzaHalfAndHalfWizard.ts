@@ -66,8 +66,37 @@ export function isPizzaRemoveToppingGroup(groupName: string): boolean {
   return false;
 }
 
+export function halfAndHalfRemoveCatalogGroupName(groupName: string): string {
+  return groupName.replace(/\s*\((LEFT|RIGHT) half\)\s*$/i, "").trim();
+}
+
+/** Side encoded on ticket lines for shared remove menus. */
+export function halfAndHalfRemoveTicketSideFromGroupName(groupName: string): "left" | "right" | null {
+  if (/\(LEFT half\)\s*$/i.test(groupName.trim())) return "left";
+  if (/\(RIGHT half\)\s*$/i.test(groupName.trim())) return "right";
+  return null;
+}
+
+export function halfAndHalfRemoveTicketGroupName(catalogGroupName: string, side: "left" | "right"): string {
+  const tail = halfAndHalfColumnTailSide(catalogGroupName);
+  if (tail === "left" || tail === "right") return catalogGroupName;
+  return `${catalogGroupName} (${side === "left" ? "LEFT" : "RIGHT"} half)`;
+}
+
+export function halfAndHalfRemoveSelectionKey(groupId: string, side: "left" | "right"): string {
+  return `${groupId}:hh-remove-${side}`;
+}
+
+export function isHalfAndHalfRemoveSelectionKey(key: string): boolean {
+  return /:hh-remove-(left|right)$/.test(key);
+}
+
+export function halfAndHalfRemoveSelectionGroupId(key: string): string {
+  return key.replace(/:hh-remove-(left|right)$/, "");
+}
+
 export function isHalfAndHalfRemoveGroup(groupName: string): boolean {
-  return isPizzaRemoveToppingGroup(groupName);
+  return isPizzaRemoveToppingGroup(halfAndHalfRemoveCatalogGroupName(groupName));
 }
 
 export function isHalfAndHalfHalvesColumnGroup(groupName: string): boolean {
@@ -271,6 +300,40 @@ export function halfAndHalfWizardOptionsSectionTitle(
   return section === "remove" ? `${half} remove` : `${half} extras`;
 }
 
+/** Flatten till picker state into priced ticket rows (separate remove picks per half). */
+export function halfAndHalfSelectedModifierPicks(
+  itemName: string,
+  groups: { id: string; name: string }[],
+  selected: Record<string, { id: string; name: string }[] | undefined>
+): { modifierId: string; name: string; groupId: string; groupName: string }[] {
+  const rows: { modifierId: string; name: string; groupId: string; groupName: string }[] = [];
+  for (const group of groups) {
+    if (isHalfAndHalfWizardItem(itemName) && isHalfAndHalfRemoveGroup(group.name)) {
+      for (const side of ["left", "right"] as const) {
+        const key = halfAndHalfRemoveSelectionKey(group.id, side);
+        for (const option of selected[key] ?? []) {
+          rows.push({
+            modifierId: option.id,
+            name: option.name,
+            groupId: group.id,
+            groupName: halfAndHalfRemoveTicketGroupName(group.name, side),
+          });
+        }
+      }
+      continue;
+    }
+    for (const option of selected[group.id] ?? []) {
+      rows.push({
+        modifierId: option.id,
+        name: option.name,
+        groupId: group.id,
+        groupName: group.name,
+      });
+    }
+  }
+  return rows;
+}
+
 /** @deprecated full-width removes — use per-side columns */
 export function halfAndHalfSharedTailGroups<T extends { name: string }>(groups: T[]): T[] {
   return halfAndHalfWizardRemoveGroups(groups);
@@ -304,7 +367,10 @@ export function halfAndHalfModifierDisplayRank(groupName: string): number {
   if (role === "pizza sauce") return 20;
   if (isHalfAndHalfLeftGroup(groupName) && !isHalfAndHalfExtrasGroup(groupName)) return 30;
   if (isHalfAndHalfRemoveGroup(groupName)) {
-    const side = halfAndHalfColumnTailSide(groupName);
+    const ticketSide = halfAndHalfRemoveTicketSideFromGroupName(groupName);
+    if (ticketSide === "right") return 65;
+    if (ticketSide === "left") return 35;
+    const side = halfAndHalfColumnTailSide(halfAndHalfRemoveCatalogGroupName(groupName));
     return side === "right" ? 65 : 35;
   }
   if (isHalfAndHalfExtrasGroup(groupName) && halfAndHalfColumnTailSide(groupName) === "left") return 40;
@@ -361,11 +427,11 @@ export function prepareHalfAndHalfLineModifiers<T extends { name?: string; group
 function duplicateSharedRemoveToppingsForRightHalf<T extends { name?: string; groupName?: string }>(
   ordered: T[]
 ): T[] {
-  const shared = ordered.filter(
-    (m) =>
-      isHalfAndHalfRemoveGroup(m.groupName ?? "") &&
-      halfAndHalfColumnTailSide(m.groupName ?? "") === "shared"
-  );
+  const shared = ordered.filter((m) => {
+    const gn = m.groupName ?? "";
+    if (halfAndHalfRemoveTicketSideFromGroupName(gn)) return false;
+    return isHalfAndHalfRemoveGroup(gn) && halfAndHalfColumnTailSide(halfAndHalfRemoveCatalogGroupName(gn)) === "shared";
+  });
   if (!shared.length) return ordered;
   const out: T[] = [];
   let duplicated = false;
