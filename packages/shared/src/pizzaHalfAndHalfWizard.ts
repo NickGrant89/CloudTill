@@ -17,15 +17,14 @@ export function isHalfAndHalfWizardItem(itemName: string): boolean {
   return halfAndHalfKind(itemName) !== null;
 }
 
-export type HalfAndHalfWizardStepId = "size" | "base" | "sauce" | "halves" | "removes" | "extras";
+export type HalfAndHalfWizardStepId = "size" | "base" | "sauce" | "halves" | "options";
 
 export const HALF_AND_HALF_WIZARD_STEPS: { id: HalfAndHalfWizardStepId; title: string; subtitle: string }[] = [
   { id: "size", title: "Size", subtitle: "9″, 12″ or 16″" },
   { id: "base", title: "Base", subtitle: "Pizza base" },
   { id: "sauce", title: "Sauce", subtitle: "Both halves or each side" },
   { id: "halves", title: "Halves", subtitle: "Right and left" },
-  { id: "removes", title: "No", subtitle: "Remove toppings" },
-  { id: "extras", title: "Extras", subtitle: "Paid add-ons per half" },
+  { id: "options", title: "Options", subtitle: "Remove toppings and extras" },
 ];
 
 function normRole(name: string): string {
@@ -40,8 +39,8 @@ export function halfAndHalfWizardStepForGroup(groupName: string): HalfAndHalfWiz
   if (role === "size") return "size";
   if (role === "pizza base") return "base";
   if (role === "pizza sauce" || role === "pizza sauce 2") return "sauce";
-  if (isHalfAndHalfRemoveGroup(groupName)) return "removes";
-  if (isHalfAndHalfExtrasGroup(groupName)) return "extras";
+  if (isHalfAndHalfRemoveGroup(groupName)) return "options";
+  if (isHalfAndHalfExtrasGroup(groupName)) return "options";
   if (/right/i.test(groupName) && /half/i.test(groupName)) return "halves";
   if (/left/i.test(groupName) && /half/i.test(groupName)) return "halves";
   return null;
@@ -220,11 +219,11 @@ export function halfAndHalfExtrasGroups<T extends { name: string }>(groups: T[])
 }
 
 export function halfAndHalfWizardExtrasGroups<T extends { name: string }>(groups: T[]): T[] {
-  return groups.filter((g) => halfAndHalfWizardStepForGroup(g.name) === "extras");
+  return groups.filter((g) => isHalfAndHalfExtrasGroup(g.name));
 }
 
 export function halfAndHalfWizardRemoveGroups<T extends { name: string }>(groups: T[]): T[] {
-  return groups.filter((g) => halfAndHalfWizardStepForGroup(g.name) === "removes");
+  return groups.filter((g) => isHalfAndHalfRemoveGroup(g.name));
 }
 
 export type HalfAndHalfColumnTailSide = "right" | "left" | "shared";
@@ -250,7 +249,7 @@ export function halfAndHalfColumnTailGroupsForSide<T extends { name: string }>(
   return halfAndHalfWizardExtrasGroups(groups).filter((g) => halfAndHalfColumnTailSide(g.name) === side);
 }
 
-/** Full-width remove menus (wizard Removes step). */
+/** Full-width remove menus (wizard Options step, above extras). */
 export function halfAndHalfSharedTailGroups<T extends { name: string }>(groups: T[]): T[] {
   return halfAndHalfWizardRemoveGroups(groups);
 }

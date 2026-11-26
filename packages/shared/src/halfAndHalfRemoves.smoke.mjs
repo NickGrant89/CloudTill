@@ -16,8 +16,8 @@ for (const name of removeNames) {
     console.error("FAIL: expected remove group", name);
     process.exit(1);
   }
-  if (halfAndHalfWizardStepForGroup(name) !== "removes") {
-    console.error("FAIL: wizard step should be removes for", name);
+  if (halfAndHalfWizardStepForGroup(name) !== "options") {
+    console.error("FAIL: wizard step should be options for", name);
     process.exit(1);
   }
 }
