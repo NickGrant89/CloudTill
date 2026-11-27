@@ -19,7 +19,7 @@ import {
   withLinkedHalfAndHalfSauces,
   type HalfAndHalfWizardStepId,
 } from "@cloudtill/shared";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { money } from "./api";
 import { ModifierOptionButton } from "./ModifierOptionButton";
 
@@ -125,8 +125,15 @@ export function HalfAndHalfWizard(props: {
   const [stepIndex, setStepIndex] = useState(() =>
     firstIncompleteStep(stepIds, visibleGroups, selectedMods, true)
   );
+  /** User tapped ← Groups or a step tab — do not auto-advance until they pick another step. */
+  const manualStepUntilPickRef = useRef<number | null>(null);
   const [sauceLinked, setSauceLinked] = useState(true);
   const [sauceEditSide, setSauceEditSide] = useState<"left" | "right" | null>(null);
+
+  function goToStep(index: number) {
+    manualStepUntilPickRef.current = index;
+    setStepIndex(index);
+  }
 
   useEffect(() => {
     onSauceLinkedChange?.(sauceLinked);
@@ -146,10 +153,17 @@ export function HalfAndHalfWizard(props: {
     if (stepIndex >= activeSteps.length) setStepIndex(Math.max(0, activeSteps.length - 1));
   }, [activeSteps.length, stepIndex]);
 
-  /* Advance when picks change only — do not depend on stepIndex or taps to earlier steps snap forward. */
+  /* Advance forward only when picks change — never override a tab/back navigation. */
   useEffect(() => {
-    const need = firstIncompleteStep(stepIds, visibleGroups, selectedMods, sauceLinked);
-    setStepIndex((i) => (need > i ? need : i));
+    const pinned = manualStepUntilPickRef.current;
+    setStepIndex((i) => {
+      if (pinned !== null) {
+        if (i === pinned) return i;
+        manualStepUntilPickRef.current = null;
+      }
+      const need = firstIncompleteStep(stepIds, visibleGroups, selectedMods, sauceLinked);
+      return need > i ? need : i;
+    });
   }, [visibleGroups, selectedMods, stepIds, sauceLinked]);
 
   const currentStep = activeSteps[stepIndex];
@@ -163,15 +177,6 @@ export function HalfAndHalfWizard(props: {
     return visibleGroups.filter((g) => halfAndHalfWizardStepForGroup(g.name) === currentStep.id);
   }, [visibleGroups, currentStep]);
 
-
-  function stepComplete(stepId: HalfAndHalfWizardStepId): boolean {
-    return halfAndHalfStepSatisfied({
-      stepId,
-      visibleGroups,
-      selected: selectedMods,
-      sauceLinked,
-    });
-  }
 
   const mergedSauceOptions = useMemo(
     () => halfAndHalfMergedSauceOptions<ModGroup, Modifier>(sauceVisibleGroups),
@@ -187,13 +192,6 @@ export function HalfAndHalfWizard(props: {
     if (!rightOk) return "right";
     return "left";
   }, [sauceLinked, sauceLeft, sauceRight, selectedMods, sauceEditSide]);
-
-  useEffect(() => {
-    if (!currentStep || currentStep.id === "halves" || currentStep.id === "options") return;
-    if (!stepComplete(currentStep.id) || stepIndex >= activeSteps.length - 1) return;
-    const timer = window.setTimeout(() => setStepIndex((i) => Math.min(activeSteps.length - 1, i + 1)), 150);
-    return () => window.clearTimeout(timer);
-  }, [selectedMods, currentStep, stepIndex, activeSteps.length, sauceLinked, visibleGroups]);
 
   const sizeInches = isConsolidatedPizzaItem(item.name)
     ? pizzaSizeInchesFromSelection(item.modifierGroups, selectedMods)
@@ -286,8 +284,8 @@ export function HalfAndHalfWizard(props: {
             type="button"
             className="chip chip-back till-options-back"
             onClick={(e) => {
-              e.preventDefault();
               e.stopPropagation();
+              manualStepUntilPickRef.current = null;
               onClose();
             }}
           >
@@ -304,9 +302,8 @@ export function HalfAndHalfWizard(props: {
               aria-selected={index === stepIndex}
               className={`chip ${index === stepIndex ? "active" : ""}`}
               onClick={(e) => {
-                e.preventDefault();
                 e.stopPropagation();
-                setStepIndex(index);
+                goToStep(index);
               }}
             >
               {step.title}

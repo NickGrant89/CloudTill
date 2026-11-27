@@ -1169,7 +1169,6 @@ select:focus-visible {
   position: relative;
   top: auto;
   z-index: 50;
-  isolation: isolate;
 }
 
 .options-picker--hh .options-picker-head .topbar {
@@ -1450,7 +1449,6 @@ select:focus-visible {
 }
 
 .catalog-panel--options .options-picker {
-  isolation: isolate;
   flex: 1 1 0;
   min-height: 0;
   width: 100%;
