@@ -100,6 +100,33 @@ if (!removeHeading.includes("Remove") || !removeHeading.includes("LEFT half")) {
   console.error("FAIL: remove heading", removeHeading);
   process.exit(1);
 }
+const unsidedRemove = halfAndHalfTicketGroupHeading("Remove Toppings");
+if (unsidedRemove.includes("LEFT") || unsidedRemove.includes("RIGHT")) {
+  console.error("FAIL: unsided shared remove must not invent a half", unsidedRemove);
+  process.exit(1);
+}
+const mirroredSauce = halfAndHalfTicketGroupHeading('9" Pizza Sauce', { mirroredSauces: true });
+if (mirroredSauce !== "Sauce") {
+  console.error("FAIL: mirrored sauce heading must be Sauce, got", mirroredSauce);
+  process.exit(1);
+}
+const blankBlocks = groupHalfAndHalfModifierLines(
+  HALF_AND_HALF_PRESET_ITEM,
+  [
+    { name: '9"', groupName: "Size" },
+    { name: "\u200b", groupName: '9" Pizza Sauce' },
+    { name: "   ", groupName: "Left Half & Half" },
+  ],
+  { mirroredSauces: true }
+);
+if (blankBlocks.some((b) => /sauce|left half/i.test(b.heading) && !b.names.some((n) => n.trim()))) {
+  console.error("FAIL: blank sauce/half names must not create empty ticket headings", blankBlocks);
+  process.exit(1);
+}
+if (blankBlocks.length !== 1 || blankBlocks[0].heading !== "Size") {
+  console.error("FAIL: only Size should remain when sauce/half names are empty", blankBlocks);
+  process.exit(1);
+}
 
 const selected = { [`${leftRemoveKey}:hh-remove-left`]: [{ id: "r1", name: "No Jalapeno" }] };
 const picks = halfAndHalfSelectedModifierPicks(HALF_AND_HALF_PRESET_ITEM, [leftRemove], selected);

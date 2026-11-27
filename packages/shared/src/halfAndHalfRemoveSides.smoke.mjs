@@ -3,6 +3,7 @@ import {
   halfAndHalfSelectedModifierPicks,
   normalizeHalfAndHalfRemoveSelectionState,
   pickerStateFromLineModifiers,
+  preserveHalfAndHalfTicketGroupName,
   HALF_AND_HALF_PRESET_ITEM,
 } from "../dist/pizzaHalfAndHalfWizard.js";
 import { priceModifierPicks } from "../dist/modifierPricing.js";
@@ -70,6 +71,17 @@ const hydrated = pickerStateFromLineModifiers(
 );
 if ((hydrated[leftKey] ?? []).length !== 1) {
   console.error("FAIL: edit hydrate must restore left remove", hydrated);
+  process.exit(1);
+}
+
+const kept = preserveHalfAndHalfTicketGroupName("Remove Toppings (LEFT half)", "Remove Toppings");
+if (kept !== "Remove Toppings (LEFT half)") {
+  console.error("FAIL: persist must keep LEFT half tag over catalog name", kept);
+  process.exit(1);
+}
+const catalogFallback = preserveHalfAndHalfTicketGroupName(undefined, "Remove Toppings");
+if (catalogFallback !== "Remove Toppings") {
+  console.error("FAIL: catalog name used when no ticket side tag", catalogFallback);
   process.exit(1);
 }
 

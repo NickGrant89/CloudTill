@@ -88,6 +88,21 @@ export function halfAndHalfRemoveTicketGroupName(catalogGroupName: string, side:
   return `${stripped} (${side === "left" ? "LEFT" : "RIGHT"} half)`;
 }
 
+/** Keep till-encoded half side on remove/extras when persisting over catalog group names. */
+export function preserveHalfAndHalfTicketGroupName(
+  incoming: string | undefined,
+  catalogName: string | undefined
+): string {
+  const ticket = incoming?.trim() || "";
+  if (
+    ticket &&
+    (halfAndHalfRemoveTicketSideFromGroupName(ticket) || halfAndHalfExtrasTicketSideFromGroupName(ticket))
+  ) {
+    return ticket;
+  }
+  return catalogName?.trim() || ticket || "";
+}
+
 export const HALF_AND_HALF_EXTRAS_TICKET_LABEL = "Half & Half Extras";
 
 export function halfAndHalfExtrasTicketSideFromGroupName(groupName: string): "left" | "right" | null {
@@ -606,8 +621,12 @@ function halfAndHalfTicketBlockAndKind(groupName: string): {
 
   if (role === "pizza sauce") return { block: "left", kind: "sauce" };
   if (role === "pizza sauce 2") return { block: "right", kind: "sauce" };
-  if (isHalfAndHalfLeftGroup(gn)) return { block: "left", kind: "half" };
-  if (isHalfAndHalfRightGroup(gn)) return { block: "right", kind: "half" };
+  if (isHalfAndHalfLeftGroup(gn) && !isHalfAndHalfRemoveGroup(gn) && !isHalfAndHalfExtrasGroup(gn)) {
+    return { block: "left", kind: "half" };
+  }
+  if (isHalfAndHalfRightGroup(gn) && !isHalfAndHalfRemoveGroup(gn) && !isHalfAndHalfExtrasGroup(gn)) {
+    return { block: "right", kind: "half" };
+  }
   return { block: "shared", kind: "other" };
 }
 
@@ -671,6 +690,11 @@ export function prepareHalfAndHalfLineModifiers<T extends { name?: string; group
   return { mods: ordered, mirroredSauces };
 }
 
+/** Visible modifier option label — drops ZWSP / empty shells that would render blank ticket rows. */
+export function visibleModifierOptionName(name: string | undefined | null): string {
+  return (name ?? "").replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
+}
+
 /** Ticket / kitchen heading for one modifier group row on half-and-half. */
 export function halfAndHalfTicketGroupHeading(
   groupName: string,
@@ -681,8 +705,11 @@ export function halfAndHalfTicketGroupHeading(
   if (removeSide || isHalfAndHalfRemoveGroup(gn)) {
     const catalog = halfAndHalfRemoveCatalogGroupName(gn);
     const stripped = catalog.replace(/^(\d+)\s*(?:”|")\s*/i, "").trim();
+    const catalogSide = halfAndHalfColumnTailSide(catalog);
     const side =
-      removeSide ?? (halfAndHalfColumnTailSide(catalog) === "right" ? "right" : "left");
+      removeSide ?? (catalogSide === "right" || catalogSide === "left" ? catalogSide : null);
+    // Shared remove menus without a till side tag stay unsided — do not invent LEFT half.
+    if (!side) return stripped || "Remove Toppings";
     return `${stripped} (${side === "left" ? "LEFT" : "RIGHT"} half)`;
   }
   const extrasSide = halfAndHalfExtrasTicketSideFromGroupName(gn);
@@ -692,9 +719,10 @@ export function halfAndHalfTicketGroupHeading(
     if (side === "left" || side === "right") return halfAndHalfExtrasTicketGroupName(gn, side);
   }
   const role = normRole(gn);
-  if (opts?.mirroredSauces && role === "pizza sauce") return "Sauce (LEFT half)";
   if (role === "size") return "Size";
   if (role === "pizza base") return "Base";
+  // Same sauce on both halves (or right sauce dropped after mirror) → plain Sauce.
+  if (opts?.mirroredSauces && (role === "pizza sauce" || role === "pizza sauce 2")) return "Sauce";
   if (role === "pizza sauce") return "Sauce (LEFT half)";
   if (role === "pizza sauce 2") return "Sauce (RIGHT half)";
   if (isHalfAndHalfLeftGroup(gn) && !isHalfAndHalfExtrasGroup(gn)) return "Left half";
@@ -712,10 +740,11 @@ export function groupHalfAndHalfModifierLines(
   const { mods: ordered } = prepareHalfAndHalfLineModifiers(itemName, mods);
   const blocks: HalfAndHalfModifierBlock[] = [];
   for (const mod of ordered) {
-    const name = mod.name?.trim();
+    const name = visibleModifierOptionName(mod.name);
     if (!name) continue;
     const rawGroup = mod.groupName?.trim() || undefined;
     const heading = rawGroup ? halfAndHalfTicketGroupHeading(rawGroup, opts) : "";
+    if (!heading && !name) continue;
     const last = blocks[blocks.length - 1];
     if (last && last.heading === heading) last.names.push(name);
     else blocks.push({ groupName: rawGroup, heading, names: [name] });

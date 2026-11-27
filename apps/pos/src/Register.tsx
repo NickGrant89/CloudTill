@@ -176,45 +176,52 @@ function ModifierList({
   if (variant === "halves-footer") {
     return (
       <ul className="mod-list mod-list--halves-footer">
-        {displayBlocks.map((block, index) => {
-          const heading = block.heading;
-          const isHalfSide = heading === "Left half" || heading === "Right half";
-          if (isHalfSide) {
+        {displayBlocks
+          .filter((block) => block.names.some((name) => Boolean(name?.trim())))
+          .map((block, index) => {
+            const heading = block.heading;
+            const names = block.names.filter((name) => Boolean(name?.trim()));
+            const isHalfSide = heading === "Left half" || heading === "Right half";
+            if (isHalfSide) {
+              return (
+                <li key={`${block.groupName ?? "mods"}-${index}`} className="mod-half-summary">
+                  <span className="mod-side-tag">{heading}</span>
+                  <span className="mod-side-picks">{names.join(" · ")}</span>
+                </li>
+              );
+            }
             return (
-              <li key={`${block.groupName ?? "mods"}-${index}`} className="mod-half-summary">
-                <span className="mod-side-tag">{heading}</span>
-                <span className="mod-side-picks">{block.names.join(" · ")}</span>
+              <li key={`${block.groupName ?? "mods"}-${index}`}>
+                {heading && <div className="mod-group">{heading}</div>}
+                {names.map((name, nameIndex) => (
+                  <div key={`${name}-${nameIndex}`} className="mod-name">
+                    {name}
+                  </div>
+                ))}
               </li>
             );
-          }
-          return (
-            <li key={`${block.groupName ?? "mods"}-${index}`}>
-              {heading && <div className="mod-group">{heading}</div>}
-              {block.names.map((name, nameIndex) => (
-                <div key={`${name}-${nameIndex}`} className="mod-name">
-                  {name}
-                </div>
-              ))}
-            </li>
-          );
-        })}
+          })}
       </ul>
     );
   }
   return (
     <ul className="mod-list">
-      {displayBlocks.map((block, index) => (
-        <li key={`${block.groupName ?? "mods"}-${index}`}>
-          {block.heading && (
-            <div className="mod-group">{block.heading}</div>
-          )}
-          {block.names.map((name, nameIndex) => (
-            <div key={`${name}-${nameIndex}`} className="mod-name">
-              {name}
-            </div>
-          ))}
-        </li>
-      ))}
+      {displayBlocks
+        .filter((block) => block.names.some((name) => Boolean(name?.trim())))
+        .map((block, index) => (
+          <li key={`${block.groupName ?? "mods"}-${index}`}>
+            {block.heading && (
+              <div className="mod-group">{block.heading}</div>
+            )}
+            {block.names
+              .filter((name) => Boolean(name?.trim()))
+              .map((name, nameIndex) => (
+                <div key={`${name}-${nameIndex}`} className="mod-name">
+                  {name}
+                </div>
+              ))}
+          </li>
+        ))}
     </ul>
   );
 }

@@ -1,4 +1,4 @@
-import { priceModifierPicks, type ModifierGroupPricing } from "@cloudtill/shared";
+import { preserveHalfAndHalfTicketGroupName, priceModifierPicks, type ModifierGroupPricing } from "@cloudtill/shared";
 import { prisma } from "./db.js";
 
 export type IncomingModifier = {
@@ -38,10 +38,11 @@ export async function orderStoredModifiers(
     })
     .map(({ mod }) => {
       const row = byId.get(mod.modifierId || mod.id || "");
-      const groupName = row?.group.name || mod.groupName?.trim() || "";
+      const groupName = preserveHalfAndHalfTicketGroupName(mod.groupName, row?.group.name);
+      const rawName = (row?.name?.trim() ? row.name : mod.name) || mod.name;
       return {
         ...(row ? { modifierId: row.id } : mod.modifierId ? { modifierId: mod.modifierId } : {}),
-        name: row?.name ?? mod.name,
+        name: rawName,
         groupId: row?.group.id,
         groupName,
       };
