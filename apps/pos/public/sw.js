@@ -1,5 +1,5 @@
 /* PurePOS till service worker — app shell cache + background sync of offline sales */
-const SHELL_CACHE = "purepos-pos-shell-v2";
+const SHELL_CACHE = "purepos-pos-shell-v3";
 const DB_NAME = "purepos-pos";
 const DB_VERSION = 1;
 const SYNC_TAG = "purepos-sync-sales";

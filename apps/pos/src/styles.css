@@ -1080,19 +1080,15 @@ select:focus-visible {
 
 .toolbar-dark {
   display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
   flex: 0 0 auto;
-  max-height: none;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  gap: 8px;
-  align-items: center;
+  gap: 6px;
+  align-items: stretch;
   margin: 8px 8px 0;
   padding: 6px 8px;
   min-width: 0;
-  overflow-x: auto;
-  overflow-y: visible;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+  overflow: hidden;
   color: #d7e0da;
   font-size: 0.9rem;
   background: rgba(255, 248, 238, 0.07);
@@ -1100,7 +1096,22 @@ select:focus-visible {
   border-radius: 16px;
 }
 
-.toolbar-dark::-webkit-scrollbar {
+.toolbar-status {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.toolbar-status::-webkit-scrollbar,
+.toolbar-actions::-webkit-scrollbar {
   display: none;
 }
 
@@ -1579,21 +1590,25 @@ select:focus-visible {
 
 .toolbar-actions {
   display: flex;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: 6px;
   align-items: center;
-  margin-left: auto;
+  width: 100%;
   min-width: 0;
-  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
 
 .toolbar-actions .toolbar-desk,
 .toolbar-actions .toolbar-keep {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
+  white-space: nowrap;
 }
 
 .toolbar-phone-more {
@@ -1919,11 +1934,23 @@ select:focus-visible {
 
   .toolbar-dark {
     --till-chrome-toolbar-h: auto;
-    max-height: none;
-    height: auto;
-    flex-wrap: wrap;
-    align-content: flex-start;
-    overflow-y: visible;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  .toolbar-status {
+    flex: 0 1 auto;
+    width: auto;
+    max-width: min(48%, 420px);
+  }
+
+  .toolbar-actions {
+    flex: 1 1 auto;
+    width: auto;
+    margin-left: auto;
+    justify-content: flex-end;
   }
 
   .toolbar-identity {
@@ -1983,16 +2010,6 @@ select:focus-visible {
   .offline-export,
   .lock-btn {
     flex: 0 0 auto;
-  }
-
-  .toolbar-actions {
-    flex: 1 1 auto;
-    justify-content: flex-end;
-    flex-wrap: wrap;
-    margin-left: auto;
-    gap: 6px;
-    min-width: 0;
-    max-width: 100%;
   }
 
   .toolbar-actions button {
@@ -2295,17 +2312,20 @@ select:focus-visible {
   }
 
   .toolbar-dark {
-    display: flex;
-    flex: 0 0 auto;
-    max-height: none;
-    height: auto;
-    flex-wrap: wrap;
-    align-items: center;
-    align-content: flex-start;
+    flex-direction: column;
+    flex-wrap: nowrap;
     gap: 6px;
     margin: 6px 6px 0;
     padding: 6px 8px;
-    overflow: visible;
+    overflow: hidden;
+  }
+
+  .toolbar-status {
+    width: 100%;
+  }
+
+  .till-version-badge {
+    flex-shrink: 0;
   }
 
   .toolbar-identity {
@@ -2360,20 +2380,10 @@ select:focus-visible {
     font-size: 0.7rem;
   }
 
-  /* Phone: full desk actions beside Tickets — wrap to a second line instead of More. */
   .toolbar-actions {
-    flex: 1 1 100%;
-    order: 10;
+    flex-wrap: nowrap;
     width: 100%;
-    max-width: none;
-    min-width: 0;
     margin-left: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    overflow: visible;
-    mask-image: none;
-    -webkit-mask-image: none;
     padding-bottom: 2px;
   }
 
@@ -2714,22 +2724,26 @@ select:focus-visible {
   }
 
   .till-chrome .toolbar-dark {
-    flex: 0 0 auto;
-    max-height: none;
-    height: auto;
-    flex-wrap: wrap;
-    align-content: flex-start;
-    overflow-x: auto;
-    overflow-y: visible;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  .till-chrome .toolbar-status {
+    flex: 0 1 auto;
+    width: auto;
+    max-width: min(50%, 480px);
   }
 
   .till-chrome .toolbar-actions {
     display: flex !important;
     flex: 1 1 auto;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     min-width: 0;
-    max-width: 100%;
+    width: auto;
     margin-left: auto;
+    justify-content: flex-end;
     gap: 6px;
   }
 

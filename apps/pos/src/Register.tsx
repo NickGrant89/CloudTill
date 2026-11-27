@@ -1960,59 +1960,61 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
     >
       <header className="till-chrome">
       <div className="toolbar-dark">
-        <div className="toolbar-identity">
-          {currentRegister ? (
-            <span
-              className="register-badge register-title"
-              data-register-name={currentRegister.name}
-              title="Till name from Back office → Stores & tills"
-              style={{ background: registerTone(currentRegister.id, registers).bg, color: registerTone(currentRegister.id, registers).ink }}
-            >
-              {currentRegister.name}
-            </span>
-          ) : (
-            <strong className="store-name">{store.name}</strong>
-          )}
-          <span className="who">{currentRegister ? store.name : user.name}</span>
-          {currentRegister && <span className="who who-staff">{user.name}</span>}
-          <button type="button" className="lock-btn" onClick={onLogout}>
-            Lock
-          </button>
-        </div>
-        <button
-          type="button"
-          className={`offline-badge${!offline.online ? " is-offline" : ""}${offline.pendingSales ? " has-queue" : ""}`}
-          title={
-            offline.online
-              ? offline.pendingSales
-                ? `${offline.pendingSales} sale(s) waiting to sync — click to sync, or Export backup`
-                : "Online · items follow server · storage persistence requested"
-              : "Offline · sales queue locally; items from cache"
-          }
-          onClick={() => {
-            if (offline.online && offline.pendingSales) void syncQueuedSales();
-            else void refreshOfflineBadge();
-          }}
-        >
-          {!offline.online ? "Offline" : offline.syncing ? "Syncing…" : offline.pendingSales ? `Sync ${offline.pendingSales}` : "Online"}
-        </button>
-        <span className="till-version-badge" title="Till build / live API release">
-          v{tillVersionLabel}
-        </span>
-        {offline.pendingSales > 0 ? (
+        <div className="toolbar-status">
+          <div className="toolbar-identity">
+            {currentRegister ? (
+              <span
+                className="register-badge register-title"
+                data-register-name={currentRegister.name}
+                title="Till name from Back office → Stores & tills"
+                style={{ background: registerTone(currentRegister.id, registers).bg, color: registerTone(currentRegister.id, registers).ink }}
+              >
+                {currentRegister.name}
+              </span>
+            ) : (
+              <strong className="store-name">{store.name}</strong>
+            )}
+            <span className="who">{currentRegister ? store.name : user.name}</span>
+            {currentRegister && <span className="who who-staff">{user.name}</span>}
+            <button type="button" className="lock-btn" onClick={onLogout}>
+              Lock
+            </button>
+          </div>
           <button
             type="button"
-            className="offline-export"
-            title="Download unsynced sales JSON in case this device is wiped before sync"
+            className={`offline-badge${!offline.online ? " is-offline" : ""}${offline.pendingSales ? " has-queue" : ""}`}
+            title={
+              offline.online
+                ? offline.pendingSales
+                  ? `${offline.pendingSales} sale(s) waiting to sync — click to sync, or Export backup`
+                  : "Online · items follow server · storage persistence requested"
+                : "Offline · sales queue locally; items from cache"
+            }
             onClick={() => {
-              void exportPendingSalesBackup().then((result) => {
-                if (result) setCatalogError(`Saved backup of ${result.count} unsynced sale(s) — keep that file until Sync clears`);
-              });
+              if (offline.online && offline.pendingSales) void syncQueuedSales();
+              else void refreshOfflineBadge();
             }}
           >
-            Export
+            {!offline.online ? "Offline" : offline.syncing ? "Syncing…" : offline.pendingSales ? `Sync ${offline.pendingSales}` : "Online"}
           </button>
-        ) : null}
+          <span className="till-version-badge" title="Till build / live API release">
+            v{tillVersionLabel}
+          </span>
+          {offline.pendingSales > 0 ? (
+            <button
+              type="button"
+              className="offline-export"
+              title="Download unsynced sales JSON in case this device is wiped before sync"
+              onClick={() => {
+                void exportPendingSalesBackup().then((result) => {
+                  if (result) setCatalogError(`Saved backup of ${result.count} unsynced sale(s) — keep that file until Sync clears`);
+                });
+              }}
+            >
+              Export
+            </button>
+          ) : null}
+        </div>
         <div className="toolbar-actions">
         <button type="button" className="toolbar-keep toolbar-desk" onClick={() => void openOpenTicketsList()}>
           Tickets{openTickets.length ? ` · ${openTickets.length}` : ""}
