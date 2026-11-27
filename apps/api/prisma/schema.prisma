@@ -563,3 +563,30 @@ model TextPayLink {
   @@index([storeId, status])
   @@index([ticketId])
 }
+
+/// Platform sales person. Earns commission on businesses they brought in. Not a shop staff login.
+model SalesPerson {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  attributions SalesAttribution[]
+}
+
+/// One sales person per business. companyKey matches how the admin groups branches.
+model SalesAttribution {
+  id            String   @id @default(cuid())
+  salesPersonId String
+  companyKey    String   @unique
+  /// Head-office store id, so the commission screen can name the customer.
+  storeId       String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  salesPerson SalesPerson @relation(fields: [salesPersonId], references: [id], onDelete: Cascade)
+
+  @@index([salesPersonId])
+}
