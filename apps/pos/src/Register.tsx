@@ -683,19 +683,16 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
     const initial: Record<string, Modifier[]> = {};
     const groups = visiblePizzaModifierGroups(item.name, item.modifierGroups, initial);
     for (const group of groups) {
-      if (isHalfAndHalfWizardItem(item.name) && isHalfAndHalfRemoveGroup(group.name)) {
-        initial[halfAndHalfRemoveSelectionKey(group.id, "left")] = [];
-        initial[halfAndHalfRemoveSelectionKey(group.id, "right")] = [];
+      if (isHalfAndHalfWizardItem(item.name)) {
+        if (isHalfAndHalfRemoveGroup(group.name)) {
+          initial[halfAndHalfRemoveSelectionKey(group.id, "left")] = [];
+          initial[halfAndHalfRemoveSelectionKey(group.id, "right")] = [];
+        } else {
+          initial[group.id] = [];
+        }
         continue;
       }
       initial[group.id] = group.minSelect > 0 && group.modifiers[0] ? [group.modifiers[0]] : [];
-    }
-  if (isHalfAndHalfWizardItem(item.name)) {
-      const { left, right } = halfAndHalfSauceGroups(groups);
-      const picked = left ? initial[left.id]?.[0] : undefined;
-      if (left && right && picked) {
-        initial[right.id] = [mirrorSauceModifier(right, picked)];
-      }
     }
     setEditingLineKey(null);
   const normalized = normalizeHalfAndHalfRemoveSelectionState(item.name, item.modifierGroups, initial);
@@ -2053,12 +2050,14 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
         >
           {showHalfAndHalfWizard && modifierItem ? (
             <HalfAndHalfWizard
+              key={editingLineKey ?? `new-${modifierItem.id}`}
               item={modifierItem}
               visibleGroups={visibleModifierGroups}
               selectedMods={selectedMods}
               modifierPreview={modifierPreview}
               modifierTotal={modifierTotal}
               editingLineKey={editingLineKey}
+              initialSauceLinked={hhSauceLinked}
               chargedByModifierId={chargedByModifierId}
               onChoose={chooseModifier}
               onChooseRemove={chooseHalfAndHalfRemove}

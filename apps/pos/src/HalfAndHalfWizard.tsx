@@ -89,6 +89,7 @@ export function HalfAndHalfWizard(props: {
   modifierPreview: ModifierPreview[];
   modifierTotal: number;
   editingLineKey: string | null;
+  initialSauceLinked?: boolean;
   chargedByModifierId: Map<string, number>;
   onChoose: (group: ModGroup, modifier: Modifier) => void;
   onChooseRemove: (group: ModGroup, modifier: Modifier, side: "left" | "right") => void;
@@ -105,6 +106,7 @@ export function HalfAndHalfWizard(props: {
     modifierPreview,
     modifierTotal,
     editingLineKey,
+    initialSauceLinked = true,
     chargedByModifierId,
     onChoose,
     onChooseRemove,
@@ -123,12 +125,16 @@ export function HalfAndHalfWizard(props: {
 
   const stepIds = useMemo(() => activeSteps.map((s) => s.id), [activeSteps]);
 
-  const [stepIndex, setStepIndex] = useState(() =>
-    firstIncompleteStep(stepIds, visibleGroups, selectedMods, true)
-  );
+  const [stepIndex, setStepIndex] = useState(() => {
+    if (editingLineKey) {
+      return firstIncompleteStep(stepIds, visibleGroups, selectedMods, initialSauceLinked);
+    }
+    const sizeIdx = stepIds.indexOf("size");
+    return sizeIdx >= 0 ? sizeIdx : 0;
+  });
   /** User tapped ← Groups or a step tab — do not auto-advance until they pick another step. */
   const manualStepUntilPickRef = useRef<number | null>(null);
-  const [sauceLinked, setSauceLinked] = useState(true);
+  const [sauceLinked, setSauceLinked] = useState(initialSauceLinked);
   const [sauceEditSide, setSauceEditSide] = useState<"left" | "right" | null>(null);
 
   function goToStep(index: number) {
