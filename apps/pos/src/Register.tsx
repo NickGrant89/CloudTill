@@ -28,6 +28,7 @@ import {
   withLinkedHalfAndHalfSauces,
 } from "@cloudtill/shared";
 import { HalfAndHalfWizard } from "./HalfAndHalfWizard";
+import { OptionsPickerBottomBar } from "./OptionsPickerBottomBar";
 import { ModifierOptionButton } from "./ModifierOptionButton";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, getToken, loadCatalogSnapshot, money, OfflineError, saveCatalogSnapshot } from "./api";
@@ -2140,14 +2141,6 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
               onClose={leavePizzaOptionsToGroups}
               onConfirm={() => void confirmModifiers()}
               onSauceLinkedChange={setHhSauceLinked}
-              renderPreview={(stepId) => (
-                <ModifierList
-                  mods={modifierPreview}
-                  groups={modifierItem.modifierGroups}
-                  itemName={modifierItem.name}
-                  variant={stepId === "halves" || stepId === "options" ? "halves-footer" : "default"}
-                />
-              )}
             />
           ) : modifierItem ? (
             <div className="options-picker">
@@ -2226,30 +2219,13 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                 )}
               </div>
               <div className="options-picker-footer">
-                <div className="modifier-bar modifier-bar--options">
-                  <div className="modifier-bar-summary">
-                    <p className="step-kicker">{editingLineKey ? "Edit options" : "Step 2 · Options"}</p>
-                    <strong>{modifierItem.name}</strong>
-                    {modifierPreview.length > 0 ? (
-                      <div className="till-options-preview">
-                        <ModifierList
-                          mods={modifierPreview}
-                          groups={modifierItem.modifierGroups}
-                          itemName={modifierItem.name}
-                        />
-                      </div>
-                    ) : (
-                      <div className="meta">Choose options</div>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    className="pay-btn options-confirm-btn"
-                    onClick={() => void confirmModifiers()}
-                  >
-                    {editingLineKey ? "Update" : "Add"} {money(modifierTotal)}
-                  </button>
-                </div>
+                <OptionsPickerBottomBar
+                  itemName={modifierItem.name}
+                  mods={modifierPreview}
+                  totalCents={modifierTotal}
+                  editingLineKey={editingLineKey}
+                  onConfirm={() => void confirmModifiers()}
+                />
               </div>
             </div>
           ) : (

@@ -25,6 +25,7 @@ import {
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { money } from "./api";
 import { ModifierOptionButton } from "./ModifierOptionButton";
+import { OptionsPickerBottomBar } from "./OptionsPickerBottomBar";
 
 interface Modifier {
   id: string;
@@ -77,7 +78,6 @@ export function HalfAndHalfWizard(props: {
   onClose: () => void;
   onConfirm: () => void;
   onSauceLinkedChange?: (linked: boolean) => void;
-  renderPreview: (stepId: HalfAndHalfWizardStepId) => React.ReactNode;
 }) {
   const {
     item,
@@ -94,7 +94,6 @@ export function HalfAndHalfWizard(props: {
     onClose,
     onConfirm,
     onSauceLinkedChange,
-    renderPreview,
   } = props;
 
   const activeSteps = useMemo(() => {
@@ -509,26 +508,13 @@ export function HalfAndHalfWizard(props: {
       </div>
 
       <div className="options-picker-footer">
-        <div className="modifier-bar modifier-bar--options">
-          <div className="modifier-bar-summary">
-            <p className="step-kicker">{editingLineKey ? "Edit options" : "Step 2 · Options"}</p>
-            <strong>{item.name}</strong>
-            {modifierPreview.length > 0 ? (
-              <div className="till-options-preview">{renderPreview(currentStep.id)}</div>
-            ) : (
-              <div className="meta">
-                {currentStep.id === "halves"
-                  ? "Pick RIGHT and LEFT toppings"
-                  : currentStep.id === "options"
-                    ? "Remove toppings, then paid extras per half"
-                    : "Choose options"}
-              </div>
-            )}
-          </div>
-          <button type="button" className="pay-btn options-confirm-btn" onClick={onConfirm}>
-            {editingLineKey ? "Update" : "Add"} {money(modifierTotal)}
-          </button>
-        </div>
+        <OptionsPickerBottomBar
+          itemName={item.name}
+          mods={modifierPreview}
+          totalCents={modifierTotal}
+          editingLineKey={editingLineKey}
+          onConfirm={onConfirm}
+        />
       </div>
     </div>
   );

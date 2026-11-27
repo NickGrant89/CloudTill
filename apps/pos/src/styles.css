@@ -304,6 +304,7 @@ select:focus-visible {
 .catalog-panel {
   --catalog-topbar-h: 56px;
   --catalog-chips-h: 60px;
+  --options-bottom-bar-h: 54px;
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
@@ -1431,6 +1432,7 @@ select:focus-visible {
   flex-direction: column;
   position: relative;
   z-index: 0;
+  padding-bottom: 8px;
 }
 
 .options-picker--hh .options-picker-body .grid {
@@ -1444,14 +1446,94 @@ select:focus-visible {
 }
 
 .options-picker-footer {
+  flex: 0 0 auto;
   flex-shrink: 0;
-  position: relative;
-  z-index: 11;
-  background: #fffdf8;
-  border-top: 1px solid var(--line);
-  padding-bottom: max(8px, env(safe-area-inset-bottom));
-  box-shadow: 0 -8px 24px rgba(26, 36, 32, 0.12);
+  position: sticky;
+  bottom: 0;
+  z-index: 40;
+  margin-top: auto;
+  padding: 0;
+  background: transparent;
+  border-top: none;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+.options-picker-footer > * {
   pointer-events: auto;
+}
+
+.options-bottom-bar {
+  --options-bottom-bar-h: 54px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--options-bottom-bar-h);
+  max-height: var(--options-bottom-bar-h);
+  padding: 0 10px max(6px, env(safe-area-inset-bottom));
+  background: rgba(255, 253, 248, 0.97);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -6px 20px rgba(26, 36, 32, 0.1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.options-bottom-bar-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.options-bottom-bar-summary::-webkit-scrollbar {
+  display: none;
+}
+
+.options-bottom-bar-chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  max-width: min(34vw, 9rem);
+}
+
+.options-bottom-bar-label {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.options-bottom-bar-value {
+  color: var(--panel-ink);
+  font-size: 0.8rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.options-bottom-bar-empty {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.options-bottom-bar-add {
+  flex: 0 0 auto;
+  min-width: 7.25rem;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 14px;
+  border-radius: 12px;
+  touch-action: manipulation;
 }
 
 .modifier-bar--options {
@@ -1462,10 +1544,6 @@ select:focus-visible {
 .modifier-bar-summary {
   min-width: 0;
   flex: 1;
-}
-
-.options-picker-footer .till-options-preview {
-  max-height: min(28vh, 8rem);
 }
 
 .options-confirm-btn {
@@ -1507,10 +1585,6 @@ select:focus-visible {
 
 }
 
-.options-picker--hh .options-picker-footer .till-options-preview {
-  max-height: min(36vh, 10rem);
-}
-
 @media (max-width: 768px) {
   .hh-halves-columns {
     grid-template-columns: 1fr;
@@ -1523,19 +1597,15 @@ select:focus-visible {
     display: none !important;
   }
 
-  .catalog-panel--options .modifier-bar--options {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .catalog-panel--options .options-confirm-btn {
-    width: 100%;
-    margin-left: 0;
+  .catalog-panel--options .options-bottom-bar {
     min-height: 52px;
+    max-height: 52px;
+    padding-bottom: max(4px, env(safe-area-inset-bottom));
   }
 
-  .catalog-panel--options .options-picker-footer {
-    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  .catalog-panel--options .options-bottom-bar-add {
+    min-height: 42px;
+    font-size: 0.92rem;
   }
 }
 
