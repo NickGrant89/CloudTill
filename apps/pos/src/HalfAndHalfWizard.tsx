@@ -12,6 +12,7 @@ import {
   halfAndHalfStepSatisfied,
   halfAndHalfWizardStepForGroup,
   isHalfAndHalfWizardItem,
+  isHalfAndHalfRemoveGroup,
   isConsolidatedPizzaItem,
   modifierListPriceCents,
   pizzaSizeInchesFromSelection,
@@ -248,14 +249,16 @@ export function HalfAndHalfWizard(props: {
     group: ModGroup,
     option: Modifier,
     onPick: () => void,
-    selectedOverride?: boolean
+    selectedOverride?: boolean,
+    reactKey?: string
   ) {
-    const selected =
-      selectedOverride ?? (selectedMods[group.id] ?? []).some((p) => p.id === option.id);
+    const selected = isHalfAndHalfRemoveGroup(group.name)
+      ? Boolean(selectedOverride)
+      : (selectedOverride ?? (selectedMods[group.id] ?? []).some((p) => p.id === option.id));
     const listPrice = modifierListPriceCents(option.priceCents, group.name, item.name, sizeInches);
     return (
       <ModifierOptionButton
-        key={`${group.id}-${option.id}`}
+        key={reactKey ?? `${group.id}-${option.id}`}
         name={option.name}
         selected={selected}
         priceLabel={modifierPriceLabel(selected, listPrice, chargedByModifierId.get(option.id))}
@@ -389,7 +392,8 @@ export function HalfAndHalfWizard(props: {
                                   group,
                                   option,
                                   () => onChooseRemove(group, option, side),
-                                  picked
+                                  picked,
+                                  `${sideKey}-${option.id}`
                                 );
                               })
                             )}

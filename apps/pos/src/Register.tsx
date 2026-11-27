@@ -9,6 +9,7 @@ import {
   halfAndHalfRemoveTicketSideFromGroupName,
   halfAndHalfSelectedModifierPicks,
   halfAndHalfSauceGroups,
+  normalizeHalfAndHalfRemoveSelectionState,
   isHalfAndHalfRemoveGroup,
   isHalfAndHalfRemoveSelectionKey,
   isHalfAndHalfWizardItem,
@@ -675,6 +676,11 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
     const initial: Record<string, Modifier[]> = {};
     const groups = visiblePizzaModifierGroups(item.name, item.modifierGroups, initial);
     for (const group of groups) {
+      if (isHalfAndHalfWizardItem(item.name) && isHalfAndHalfRemoveGroup(group.name)) {
+        initial[halfAndHalfRemoveSelectionKey(group.id, "left")] = [];
+        initial[halfAndHalfRemoveSelectionKey(group.id, "right")] = [];
+        continue;
+      }
       initial[group.id] = group.minSelect > 0 && group.modifiers[0] ? [group.modifiers[0]] : [];
     }
   if (isHalfAndHalfWizardItem(item.name)) {
@@ -685,7 +691,8 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
       }
     }
     setEditingLineKey(null);
-    setSelectedMods(initial);
+  const normalized = normalizeHalfAndHalfRemoveSelectionState(item.name, item.modifierGroups, initial);
+    setSelectedMods(normalized as Record<string, Modifier[]>);
     setModifierGroupId(groups[0]?.id ?? "");
     setModifierItem(item);
     setHhSauceLinked(true);
@@ -697,10 +704,15 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
       setSelectedMods(next);
       return;
     }
+    const normalized = normalizeHalfAndHalfRemoveSelectionState(
+      modifierItem.name,
+      modifierItem.modifierGroups,
+      next
+    ) as Record<string, Modifier[]>;
     const visibleIds = new Set(
-      visiblePizzaModifierGroups(modifierItem.name, modifierItem.modifierGroups, next).map((g) => g.id)
+      visiblePizzaModifierGroups(modifierItem.name, modifierItem.modifierGroups, normalized).map((g) => g.id)
     );
-    const cleaned = { ...next };
+    const cleaned = { ...normalized };
     for (const key of Object.keys(cleaned)) {
       if (isHalfAndHalfRemoveSelectionKey(key)) {
         const groupId = halfAndHalfRemoveSelectionGroupId(key);
@@ -728,11 +740,19 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
       }
       const next = { ...prev, [key]: nextSelection };
       delete next[group.id];
-      return next;
+      if (!modifierItem) return next;
+      return normalizeHalfAndHalfRemoveSelectionState(
+        modifierItem.name,
+        modifierItem.modifierGroups,
+        next
+      ) as Record<string, Modifier[]>;
     });
   }
 
   function chooseModifier(group: ModGroup, modifier: Modifier) {
+    if (modifierItem && isHalfAndHalfWizardItem(modifierItem.name) && isHalfAndHalfRemoveGroup(group.name)) {
+      return;
+    }
     setSelectedMods((prev) => {
       const current = prev[group.id] ?? [];
       let next: Record<string, Modifier[]>;
@@ -890,7 +910,12 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
       }
     }
     setEditingLineKey(line.key);
-    setSelectedMods(initial);
+    setSelectedMods(
+      normalizeHalfAndHalfRemoveSelectionState(item.name, item.modifierGroups, initial) as Record<
+        string,
+        Modifier[]
+      >
+    );
     setModifierGroupId(item.modifierGroups[0]?.id ?? "");
     setModifierItem(item);
     setMobilePane("items");

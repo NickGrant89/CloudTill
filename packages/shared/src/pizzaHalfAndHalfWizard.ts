@@ -95,6 +95,36 @@ export function halfAndHalfRemoveSelectionGroupId(key: string): string {
   return key.replace(/:hh-remove-(left|right)$/, "");
 }
 
+/** Till picker must not use catalog group.id for removes — migrate legacy rows into left-only side keys. */
+export function normalizeHalfAndHalfRemoveSelectionState<T>(
+  itemName: string,
+  groups: { id: string; name: string }[],
+  selected: Record<string, T[] | undefined>
+): Record<string, T[] | undefined> {
+  if (!isHalfAndHalfWizardItem(itemName)) return selected;
+  let next: Record<string, T[] | undefined> | null = null;
+  const touch = (): Record<string, T[] | undefined> => {
+    if (!next) next = { ...selected };
+    return next;
+  };
+  for (const group of groups) {
+    if (!isHalfAndHalfRemoveGroup(group.name)) continue;
+    const legacy = selected[group.id];
+    if (!legacy?.length) {
+      if (group.id in selected) {
+        touch();
+        delete next![group.id];
+      }
+      continue;
+    }
+    const out = touch();
+    const leftKey = halfAndHalfRemoveSelectionKey(group.id, "left");
+    if (!(out[leftKey]?.length)) out[leftKey] = [...legacy];
+    delete out[group.id];
+  }
+  return next ?? selected;
+}
+
 export function isHalfAndHalfRemoveGroup(groupName: string): boolean {
   return isPizzaRemoveToppingGroup(halfAndHalfRemoveCatalogGroupName(groupName));
 }
@@ -188,6 +218,19 @@ export function halfAndHalfStepSatisfied(check: HalfAndHalfStepCheck): boolean {
   if (stepId === "halves") {
     const columnGroups = groups.filter((g) => isHalfAndHalfHalvesColumnGroup(g.name));
     return columnGroups.every((g) => (selected[g.id] ?? []).length >= g.minSelect);
+  }
+
+  if (stepId === "options") {
+    return groups.every((g) => {
+      if (isHalfAndHalfRemoveGroup(g.name)) {
+        const picked = [
+          ...(selected[halfAndHalfRemoveSelectionKey(g.id, "left")] ?? []),
+          ...(selected[halfAndHalfRemoveSelectionKey(g.id, "right")] ?? []),
+        ];
+        return picked.length >= g.minSelect;
+      }
+      return (selected[g.id] ?? []).length >= g.minSelect;
+    });
   }
 
   return groups.every((g) => (selected[g.id] ?? []).length >= g.minSelect);
@@ -358,7 +401,7 @@ export function halfAndHalfMergedColumnOptions<
 /**
  * Sale / kitchen / receipt display order for half-and-half (full left block, then full right):
  * Size → Base → Sauce L → Left half → Left removes → Left extras → Sauce R → Right half → Right removes → Right extras.
- * Shared remove lists sort with the left block and are duplicated after the right half in prepareHalfAndHalfLineModifiers.
+ * Shared remove lists sort with the left block; ticket rows use (LEFT half)/(RIGHT half) suffixes — no mirroring.
  */
 export function halfAndHalfModifierDisplayRank(groupName: string): number {
   const role = normRole(groupName);
@@ -419,36 +462,7 @@ export function prepareHalfAndHalfLineModifiers<T extends { name?: string; group
   if (mirroredSauces) {
     ordered = ordered.filter((m) => normRole(m.groupName ?? "") !== "pizza sauce 2");
   }
-  ordered = duplicateSharedRemoveToppingsForRightHalf(ordered);
   return { mods: ordered, mirroredSauces };
-}
-
-/** Loyverse shared `Remove Toppings` — show under left block and again under right half on kitchen/receipt. */
-function duplicateSharedRemoveToppingsForRightHalf<T extends { name?: string; groupName?: string }>(
-  ordered: T[]
-): T[] {
-  const shared = ordered.filter((m) => {
-    const gn = m.groupName ?? "";
-    if (halfAndHalfRemoveTicketSideFromGroupName(gn)) return false;
-    return isHalfAndHalfRemoveGroup(gn) && halfAndHalfColumnTailSide(halfAndHalfRemoveCatalogGroupName(gn)) === "shared";
-  });
-  if (!shared.length) return ordered;
-  const out: T[] = [];
-  let duplicated = false;
-  for (const m of ordered) {
-    out.push(m);
-    const gn = m.groupName ?? "";
-    if (
-      !duplicated &&
-      isHalfAndHalfRightGroup(gn) &&
-      !isHalfAndHalfExtrasGroup(gn) &&
-      !isHalfAndHalfRemoveGroup(gn)
-    ) {
-      for (const row of shared) out.push({ ...row });
-      duplicated = true;
-    }
-  }
-  return out;
 }
 
 export function displayModifierGroupLabel(
