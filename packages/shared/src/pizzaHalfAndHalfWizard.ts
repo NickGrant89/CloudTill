@@ -325,10 +325,19 @@ export type HalfAndHalfStepCheck = {
   sauceLinked?: boolean;
 };
 
+function halfAndHalfWizardMinPicks(group: { minSelect: number }, stepId: HalfAndHalfWizardStepId): number {
+  if (stepId === "size") return Math.max(1, group.minSelect);
+  return Math.max(0, group.minSelect);
+}
+
 export function halfAndHalfStepSatisfied(check: HalfAndHalfStepCheck): boolean {
   const { stepId, visibleGroups, selected, sauceLinked } = check;
   const groups = visibleGroups.filter((g) => halfAndHalfWizardStepForGroup(g.name) === stepId);
-  if (!groups.length) return true;
+  if (!groups.length) return stepId !== "size";
+
+  if (stepId === "size") {
+    return groups.every((g) => (selected[g.id] ?? []).length >= halfAndHalfWizardMinPicks(g, stepId));
+  }
 
   if (stepId === "sauce" && sauceLinked) {
     const { left, right } = halfAndHalfSauceGroups(groups);
@@ -360,7 +369,30 @@ export function halfAndHalfStepSatisfied(check: HalfAndHalfStepCheck): boolean {
     });
   }
 
-  return groups.every((g) => (selected[g.id] ?? []).length >= g.minSelect);
+  return groups.every((g) => (selected[g.id] ?? []).length >= halfAndHalfWizardMinPicks(g, stepId));
+}
+
+/** Wizard tab index for the first step the user still needs to complete. */
+export function halfAndHalfFirstIncompleteStepIndex(
+  steps: HalfAndHalfWizardStepId[],
+  visibleGroups: { id: string; name: string; minSelect: number }[],
+  selected: Record<string, { length: number }[] | undefined>,
+  sauceLinked: boolean
+): number {
+  for (let i = 0; i < steps.length; i++) {
+    const stepId = steps[i]!;
+    if (
+      !halfAndHalfStepSatisfied({
+        stepId,
+        visibleGroups,
+        selected,
+        sauceLinked,
+      })
+    ) {
+      return i;
+    }
+  }
+  return Math.max(0, steps.length - 1);
 }
 
 export function isHalfAndHalfSauceGroup(groupName: string): boolean {

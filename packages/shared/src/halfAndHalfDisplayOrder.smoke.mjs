@@ -1,6 +1,8 @@
 import {
   HALF_AND_HALF_CYO_ITEM,
   HALF_AND_HALF_PRESET_ITEM,
+  HALF_AND_HALF_WIZARD_STEPS,
+  halfAndHalfFirstIncompleteStepIndex,
   halfAndHalfTicketGroupHeading,
   prepareHalfAndHalfLineModifiers,
   groupHalfAndHalfModifierLines,
@@ -108,6 +110,20 @@ if (!priced[0]?.groupName?.includes("LEFT half")) {
 const text = linesFromReceipt(presetMods, HALF_AND_HALF_PRESET_ITEM).join("\n");
 if (!text.includes("Remove Toppings (LEFT half)")) {
   console.error("FAIL: receipt must show remove heading", text);
+  process.exit(1);
+}
+
+const sizeGroup = { id: "g-size", name: "Size", minSelect: 0, modifiers: [{ id: "s9", name: '9"' }] };
+const visible = [sizeGroup];
+const emptySelected = {};
+const need = halfAndHalfFirstIncompleteStepIndex(
+  HALF_AND_HALF_WIZARD_STEPS.map((s) => s.id),
+  visible,
+  emptySelected,
+  true
+);
+if (need !== 0) {
+  console.error("FAIL: new wizard must start on Size (index 0), got", need);
   process.exit(1);
 }
 

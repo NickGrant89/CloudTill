@@ -1,5 +1,6 @@
 import {
   HALF_AND_HALF_WIZARD_STEPS,
+  halfAndHalfFirstIncompleteStepIndex,
   halfAndHalfColumnGroupsForSide,
   halfAndHalfColumnTailGroupsForSide,
   halfAndHalfRemoveGroupsForSide,
@@ -9,7 +10,6 @@ import {
   halfAndHalfMergedSauceOptions,
   halfAndHalfSauceGroups,
   mirrorSauceModifier,
-  halfAndHalfStepSatisfied,
   halfAndHalfWizardStepForGroup,
   isHalfAndHalfWizardItem,
   isHalfAndHalfRemoveGroup,
@@ -48,28 +48,6 @@ interface WizardItem {
 }
 
 type ModifierPreview = { name: string; groupName: string };
-
-function firstIncompleteStep(
-  steps: HalfAndHalfWizardStepId[],
-  visibleGroups: ModGroup[],
-  selected: Record<string, Modifier[]>,
-  sauceLinked: boolean
-): number {
-  for (let i = 0; i < steps.length; i++) {
-    const stepId = steps[i]!;
-    if (
-      !halfAndHalfStepSatisfied({
-        stepId,
-        visibleGroups,
-        selected,
-        sauceLinked,
-      })
-    ) {
-      return i;
-    }
-  }
-  return Math.max(0, steps.length - 1);
-}
 
 function modifierPriceLabel(
   selected: boolean,
@@ -127,7 +105,7 @@ export function HalfAndHalfWizard(props: {
 
   const [stepIndex, setStepIndex] = useState(() => {
     if (editingLineKey) {
-      return firstIncompleteStep(stepIds, visibleGroups, selectedMods, initialSauceLinked);
+      return halfAndHalfFirstIncompleteStepIndex(stepIds, visibleGroups, selectedMods, initialSauceLinked);
     }
     const sizeIdx = stepIds.indexOf("size");
     return sizeIdx >= 0 ? sizeIdx : 0;
@@ -168,7 +146,7 @@ export function HalfAndHalfWizard(props: {
         if (i === pinned) return i;
         manualStepUntilPickRef.current = null;
       }
-      const need = firstIncompleteStep(stepIds, visibleGroups, selectedMods, sauceLinked);
+      const need = halfAndHalfFirstIncompleteStepIndex(stepIds, visibleGroups, selectedMods, sauceLinked);
       return need > i ? need : i;
     });
   }, [visibleGroups, selectedMods, stepIds, sauceLinked]);
