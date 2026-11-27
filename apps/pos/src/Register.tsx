@@ -1,5 +1,6 @@
 import {
   displayModifierGroupLabel,
+  groupHalfAndHalfModifierLines,
   groupModifierLines,
   isConsolidatedPizzaItem,
   halfAndHalfRemoveSelectionGroupId,
@@ -158,15 +159,24 @@ function ModifierList({
       : groups?.length
         ? sortModsByItemGroups(mods, groups, itemName)
         : mods;
-  const blocks = groupModifierLines(sorted);
-  if (!blocks.length) return null;
+  const hhBlocks =
+    itemName && isHalfAndHalfWizardItem(itemName)
+      ? groupHalfAndHalfModifierLines(itemName, sorted, { mirroredSauces })
+      : null;
+  const legacyBlocks = groupModifierLines(sorted);
+  const displayBlocks = hhBlocks
+    ? hhBlocks.map((b) => ({ groupName: b.groupName, names: b.names, heading: b.heading }))
+    : legacyBlocks.map((b) => ({
+        ...b,
+        heading: displayModifierGroupLabel(itemName, b.groupName, { mirroredSauces }) ?? b.groupName,
+      }));
+  if (!displayBlocks.length) return null;
   if (variant === "halves-footer") {
     return (
       <ul className="mod-list mod-list--halves-footer">
-        {blocks.map((block, index) => {
-          const heading =
-            displayModifierGroupLabel(itemName, block.groupName, { mirroredSauces }) ?? block.groupName;
-          const isHalfSide = heading === "LEFT" || heading === "RIGHT";
+        {displayBlocks.map((block, index) => {
+          const heading = block.heading;
+          const isHalfSide = heading === "Left half" || heading === "Right half";
           if (isHalfSide) {
             return (
               <li key={`${block.groupName ?? "mods"}-${index}`} className="mod-half-summary">
@@ -191,12 +201,10 @@ function ModifierList({
   }
   return (
     <ul className="mod-list">
-      {blocks.map((block, index) => (
+      {displayBlocks.map((block, index) => (
         <li key={`${block.groupName ?? "mods"}-${index}`}>
-          {block.groupName && (
-            <div className="mod-group">
-              {displayModifierGroupLabel(itemName, block.groupName, { mirroredSauces }) ?? block.groupName}
-            </div>
+          {block.heading && (
+            <div className="mod-group">{block.heading}</div>
           )}
           {block.names.map((name, nameIndex) => (
             <div key={`${name}-${nameIndex}`} className="mod-name">

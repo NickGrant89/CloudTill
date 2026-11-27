@@ -1,4 +1,5 @@
 import {
+  halfAndHalfExtrasTicketSideFromGroupName,
   halfAndHalfRemoveCatalogGroupName,
   halfAndHalfRemoveTicketSideFromGroupName,
 } from "./pizzaHalfAndHalfWizard.js";
@@ -82,13 +83,18 @@ export function priceModifierPicks(
   const raw = picks.map((pick) => {
     const ticketName = pick.groupName?.trim();
     const sideTaggedRemove = Boolean(ticketName && halfAndHalfRemoveTicketSideFromGroupName(ticketName));
+    const sideTaggedExtras = Boolean(ticketName && halfAndHalfExtrasTicketSideFromGroupName(ticketName));
+    const keepTicketGroupName = sideTaggedRemove || sideTaggedExtras;
     const group =
-      (pick.groupId && !sideTaggedRemove ? groupById.get(pick.groupId) : undefined) ??
-      (!sideTaggedRemove && ticketName
+      (pick.groupId && !keepTicketGroupName ? groupById.get(pick.groupId) : undefined) ??
+      (!keepTicketGroupName && ticketName
         ? groups.find((g) => g.name.toLowerCase() === ticketName.toLowerCase())
+        : undefined) ??
+      (pick.modifierId
+        ? groups.find((g) => g.modifiers.some((mod) => mod.id === pick.modifierId))
         : undefined);
     const catalogName = group?.name;
-    const groupName = sideTaggedRemove ? ticketName! : catalogName ?? ticketName ?? "";
+    const groupName = keepTicketGroupName ? ticketName! : catalogName ?? ticketName ?? "";
     const priceGroupName = catalogName ?? halfAndHalfRemoveCatalogGroupName(groupName) ?? groupName;
     const db = group?.modifiers.find((mod) => mod.id === pick.modifierId);
     const list = pick.modifierId
@@ -100,7 +106,7 @@ export function priceModifierPicks(
       modifierId: pick.modifierId,
       name: pick.name,
       priceCents: list,
-      groupId: sideTaggedRemove ? pick.groupId : group?.id ?? pick.groupId,
+      groupId: keepTicketGroupName ? pick.groupId : group?.id ?? pick.groupId,
       groupName,
     };
   });

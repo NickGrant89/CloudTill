@@ -1,5 +1,6 @@
 import {
-  displayModifierGroupLabel,
+  groupHalfAndHalfModifierLines,
+  isHalfAndHalfWizardItem,
   prepareHalfAndHalfLineModifiers,
 } from "./pizzaHalfAndHalfWizard.js";
 
@@ -65,11 +66,19 @@ export function receiptModifierLines(
   mods: { name?: string; groupName?: string }[],
   itemName?: string
 ) {
-  const { mods: ordered, mirroredSauces } = prepareHalfAndHalfLineModifiers(itemName, mods);
+  const { mirroredSauces } = prepareHalfAndHalfLineModifiers(itemName, mods);
   const lines: string[] = [];
-  for (const block of groupModifierLines(ordered)) {
-    const heading = displayModifierGroupLabel(itemName, block.groupName, { mirroredSauces });
-    if (heading) lines.push(`  ${heading}`);
+  const blocks =
+    itemName && isHalfAndHalfWizardItem(itemName)
+      ? groupHalfAndHalfModifierLines(itemName, mods, { mirroredSauces })
+      : groupModifierLines(
+          prepareHalfAndHalfLineModifiers(itemName, mods).mods
+        ).map((b) => ({
+          heading: b.groupName ?? "",
+          names: b.names,
+        }));
+  for (const block of blocks) {
+    if (block.heading) lines.push(`  ${block.heading}`);
     for (const name of block.names) lines.push(`    + ${name}`);
   }
   return lines;

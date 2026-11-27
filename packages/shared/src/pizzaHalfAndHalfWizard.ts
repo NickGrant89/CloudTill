@@ -67,11 +67,15 @@ export function isPizzaRemoveToppingGroup(groupName: string): boolean {
 }
 
 export function halfAndHalfRemoveCatalogGroupName(groupName: string): string {
-  return groupName.replace(/\s*\((LEFT|RIGHT) half\)\s*$/i, "").trim();
+  return groupName
+    .replace(/\s*\((LEFT|RIGHT) half\)\s*$/i, "")
+    .replace(/^(\d+)\s*(?:”|")\s*/i, "")
+    .trim();
 }
 
 /** Side encoded on ticket lines for shared remove menus. */
 export function halfAndHalfRemoveTicketSideFromGroupName(groupName: string): "left" | "right" | null {
+  if (!isPizzaRemoveToppingGroup(halfAndHalfRemoveCatalogGroupName(groupName))) return null;
   if (/\(LEFT half\)\s*$/i.test(groupName.trim())) return "left";
   if (/\(RIGHT half\)\s*$/i.test(groupName.trim())) return "right";
   return null;
@@ -79,8 +83,24 @@ export function halfAndHalfRemoveTicketSideFromGroupName(groupName: string): "le
 
 export function halfAndHalfRemoveTicketGroupName(catalogGroupName: string, side: "left" | "right"): string {
   const tail = halfAndHalfColumnTailSide(catalogGroupName);
+  const stripped = catalogGroupName.replace(/^(\d+)\s*(?:”|")\s*/i, "").trim();
   if (tail === "left" || tail === "right") return catalogGroupName;
-  return `${catalogGroupName} (${side === "left" ? "LEFT" : "RIGHT"} half)`;
+  return `${stripped} (${side === "left" ? "LEFT" : "RIGHT"} half)`;
+}
+
+export const HALF_AND_HALF_EXTRAS_TICKET_LABEL = "Half & Half Extras";
+
+export function halfAndHalfExtrasTicketSideFromGroupName(groupName: string): "left" | "right" | null {
+  const trimmed = groupName.trim();
+  const ticket = trimmed.startsWith(HALF_AND_HALF_EXTRAS_TICKET_LABEL);
+  if (!ticket && !isHalfAndHalfExtrasGroup(trimmed)) return null;
+  if (/\(LEFT half\)\s*$/i.test(trimmed)) return "left";
+  if (/\(RIGHT half\)\s*$/i.test(trimmed)) return "right";
+  return null;
+}
+
+export function halfAndHalfExtrasTicketGroupName(_catalogGroupName: string, side: "left" | "right"): string {
+  return `${HALF_AND_HALF_EXTRAS_TICKET_LABEL} (${side === "left" ? "LEFT" : "RIGHT"} half)`;
 }
 
 export function halfAndHalfRemoveSelectionKey(groupId: string, side: "left" | "right"): string {
@@ -144,6 +164,10 @@ export function catalogGroupNameMatchesLineModifier(
       halfAndHalfRemoveCatalogGroupName(catalog).toLowerCase()
     );
   }
+  const extrasTicketSide = halfAndHalfExtrasTicketSideFromGroupName(line);
+  if (isHalfAndHalfWizardItem(itemName) && extrasTicketSide && isHalfAndHalfExtrasGroup(catalog)) {
+    return halfAndHalfColumnTailSide(catalog) === extrasTicketSide;
+  }
   if (normRole(line) !== normRole(catalog)) return false;
   const lineInch = modifierGroupInchSize(line);
   const catalogInch = modifierGroupInchSize(catalog);
@@ -170,6 +194,25 @@ export function pickerStateFromLineModifiers<
   for (const picked of lineMods) {
     const gn = picked.groupName?.trim();
     if (!gn) continue;
+
+    const extrasTicketSide = halfAndHalfExtrasTicketSideFromGroupName(gn);
+    if (isHalfAndHalfWizardItem(itemName) && extrasTicketSide) {
+      const candidates = groups.filter(
+        (g) => isHalfAndHalfExtrasGroup(g.name) && halfAndHalfColumnTailSide(g.name) === extrasTicketSide
+      );
+      let placed = false;
+      for (const group of candidates) {
+        const option = group.modifiers.find(
+          (m) => (picked.modifierId && m.id === picked.modifierId) || m.name === picked.name
+        );
+        if (!option) continue;
+        const list = initial[group.id] ?? [];
+        if (!list.some((m) => m.id === option.id)) list.push(option);
+        initial[group.id] = list;
+        placed = true;
+      }
+      if (placed) continue;
+    }
 
     if (isHalfAndHalfWizardItem(itemName) && isHalfAndHalfRemoveGroup(gn)) {
       const catalog = halfAndHalfRemoveCatalogGroupName(gn);
@@ -449,11 +492,18 @@ export function halfAndHalfSelectedModifierPicks(
       continue;
     }
     for (const option of selected[group.id] ?? []) {
+      let ticketGroupName = group.name;
+      if (isHalfAndHalfExtrasGroup(group.name)) {
+        const side = halfAndHalfColumnTailSide(group.name);
+        if (side === "left" || side === "right") {
+          ticketGroupName = halfAndHalfExtrasTicketGroupName(group.name, side);
+        }
+      }
       rows.push({
         modifierId: option.id,
         name: option.name,
-        groupId: group.id,
-        groupName: group.name,
+        groupId: isHalfAndHalfExtrasGroup(group.name) ? undefined : group.id,
+        groupName: ticketGroupName,
       });
     }
   }
@@ -481,30 +531,57 @@ export function halfAndHalfMergedColumnOptions<
   return rows;
 }
 
+type HalfAndHalfTicketBlock = "shared" | "left" | "right";
+type HalfAndHalfTicketKind = "size" | "base" | "remove" | "sauce" | "half" | "extras" | "other";
+
+function halfAndHalfTicketBlockAndKind(groupName: string): {
+  block: HalfAndHalfTicketBlock;
+  kind: HalfAndHalfTicketKind;
+} {
+  const gn = groupName.trim();
+  if (!gn) return { block: "shared", kind: "other" };
+  const role = normRole(gn);
+  if (role === "size") return { block: "shared", kind: "size" };
+  if (role === "pizza base") return { block: "shared", kind: "base" };
+
+  const removeSide = halfAndHalfRemoveTicketSideFromGroupName(gn);
+  if (removeSide) return { block: removeSide, kind: "remove" };
+  if (isHalfAndHalfRemoveGroup(gn)) {
+    const side = halfAndHalfColumnTailSide(halfAndHalfRemoveCatalogGroupName(gn));
+    return { block: side === "right" ? "right" : "left", kind: "remove" };
+  }
+
+  const extrasSide = halfAndHalfExtrasTicketSideFromGroupName(gn);
+  if (extrasSide) return { block: extrasSide, kind: "extras" };
+  if (isHalfAndHalfExtrasGroup(gn)) {
+    const side = halfAndHalfColumnTailSide(gn);
+    return { block: side === "right" ? "right" : side === "left" ? "left" : "shared", kind: "extras" };
+  }
+
+  if (role === "pizza sauce") return { block: "left", kind: "sauce" };
+  if (role === "pizza sauce 2") return { block: "right", kind: "sauce" };
+  if (isHalfAndHalfLeftGroup(gn)) return { block: "left", kind: "half" };
+  if (isHalfAndHalfRightGroup(gn)) return { block: "right", kind: "half" };
+  return { block: "shared", kind: "other" };
+}
+
+const HALF_TICKET_BLOCK_RANK: Record<HalfAndHalfTicketBlock, number> = { shared: 0, left: 1, right: 2 };
+const HALF_TICKET_KIND_RANK: Record<HalfAndHalfTicketKind, number> = {
+  size: 0,
+  base: 1,
+  remove: 2,
+  sauce: 3,
+  half: 4,
+  extras: 5,
+  other: 9,
+};
+
 /**
- * Sale / kitchen / receipt display order for half-and-half (full left block, then full right):
- * Size → Base → Sauce L → Left half → Left removes → Left extras → Sauce R → Right half → Right removes → Right extras.
- * Shared remove lists sort with the left block; ticket rows use (LEFT half)/(RIGHT half) suffixes — no mirroring.
+ * Size, base, then full left half (removes → sauce → half → extras), then full right half.
  */
 export function halfAndHalfModifierDisplayRank(groupName: string): number {
-  const role = normRole(groupName);
-  if (role === "size") return 0;
-  if (role === "pizza base") return 10;
-  if (role === "pizza sauce") return 20;
-  if (isHalfAndHalfLeftGroup(groupName) && !isHalfAndHalfExtrasGroup(groupName)) return 30;
-  if (isHalfAndHalfRemoveGroup(groupName)) {
-    const ticketSide = halfAndHalfRemoveTicketSideFromGroupName(groupName);
-    if (ticketSide === "right") return 65;
-    if (ticketSide === "left") return 35;
-    const side = halfAndHalfColumnTailSide(halfAndHalfRemoveCatalogGroupName(groupName));
-    return side === "right" ? 65 : 35;
-  }
-  if (isHalfAndHalfExtrasGroup(groupName) && halfAndHalfColumnTailSide(groupName) === "left") return 40;
-  if (role === "pizza sauce 2") return 50;
-  if (isHalfAndHalfRightGroup(groupName) && !isHalfAndHalfExtrasGroup(groupName)) return 60;
-  if (isHalfAndHalfExtrasGroup(groupName) && halfAndHalfColumnTailSide(groupName) === "right") return 70;
-  if (isHalfAndHalfExtrasGroup(groupName)) return 45;
-  return 100;
+  const { block, kind } = halfAndHalfTicketBlockAndKind(groupName);
+  return HALF_TICKET_BLOCK_RANK[block] * 100 + HALF_TICKET_KIND_RANK[kind] * 10;
 }
 
 export function sortHalfAndHalfModifiersForDisplay<T extends { groupName?: string }>(
@@ -548,6 +625,58 @@ export function prepareHalfAndHalfLineModifiers<T extends { name?: string; group
   return { mods: ordered, mirroredSauces };
 }
 
+/** Ticket / kitchen heading for one modifier group row on half-and-half. */
+export function halfAndHalfTicketGroupHeading(
+  groupName: string,
+  opts?: { mirroredSauces?: boolean }
+): string {
+  const gn = groupName.trim();
+  const removeSide = halfAndHalfRemoveTicketSideFromGroupName(gn);
+  if (removeSide || isHalfAndHalfRemoveGroup(gn)) {
+    const catalog = halfAndHalfRemoveCatalogGroupName(gn);
+    const stripped = catalog.replace(/^(\d+)\s*(?:”|")\s*/i, "").trim();
+    const side =
+      removeSide ?? (halfAndHalfColumnTailSide(catalog) === "right" ? "right" : "left");
+    return `${stripped} (${side === "left" ? "LEFT" : "RIGHT"} half)`;
+  }
+  const extrasSide = halfAndHalfExtrasTicketSideFromGroupName(gn);
+  if (extrasSide) return gn;
+  if (isHalfAndHalfExtrasGroup(gn)) {
+    const side = halfAndHalfColumnTailSide(gn);
+    if (side === "left" || side === "right") return halfAndHalfExtrasTicketGroupName(gn, side);
+  }
+  const role = normRole(gn);
+  if (opts?.mirroredSauces && role === "pizza sauce") return "Sauce (LEFT half)";
+  if (role === "size") return "Size";
+  if (role === "pizza base") return "Base";
+  if (role === "pizza sauce") return "Sauce (LEFT half)";
+  if (role === "pizza sauce 2") return "Sauce (RIGHT half)";
+  if (isHalfAndHalfLeftGroup(gn) && !isHalfAndHalfExtrasGroup(gn)) return "Left half";
+  if (isHalfAndHalfRightGroup(gn) && !isHalfAndHalfExtrasGroup(gn)) return "Right half";
+  return tillPizzaModGroupLabel(gn);
+}
+
+export type HalfAndHalfModifierBlock = { groupName?: string; heading: string; names: string[] };
+
+export function groupHalfAndHalfModifierLines(
+  itemName: string,
+  mods: { name?: string; groupName?: string }[],
+  opts?: { mirroredSauces?: boolean }
+): HalfAndHalfModifierBlock[] {
+  const { mods: ordered } = prepareHalfAndHalfLineModifiers(itemName, mods);
+  const blocks: HalfAndHalfModifierBlock[] = [];
+  for (const mod of ordered) {
+    const name = mod.name?.trim();
+    if (!name) continue;
+    const rawGroup = mod.groupName?.trim() || undefined;
+    const heading = rawGroup ? halfAndHalfTicketGroupHeading(rawGroup, opts) : "";
+    const last = blocks[blocks.length - 1];
+    if (last && last.heading === heading) last.names.push(name);
+    else blocks.push({ groupName: rawGroup, heading, names: [name] });
+  }
+  return blocks;
+}
+
 export function displayModifierGroupLabel(
   itemName: string | undefined,
   groupName: string | undefined,
@@ -555,10 +684,8 @@ export function displayModifierGroupLabel(
 ): string | undefined {
   if (!groupName?.trim()) return undefined;
   if (itemName && isHalfAndHalfWizardItem(itemName)) {
-    const role = normRole(groupName);
-    if (opts?.mirroredSauces && role === "pizza sauce") return "Sauce";
-    if (opts?.mirroredSauces && role === "pizza sauce 2") return undefined;
-    return kitchenHalfAndHalfGroupLabel(groupName);
+    if (opts?.mirroredSauces && normRole(groupName) === "pizza sauce 2") return undefined;
+    return halfAndHalfTicketGroupHeading(groupName, opts);
   }
   if (itemName && isConsolidatedPizzaItem(itemName)) return tillPizzaModGroupLabel(groupName);
   return groupName.trim();
