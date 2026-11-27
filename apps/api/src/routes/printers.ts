@@ -5,6 +5,7 @@ import { owned, rejectForeign } from "../tenant.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 import { createDriver, getMockDriver } from "../printers/drivers.js";
 import { loadReceiptData, renderReceipt } from "../receipts.js";
+import { buildKitchenTicketText, queueKitchenPrintJob } from "../kitchenTicket.js";
 import { drawerKickBytes } from "@cloudtill/shared";
 
 export const printersRouter = Router();
@@ -121,6 +122,53 @@ printersRouter.post("/print-receipt", async (req: AuthedRequest, res) => {
   });
 
   res.json({ job: updated, result, printer });
+});
+
+/** Reprint the kitchen ticket for a completed sale (modifiers included). */
+printersRouter.post("/print-kitchen", async (req: AuthedRequest, res) => {
+  const body = z
+    .object({
+      saleId: z.string(),
+      printerId: z.string().optional(),
+    })
+    .parse(req.body);
+  if (await rejectForeign(res, "sale", [body.saleId], req.user!.storeId)) return;
+
+  const sale = await prisma.sale.findUniqueOrThrow({
+    where: { id: body.saleId },
+    include: { lines: true, customer: true },
+  });
+  const text = buildKitchenTicketText({
+    orderNumber: sale.receiptNumber,
+    customerName: sale.customer?.name ?? null,
+    fulfillment: "dine_in",
+    lines: sale.lines,
+    note: sale.note,
+    paidLabel: `PAID · ${sale.receiptNumber}`,
+  });
+  const job = await queueKitchenPrintJob({
+    storeId: sale.storeId,
+    text,
+    saleId: sale.id,
+  });
+  const printer = await resolvePrinter(req.user!.storeId, body.printerId);
+  const driver = createDriver({
+    driver: printer?.driver ?? "mock",
+    host: printer?.host,
+    port: printer?.port,
+  });
+  const bytes = Buffer.from(job.payloadB64, "base64");
+  const result = await driver.print(new Uint8Array(bytes), { jobId: job.id, type: "kitchen" });
+  const updated = await prisma.printJob.update({
+    where: { id: job.id },
+    data: {
+      printerId: printer?.id ?? job.printerId,
+      status: result.ok ? "printed" : "failed",
+      error: result.ok ? null : result.detail,
+      printedAt: result.ok ? new Date() : null,
+    },
+  });
+  res.json({ job: updated, result, printer, preview: text });
 });
 
 printersRouter.post("/jobs/:id/retry", owned("printJob"), async (req: AuthedRequest, res) => {

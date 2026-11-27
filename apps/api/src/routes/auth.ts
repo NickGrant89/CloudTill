@@ -2,8 +2,9 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import { checkPin, requireAuth, requireRole, signToken, type AuthedRequest } from "../auth.js";
-import type { Role } from "@cloudtill/shared";
+import { TEXT_PAY_MESSAGE_KEY, type Role } from "@cloudtill/shared";
 import { companyStoreIds, DEMO_COMPANY, sameCompany } from "../company.js";
+import { parseBody } from "../parse.js";
 import {
   BILLING_LICENSE_KEY,
   BILLING_LICENSE_LAST_KEY,
@@ -34,7 +35,12 @@ async function session(emp: EmployeeRow, storeId = emp.storeId) {
     email: emp.email,
   });
   const store = await prisma.store.findUniqueOrThrow({ where: { id: storeId } });
-  const registers = await prisma.register.findMany({ where: { storeId } });
+  let registers = await prisma.register.findMany({ where: { storeId }, orderBy: { name: "asc" } });
+  // New stores (and tills that never had a register added) get one automatically so login always lands on a till.
+  if (registers.length === 0) {
+    await prisma.register.create({ data: { storeId, name: "Front Counter" } });
+    registers = await prisma.register.findMany({ where: { storeId }, orderBy: { name: "asc" } });
+  }
   const stores = worksAcrossBranches(emp.role)
     ? await prisma.store.findMany({
         where: { id: { in: await companyStoreIds(emp.storeId) } },
@@ -51,14 +57,17 @@ async function session(emp: EmployeeRow, storeId = emp.storeId) {
   };
 }
 
+const loginBodySchema = z.object({
+  email: z.string().email().optional(),
+  pin: z.string().min(4).max(8),
+  storeId: z.string().optional(),
+  /** backoffice = email+PIN owners/managers only; pos = till PIN login */
+  client: z.enum(["backoffice", "pos"]).optional(),
+});
+
 authRouter.post("/login", async (req, res) => {
-  const body = z
-    .object({
-      email: z.string().email().optional(),
-      pin: z.string().min(4).max(8),
-      storeId: z.string().optional(),
-    })
-    .parse(req.body);
+  const body = parseBody(loginBodySchema, req.body, res);
+  if (!body) return;
 
   const paired = body.storeId
     ? await prisma.store.findUnique({ where: { id: body.storeId }, select: { id: true, companyKey: true } })
@@ -97,6 +106,12 @@ authRouter.post("/login", async (req, res) => {
   }
   if (!matched) {
     return res.status(401).json({ error: "Invalid PIN or email" });
+  }
+
+  if (body.client === "backoffice" && matched.role === "cashier") {
+    return res.status(403).json({
+      error: "Back office is for owners and managers. Cashiers sign in on the till with their own PIN.",
+    });
   }
 
   res.json(await session(matched, paired?.id ?? matched.storeId));
@@ -142,16 +157,19 @@ authRouter.post("/stores", requireAuth, requireRole("owner"), async (req: Authed
   const parentId = req.user!.storeId;
   if (!(await storeAllowsFeature(parentId, "multi_store"))) {
     return res.status(402).json({
-      error: "Branches need the Group plan — upgrade in Settings → Billing",
+      error: "Branches need the Multi plan — upgrade in Settings → Billing",
       feature: "multi_store",
     });
   }
 
   const parent = await prisma.store.findUniqueOrThrow({ where: { id: parentId } });
-  const [taxes, paymentTypes, billing] = await Promise.all([
+  const [taxes, paymentTypes, billing, textPayMessage] = await Promise.all([
     prisma.tax.findMany({ where: { storeId: parentId } }),
     prisma.paymentType.findMany({ where: { storeId: parentId } }),
     prisma.setting.findMany({ where: { storeId: parentId, key: { in: COPIED_BILLING_KEYS } } }),
+    prisma.setting.findUnique({
+      where: { storeId_key: { storeId: parentId, key: TEXT_PAY_MESSAGE_KEY } },
+    }),
   ]);
 
   if (!parent.companyKey) {
@@ -196,6 +214,9 @@ authRouter.post("/stores", requireAuth, requireRole("owner"), async (req: Authed
     data: [
       ...billing.map((s) => ({ storeId: branch.id, key: s.key, value: s.value })),
       { storeId: branch.id, key: "receipt.header", value: `${parent.name} · ${branch.name}` },
+      ...(textPayMessage
+        ? [{ storeId: branch.id, key: textPayMessage.key, value: textPayMessage.value }]
+        : []),
     ],
   });
 

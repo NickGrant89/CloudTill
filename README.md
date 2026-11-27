@@ -15,7 +15,7 @@ Web-first typed monorepo: tablet register, desktop back office, customer online 
 | Cloud API + BO | Source of truth for catalog, customers, inventory, billing/plans, reports |
 | POS tills | Browser/tablet clients; cache catalog; queue open tickets & completed sales offline; sync to cloud |
 | Ordering | Customer web ordering against the same cloud store |
-| Billing | Solo / Shop / Group monthly £ · trial + license keys · feature gates |
+| Billing | Essential / Complete / Multi monthly £ · trial + license keys · feature gates |
 
 Conflict rules: **server wins catalog** on refresh; **client queues sales** until the cloud acks (`/api/pos/offline-sales`, idempotent `clientSaleId`).
 
@@ -82,7 +82,7 @@ docs/DEPLOY.md    Docker + Postgres (hosted shape)
 | Inventory, transfers, stocktake | Done | Transfers gated to Multi-store |
 | CSV import (items / customers / stock) | Done | BO **Import** · Pro+ |
 | Offline till sync | Done | IndexedDB queue · server-wins catalog |
-| SaaS billing / plans | Done | Solo/Shop/Group £ · trial + licenses · Settings |
+| SaaS billing / plans | Done | Essential/Complete/Multi £ · trial + licenses · Settings |
 | Low-stock toast (BO) | Done | In-app push stub |
 | Customers / gift cards / employees / PIN | Done | |
 | Time clock | Done | |

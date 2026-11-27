@@ -1,4 +1,21 @@
 const TILL_KEY = "purepos.pos.till";
+const HINT_KEY = "purepos.pos.hint";
+
+export type TillHintLevel = "full" | "compact" | "hidden";
+
+export function readTillHintLevel(): TillHintLevel {
+  try {
+    const raw = localStorage.getItem(HINT_KEY);
+    if (raw === "full" || raw === "compact" || raw === "hidden") return raw;
+  } catch {
+    /* ignore */
+  }
+  return "full";
+}
+
+export function writeTillHintLevel(level: TillHintLevel) {
+  localStorage.setItem(HINT_KEY, level);
+}
 
 export type PinnedTill = { storeId: string; registerId: string; registerName: string; toneIndex: number };
 

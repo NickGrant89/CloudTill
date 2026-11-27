@@ -1,4 +1,9 @@
-import { groupModifierLines } from "@cloudtill/shared";
+import {
+  groupHalfAndHalfModifierLines,
+  groupModifierLines,
+  isHalfAndHalfWizardItem,
+  prepareHalfAndHalfLineModifiers,
+} from "@cloudtill/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, getToken } from "./api";
 import type { SessionStore, SessionUser } from "./App";
@@ -566,7 +571,8 @@ export function KitchenScreen({
                   {o.note && <p className="kds-note">{o.note}</p>}
                   <ul className="kds-lines">
                     {o.lines.map((l) => {
-                      const mods = parseMods(l.modifiersJson);
+                      const raw = parseMods(l.modifiersJson);
+                      const { mods, mirroredSauces } = prepareHalfAndHalfLineModifiers(l.name, raw);
                       return (
                         <li key={l.id}>
                           <button
@@ -580,9 +586,18 @@ export function KitchenScreen({
                               {l.name}
                               {mods.length > 0 && (
                                 <span className="kds-mods">
-                                  {groupModifierLines(mods).map((block, index) => (
-                                    <span key={`${block.groupName ?? "mods"}-${index}`}>
-                                      {block.groupName && <span className="kds-mod-group">{block.groupName}</span>}
+                                  {(isHalfAndHalfWizardItem(l.name)
+                                    ? groupHalfAndHalfModifierLines(l.name, mods, { mirroredSauces })
+                                    : groupModifierLines(mods).map((b) => ({
+                                        groupName: b.groupName,
+                                        heading: b.groupName ?? "",
+                                        names: b.names,
+                                      }))
+                                  ).map((block, index) => (
+                                    <span key={`${block.groupName ?? block.heading ?? "mods"}-${index}`}>
+                                      {block.heading && (
+                                        <span className="kds-mod-group">{block.heading}</span>
+                                      )}
                                       {block.names.map((name, nameIndex) => (
                                         <span key={`${name}-${nameIndex}`} className="kds-mod-name">
                                           {name}

@@ -34,7 +34,10 @@ export async function loadReceiptData(saleId: string): Promise<ReceiptData> {
     lines: sale.lines.map((l) => {
       let modifiers: string[] = [];
       try {
-        modifiers = receiptModifierLines(JSON.parse(l.modifiersJson) as { name?: string; groupName?: string }[]);
+        modifiers = receiptModifierLines(
+          JSON.parse(l.modifiersJson) as { name?: string; groupName?: string }[],
+          l.name
+        );
       } catch {
         /* ignore */
       }

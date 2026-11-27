@@ -1,0 +1,23 @@
+# API matrix against live PurePOS — read-only except demo-auth checks. Does not need secrets.
+name: Platform smoke (API)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  api-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Run platform-exhaustive-check
+        env:
+          BASE_URL: https://purepos.co.uk
+        run: node scripts/platform-exhaustive-check.mjs

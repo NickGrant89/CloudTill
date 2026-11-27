@@ -73,15 +73,15 @@ export function Login({ onSuccess }: Props) {
         method: "POST",
         body: JSON.stringify(
           pairing
-            ? { email: email.trim(), pin: nextPin }
+            ? { email: email.trim(), pin: nextPin, client: "pos" }
             : device
-              ? { pin: nextPin, storeId: device.storeId }
-              : { pin: nextPin }
+              ? { pin: nextPin, storeId: device.storeId, client: "pos" }
+              : { pin: nextPin, client: "pos" }
         ),
       });
       if (changing) {
         if (data.user.role !== "owner" && data.user.role !== "manager") {
-          setError("Only an owner or manager can change which till this iPad is.");
+          setError("Only an owner or manager can change which till this phone or iPad is.");
           setPinValue("");
           return;
         }
@@ -127,7 +127,7 @@ export function Login({ onSuccess }: Props) {
     try {
       const data = await api<LoginResult>("/auth/login", {
         method: "POST",
-        body: JSON.stringify({ email: email.trim(), pin: pinRef.current, storeId }),
+        body: JSON.stringify({ email: email.trim(), pin: pinRef.current, storeId, client: "pos" }),
       });
       remember(data);
       setBranches(null);
@@ -173,7 +173,7 @@ export function Login({ onSuccess }: Props) {
       <div className="login">
         <div className="login-card">
           <h1 className="brand">PurePOS</h1>
-          <p className="tag">Use this iPad as…</p>
+          <p className="tag">Use this device as…</p>
           <div className="branch-list">
             {tillChoices.map((register) => {
               const tone = registerTone(register.id, tillChoices);
@@ -250,7 +250,7 @@ export function Login({ onSuccess }: Props) {
           {pairing
             ? "Sign in once with your email — after that staff only need their PIN."
             : changing
-              ? "This confirms you can move this iPad to a different till."
+              ? "This confirms you can move this phone or iPad to a different till."
               : `${/\/kitchen\/?$/.test(window.location.pathname) ? "Kitchen screen" : "Till"}: ${device?.storeName ?? "PurePOS Demo Café"}`}
           {!pairing && !changing && (
             <button type="button" className="linkish" onClick={() => { setPairing(true); setPinValue(""); setError(""); }}>
@@ -262,7 +262,7 @@ export function Login({ onSuccess }: Props) {
         {pinned && !pairing && !changing && (
           <p className="device-line">
             <span className="register-badge" style={{ background: toneAt(pinned.toneIndex).bg, color: toneAt(pinned.toneIndex).ink }}>
-              This iPad is {pinned.registerName}
+              This till is {pinned.registerName}
             </span>
             <button
               type="button"

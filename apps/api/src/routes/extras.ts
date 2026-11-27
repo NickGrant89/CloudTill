@@ -1,11 +1,22 @@
-import { Router } from "express";
+import { Router, type NextFunction, type Response } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 import { rejectForeign } from "../tenant.js";
+import { storeAllowsFeature } from "./billing.js";
 
 export const extrasRouter = Router();
 extrasRouter.use(requireAuth);
+
+async function requireAdvancedReports(req: AuthedRequest, res: Response, next: NextFunction) {
+  if (!(await storeAllowsFeature(req.user!.storeId, "advanced_reports"))) {
+    return res.status(402).json({
+      error: "End-of-day and richer exports need an active Complete or Multi plan. Upgrade in Settings → Billing.",
+      feature: "advanced_reports",
+    });
+  }
+  next();
+}
 
 /** UTC instants for the start and end of `day` (YYYY-MM-DD) in the store's own time zone. */
 async function storeDayBounds(storeId: string, rawDay: unknown) {
@@ -27,10 +38,27 @@ async function storeDayBounds(storeId: string, rawDay: unknown) {
 
 /** Open tickets board (POS + kitchen-adjacent) */
 extrasRouter.get("/tickets-board", async (req: AuthedRequest, res) => {
+  const storeId = req.user!.storeId;
+  // Stale empty placeholders only — do not void the till's current empty sale
+  const cutoff = new Date(Date.now() - 30 * 60 * 1000);
+  const stale = await prisma.ticket.findMany({
+    where: { storeId, status: "open", lines: { none: {} }, updatedAt: { lt: cutoff } },
+    select: { id: true },
+  });
+  if (stale.length) {
+    await prisma.ticket.updateMany({
+      where: { id: { in: stale.map((row) => row.id) } },
+      data: { status: "voided" },
+    });
+  }
+
   const tickets = await prisma.ticket.findMany({
     where: {
-      storeId: req.user!.storeId,
-      status: { in: ["open", "held"] },
+      storeId,
+      OR: [
+        { status: "held" },
+        { status: "open", lines: { some: {} } },
+      ],
     },
     include: { lines: true, customer: true, register: true },
     orderBy: { updatedAt: "desc" },
@@ -175,7 +203,7 @@ function escapeHtml(s: string) {
 }
 
 /** End-of-day CSV export (sales + payments summary) */
-extrasRouter.get("/eod.csv", async (req: AuthedRequest, res) => {
+extrasRouter.get("/eod.csv", requireAdvancedReports, async (req: AuthedRequest, res) => {
   const { day, from, to } = await storeDayBounds(req.user!.storeId, req.query.date);
 
   const sales = await prisma.sale.findMany({
@@ -223,7 +251,7 @@ extrasRouter.get("/eod.csv", async (req: AuthedRequest, res) => {
 });
 
 /** Stub “email EOD” — returns payload that a mailer would send */
-extrasRouter.get("/eod-summary", requireRole("owner", "manager"), async (req: AuthedRequest, res) => {
+extrasRouter.get("/eod-summary", requireRole("owner", "manager"), requireAdvancedReports, async (req: AuthedRequest, res) => {
   const { day, from, to } = await storeDayBounds(req.user!.storeId, req.query.date);
   const sales = await prisma.sale.findMany({
     where: { storeId: req.user!.storeId, createdAt: { gte: from, lte: to } },

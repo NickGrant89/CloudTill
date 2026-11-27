@@ -3,9 +3,11 @@ import { z } from "zod";
 import { nanoid } from "nanoid";
 import { prisma } from "../db.js";
 import { orderStoredModifiers } from "../modifierOrder.js";
+import { ensureKitchenTicketForSale } from "../kitchenTicket.js";
 import { owned, rejectForeign } from "../tenant.js";
 import { requireAuth, type AuthedRequest } from "../auth.js";
 import { calcTax, lineSubtotal } from "../money.js";
+import { sortPaymentMethods, turnedOffTenderName } from "../paymentMethods.js";
 
 export const posRouter = Router();
 posRouter.use(requireAuth);
@@ -48,7 +50,7 @@ async function ticketTotals(ticketId: string) {
   };
 }
 
-async function serializeTicket(ticketId: string) {
+export async function serializeTicket(ticketId: string) {
   const ticket = await prisma.ticket.findUniqueOrThrow({
     where: { id: ticketId },
     include: { lines: true, customer: true, register: true },
@@ -83,13 +85,63 @@ async function serializeTicket(ticketId: string) {
   };
 }
 
+/** Void empty open tickets that have sat unused — keep recent ones for the active till. */
+async function voidStaleEmptyOpenTickets(storeId: string, keepId?: string | null) {
+  const cutoff = new Date(Date.now() - 30 * 60 * 1000);
+  const empties = await prisma.ticket.findMany({
+    where: {
+      storeId,
+      status: "open",
+      lines: { none: {} },
+      updatedAt: { lt: cutoff },
+      ...(keepId ? { NOT: { id: keepId } } : {}),
+    },
+    select: { id: true },
+  });
+  if (!empties.length) return 0;
+  await prisma.ticket.updateMany({
+    where: { id: { in: empties.map((row) => row.id) } },
+    data: { status: "voided" },
+  });
+  return empties.length;
+}
+
+/** On one till, only one empty open ticket is needed — void the rest. */
+async function voidExtraEmptyOnRegister(storeId: string, registerId: string, keepId: string) {
+  const extras = await prisma.ticket.findMany({
+    where: {
+      storeId,
+      registerId,
+      status: "open",
+      lines: { none: {} },
+      NOT: { id: keepId },
+    },
+    select: { id: true },
+  });
+  if (!extras.length) return;
+  await prisma.ticket.updateMany({
+    where: { id: { in: extras.map((row) => row.id) } },
+    data: { status: "voided" },
+  });
+}
+
 posRouter.get("/tickets", async (req: AuthedRequest, res) => {
   const status = typeof req.query.status === "string" ? req.query.status : undefined;
+  const storeId = req.user!.storeId;
+  if (status === "open" || !status) {
+    await voidStaleEmptyOpenTickets(storeId);
+  }
   const tickets = await prisma.ticket.findMany({
-    where: {
-      storeId: req.user!.storeId,
-      status: status ? status : { in: ["open", "held"] },
-    },
+    where:
+      status === "held"
+        ? { storeId, status: "held" }
+        : status === "open"
+          ? // Hide empty placeholders from Tickets · N and the open rail
+            { storeId, status: "open", lines: { some: {} } }
+          : {
+              storeId,
+              OR: [{ status: "held" }, { status: "open", lines: { some: {} } }],
+            },
     orderBy: { updatedAt: "desc" },
   });
   const result = [];
@@ -106,9 +158,36 @@ posRouter.post("/tickets", async (req: AuthedRequest, res) => {
     .parse(req.body);
   if (await rejectForeign(res, "register", [body.registerId], req.user!.storeId)) return;
 
+  const storeId = req.user!.storeId;
+  // Reuse an empty open ticket on this till instead of creating another Sale · 0 lines
+  const empty = await prisma.ticket.findFirst({
+    where: {
+      storeId,
+      registerId: body.registerId,
+      status: "open",
+      lines: { none: {} },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+  if (empty) {
+    await voidExtraEmptyOnRegister(storeId, body.registerId, empty.id);
+    const name = body.name?.trim();
+    if (name && name !== empty.name) {
+      await prisma.ticket.update({
+        where: { id: empty.id },
+        data: { name, updatedAt: new Date() },
+      });
+    } else {
+      await prisma.ticket.update({ where: { id: empty.id }, data: { updatedAt: new Date() } });
+    }
+    return res.json(await serializeTicket(empty.id));
+  }
+
+  await voidStaleEmptyOpenTickets(storeId);
+
   const ticket = await prisma.ticket.create({
     data: {
-      storeId: req.user!.storeId,
+      storeId,
       registerId: body.registerId,
       employeeId: req.user!.sub,
       name: body.name ?? `Ticket ${nanoid(4)}`,
@@ -155,7 +234,7 @@ posRouter.post("/tickets/:id/lines", owned("ticket"), async (req: AuthedRequest,
       name: variant.item.name + (variant.name !== "Regular" ? ` (${variant.name})` : ""),
       quantity: body.quantity,
       unitPriceCents: variant.priceCents,
-      modifiersJson: JSON.stringify(await orderStoredModifiers(body.modifiers ?? [])),
+      modifiersJson: JSON.stringify(await orderStoredModifiers(body.modifiers ?? [], { variantId: variant.id })),
       note: body.note,
     },
   });
@@ -163,16 +242,46 @@ posRouter.post("/tickets/:id/lines", owned("ticket"), async (req: AuthedRequest,
   res.status(201).json(await serializeTicket(req.params.id));
 });
 
-posRouter.patch("/tickets/:id/lines/:lineId", owned("ticket"), owned("ticketLine", "lineId"), async (req, res) => {
+posRouter.patch("/tickets/:id/lines/:lineId", owned("ticket"), owned("ticketLine", "lineId"), async (req: AuthedRequest, res) => {
   const body = z
     .object({
       quantity: z.number().positive().optional(),
       discountCents: z.number().int().optional(),
       note: z.string().nullable().optional(),
+      modifiers: z
+        .array(
+          z.object({
+            modifierId: z.string().optional(),
+            name: z.string(),
+            priceCents: z.number().int(),
+            groupName: z.string().max(80).optional(),
+          })
+        )
+        .optional(),
     })
     .parse(req.body);
-  await prisma.ticketLine.update({ where: { id: req.params.lineId }, data: body });
-  res.json(await serializeTicket(req.params.id));
+  if (body.modifiers && (await rejectForeign(res, "modifier", body.modifiers.map((mod) => mod.modifierId), req.user!.storeId))) {
+    return;
+  }
+  const { modifiers, ...rest } = body;
+  const lineRow = modifiers
+    ? await prisma.ticketLine.findUnique({ where: { id: String(req.params.lineId) }, select: { variantId: true } })
+    : null;
+  await prisma.ticketLine.update({
+    where: { id: String(req.params.lineId) },
+    data: {
+      ...rest,
+      ...(modifiers
+        ? {
+            modifiersJson: JSON.stringify(
+              await orderStoredModifiers(modifiers, lineRow ? { variantId: lineRow.variantId } : undefined)
+            ),
+          }
+        : {}),
+    },
+  });
+  await prisma.ticket.update({ where: { id: String(req.params.id) }, data: { updatedAt: new Date() } });
+  res.json(await serializeTicket(String(req.params.id)));
 });
 
 posRouter.delete("/tickets/:id/lines/:lineId", owned("ticket"), owned("ticketLine", "lineId"), async (req, res) => {
@@ -281,6 +390,12 @@ posRouter.post("/tickets/:id/pay", owned("ticket"), async (req: AuthedRequest, r
     where: { id: { in: body.payments.map((p) => p.paymentTypeId) }, storeId: ticket.storeId },
   });
   const ptMap = new Map(paymentTypes.map((p) => [p.id, p]));
+  const turnedOff = turnedOffTenderName(body.payments, ptMap);
+  if (turnedOff) {
+    return res.status(400).json({
+      error: `${turnedOff} is turned off. Turn it on in Settings → Payment methods.`,
+    });
+  }
 
   // Store credit + gift card deduction (validate first)
   const { redeemGiftCard } = await import("./giftcards.js");
@@ -404,6 +519,37 @@ posRouter.post("/tickets/:id/pay", owned("ticket"), async (req: AuthedRequest, r
     });
   }
 
+  const kitchenLines = (
+    ticket as {
+      lines: {
+        variantId: string;
+        name: string;
+        quantity: number;
+        unitPriceCents: number;
+        modifiersJson: string;
+        note: string | null;
+      }[];
+    }
+  ).lines;
+  const kitchenTicket = await ensureKitchenTicketForSale({
+    storeId: ticket.storeId,
+    saleId: sale.id,
+    receiptNumber: sale.receiptNumber,
+    ticketId: ticket.id,
+    customerName: sale.customer?.name ?? ticket.name,
+    fulfillment: "dine_in",
+    note: ticket.note,
+    alreadySent: Boolean(ticket.kitchenStatus),
+    lines: kitchenLines.map((line) => ({
+      variantId: line.variantId,
+      name: line.name,
+      quantity: line.quantity,
+      unitPriceCents: line.unitPriceCents,
+      modifiersJson: line.modifiersJson,
+      note: line.note,
+    })),
+  });
+
   await prisma.ticket.update({ where: { id: ticket.id }, data: { status: "paid" } });
   await prisma.ticketLine.deleteMany({ where: { ticketId: ticket.id } });
 
@@ -422,6 +568,7 @@ posRouter.post("/tickets/:id/pay", owned("ticket"), async (req: AuthedRequest, r
       customerName: sale.customer?.name ?? null,
       createdAt: sale.createdAt.toISOString(),
     },
+    kitchenTicket,
     drawerOpened: opensDrawer,
     changeCents: sale.changeCents,
   });
@@ -453,7 +600,7 @@ posRouter.get("/payment-types", async (req: AuthedRequest, res) => {
   const pts = await prisma.paymentType.findMany({
     where: { storeId: req.user!.storeId, enabled: true },
   });
-  res.json(pts);
+  res.json(sortPaymentMethods(pts));
 });
 
 posRouter.get("/taxes", async (req: AuthedRequest, res) => {
@@ -595,7 +742,9 @@ posRouter.post("/offline-sales", async (req: AuthedRequest, res) => {
       lines: {
         create: await Promise.all(
           body.lines.map(async (line) => {
-            const modifiers = await orderStoredModifiers(line.modifiers);
+            const modifiers = await orderStoredModifiers(line.modifiers, {
+              variantId: line.variantId ?? undefined,
+            });
             const modSum = modifiers.reduce((s, m) => s + m.priceCents, 0);
             return {
               variantId: line.variantId,

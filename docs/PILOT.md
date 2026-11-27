@@ -48,7 +48,7 @@ Copy `apps/api/.env.example` → `apps/api/.env`:
 - CLI: `pnpm db:reset` (wipe SQLite + seed)
 - BO: **Settings → Pilot tools → Demo reset** (owner) → `POST /api/extras/demo-reset`
 
-Reseed includes Shop (pro) trial billing settings on the demo store.
+Reseed includes Complete (`pro`) trial billing settings on the demo store.
 
 ## Offline till ↔ cloud sync
 
@@ -73,21 +73,21 @@ Still true: clearing site data, or wiping the device *before* sync/export, can l
 
 | Package | £/mo | Cloud features |
 | --- | --- | --- |
-| Solo (`starter`) | 29 | Till · BO · Items/groups · live ticket sync · offline queue · backup |
-| Shop (`pro`) | 59 | + web ordering · kitchen · UK delivery apps · CSV · richer reports |
-| Group (`multi`) | 99 | + multi-store transfers · assign items to branches |
+| Essential (`starter`) | 19 | Till · BO · Items/groups · live ticket sync · offline queue · backup |
+| Complete (`pro`) | 35 | + web ordering · kitchen · UK delivery apps · CSV · richer reports |
+| Multi (`multi`) | 59 | + multi-store transfers · assign items to branches |
 
 - Public page: https://purepos.co.uk/pricing (cards from `/api/public/plans`)
 - BO **Settings → Billing** to switch package / activate license
-- Gates: CSV / ordering / delivery → Shop+; transfers / branch assign → Group
+- Gates: CSV / ordering / delivery / kitchen / richer reports → Complete+; transfers / branch assign → Multi
 
 ## Smoke checklist
 
 - [ ] `/api/health` → `ok: true` (0.5.4+)
 - [ ] POS PIN `1111`, add Latte, charge £
 - [ ] Offline badge; queue a sale offline; sync online
-- [ ] BO Import preview (Shop plan)
-- [ ] Pricing page Solo/Shop/Group + trial signup
+- [ ] BO Import preview (Complete plan)
+- [ ] Pricing page Essential/Complete/Multi + trial signup
 - [ ] Settings billing plan switch + backup panel
 - [ ] Kitchen simulate delivery app
 - [ ] Demo reset + re-login

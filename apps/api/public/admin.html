@@ -144,12 +144,22 @@
         .controls .sep { display: none; }
       }
       .empty { color: var(--muted); padding: 12px 0; }
+      .comm-scroll { overflow-x: auto; }
+      .comm-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.92rem; }
+      .comm-table th { color: var(--muted); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; }
+      .comm-table th, .comm-table td { text-align: left; padding: 8px 10px 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+      .comm-table .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+      .comm-table .note { color: var(--muted); min-width: 180px; }
+      .comm-table tr.is-owed td.num { font-weight: 800; }
+      .person { margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--line); }
+      .owed-total { font-size: 1.15rem; margin: 12px 0 0; }
+      .controls select.salesPick { max-width: 220px; }
     </style>
   </head>
   <body>
     <div class="wrap">
       <p class="brand">PurePOS</p>
-      <p class="sub">Platform admin · every business on PurePOS, their plans and licence keys</p>
+      <p class="sub">Platform admin · businesses, plans, licence keys and sales commission</p>
 
       <section id="gate" class="gate">
         <label for="secret">Admin password</label>
@@ -170,6 +180,32 @@
         </div>
         <div class="stats" id="stats"></div>
 
+        <div class="panel" id="commissionPanel">
+          <div class="panel-head">
+            <h2>Sales commission</h2>
+          </div>
+          <p class="sub" id="commissionRule">10% of the monthly plan, owed the month after the customer pays. It stops when they cancel. No first-year bonus.</p>
+          <form id="addPerson" class="row" style="margin-top: 14px">
+            <div>
+              <label for="personName">Name</label>
+              <input id="personName" required maxlength="80" placeholder="Sales person" autocomplete="off" />
+            </div>
+            <div>
+              <label for="personEmail">Email</label>
+              <input id="personEmail" type="email" maxlength="160" placeholder="Optional" autocomplete="off" />
+            </div>
+            <div>
+              <label for="personPhone">Phone</label>
+              <input id="personPhone" maxlength="40" placeholder="Optional" autocomplete="off" />
+            </div>
+            <div style="flex: 0 0 auto">
+              <label>&nbsp;</label>
+              <button type="submit">Add sales person</button>
+            </div>
+          </form>
+          <div id="commissionBody"></div>
+        </div>
+
         <div class="panel">
           <div class="panel-head">
             <h2>Businesses</h2>
@@ -188,7 +224,7 @@
     </div>
     <script>
       const STORAGE_KEY = "purepos.platformAdminSecret";
-      const PLAN_NAMES = { starter: "Solo", pro: "Shop", multi: "Group" };
+      const PLAN_NAMES = { starter: "Essential", pro: "Complete", multi: "Multi" };
       const STATUS = {
         trialing: "Free trial",
         active: "Paid",
@@ -212,7 +248,27 @@
       const searchInput = document.getElementById("search");
       let secret = sessionStorage.getItem(STORAGE_KEY) || "";
       let businesses = [];
+      let commission = null;
       let filter = "all";
+
+      function gbp(pence) {
+        return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format((Number(pence) || 0) / 100);
+      }
+      function personIdFor(companyKey) {
+        for (const person of commission?.salesPeople || []) {
+          if ((person.lines || []).some((line) => line.companyKey === companyKey)) return person.id;
+        }
+        return "";
+      }
+      function salesOptions(selectedId) {
+        const people = commission?.salesPeople || [];
+        return [`<option value="">No sales person</option>`]
+          .concat(people.map((person) => {
+            const label = person.email ? `${person.name} (${person.email})` : person.name;
+            return `<option value="${esc(person.id)}" ${person.id === selectedId ? "selected" : ""}>${esc(label)}</option>`;
+          }))
+          .join("");
+      }
 
       async function api(path, opts = {}) {
         const headers = Object.assign(
@@ -328,6 +384,8 @@
             : "";
           const key = bl.licenseKeyLast ? `<div>Licence key: <code>${esc(bl.licenseKeyLast)}</code></div>` : "";
           const id = esc(b.hq.id);
+          const salesId = personIdFor(b.key);
+          const salesPerson = (commission?.salesPeople || []).find((person) => person.id === salesId);
           const planOptions = Object.entries(PLAN_NAMES)
             .map(([v, n]) => `<option value="${v}" ${bl.planId === v ? "selected" : ""}>${n}</option>`)
             .join("");
@@ -339,6 +397,7 @@
                   <div>${b.owners.length ? esc(b.owners.join(", ")) : "No owner login"} · signed up ${day(b.hq.createdAt)}</div>
                   ${branchNames}
                   <div>${plural(b.branches.length, "store")} · ${plural(b.items, "item")} · ${plural(b.sales, "sale")} · ${plural(b.staff, "staff login")}</div>
+                  ${b.isDemo ? "" : `<div>Sales: ${salesPerson ? esc(salesPerson.name) : "nobody yet"}</div>`}
                   <div><a href="/order/${esc(b.hq.slug)}" target="_blank" rel="noreferrer">Ordering page</a></div>
                   ${key}
                 </div>
@@ -348,6 +407,9 @@
             <div class="billing-line">${esc(billingSentence(bl))}</div>
             ${b.isDemo ? `<p class="biz-meta">The shared demo is locked: its plan can't be changed and it can't be deleted.</p>` : `
             <div class="controls">
+              <select class="salesPick" aria-label="Sales person">${salesOptions(salesId)}</select>
+              <button type="button" class="ghost" data-act="sales">Attach</button>
+              <span class="sep"></span>
               <select class="planPick" aria-label="Plan">${planOptions}</select>
               <button type="button" data-act="issue">Issue licence key</button>
               <button type="button" class="ghost" data-act="paid">Mark as paid</button>
@@ -384,11 +446,60 @@
         }).join("") || `<li class="empty">Nothing yet</li>`;
       }
 
+      function renderCommission() {
+        const rule = document.getElementById("commissionRule");
+        const el = document.getElementById("commissionBody");
+        if (!commission) {
+          el.innerHTML = "";
+          return;
+        }
+        rule.textContent = commission.rule;
+        const people = commission.salesPeople || [];
+        let html = `<p class="owed-total">Total owed in ${esc(commission.owedMonthLabel)}: ${esc(gbp(commission.totalCommissionPence))}</p>`;
+        if (!people.length) {
+          html += `<p class="empty">No sales people yet. Add one, then attach them to a business below.</p>`;
+        }
+        for (const person of people) {
+          const contact = [person.email, person.phone].filter(Boolean).join(" · ");
+          const rows = (person.lines || []).map((line) => `<tr class="${line.owed ? "is-owed" : ""}">
+              <td>${esc(line.customerName)}${line.ownerEmail ? `<div class="biz-meta">${esc(line.ownerEmail)}</div>` : ""}</td>
+              <td>${esc(line.planName)}</td>
+              <td class="num">${gbp(line.planAmountPence)}</td>
+              <td class="num">${gbp(line.commissionPence)}</td>
+              <td class="note">${esc(line.reason)}</td>
+            </tr>`).join("");
+          const table = person.lines?.length
+            ? `<div class="comm-scroll"><table class="comm-table">
+                <thead><tr><th>Customer</th><th>Plan</th><th class="num">Plan amount</th><th class="num">10%</th><th>This month</th></tr></thead>
+                <tbody>${rows}</tbody>
+              </table></div>`
+            : `<p class="empty">Not attached to a business yet. Choose them on a business card.</p>`;
+          html += `<div class="person" data-person="${esc(person.id)}">
+            <div class="biz-head">
+              <div>
+                <div class="biz-name">${esc(person.name)}</div>
+                ${contact ? `<div class="biz-meta">${esc(contact)}</div>` : ""}
+              </div>
+              <div class="row" style="flex: 0 1 420px; margin: 0">
+                <input class="personName" value="${esc(person.name)}" aria-label="Sales person name" maxlength="80" />
+                <button type="button" class="ghost" data-person-act="rename">Save name</button>
+                <button type="button" class="ghost danger" data-person-act="remove">Remove</button>
+              </div>
+            </div>
+            ${table}
+            <p class="biz-meta">Owed for ${esc(person.name)} in ${esc(commission.owedMonthLabel)}: <strong>${gbp(person.totalCommissionPence)}</strong></p>
+          </div>`;
+        }
+        el.innerHTML = html;
+      }
+
       async function loadOverview() {
-        const data = await api("/overview");
+        const [data, comm] = await Promise.all([api("/overview"), api("/commission")]);
+        commission = comm;
         document.getElementById("generatedAt").textContent = "Updated " + when(data.generatedAt);
         businesses = groupBusinesses(data.stores);
         renderStats();
+        renderCommission();
         renderBusinesses();
         renderEvents(data.recentEvents);
       }
@@ -410,6 +521,48 @@
           gateMsg.className = "msg err";
         }
       }
+
+      document.getElementById("addPerson").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const name = document.getElementById("personName").value.trim();
+        const email = document.getElementById("personEmail").value.trim();
+        const phone = document.getElementById("personPhone").value.trim();
+        try {
+          await api("/sales-people", { method: "POST", body: JSON.stringify({ name, email, phone }) });
+          document.getElementById("addPerson").reset();
+          setMsg(`${name} added. Attach them to a business below.`, "ok");
+          await loadOverview();
+        } catch (err) {
+          setMsg(err.message || String(err), "err");
+        }
+      });
+      document.getElementById("commissionBody").addEventListener("click", async (e) => {
+        const btn = e.target.closest("[data-person-act]");
+        if (!btn) return;
+        const box = btn.closest("[data-person]");
+        const id = box.getAttribute("data-person");
+        const act = btn.getAttribute("data-person-act");
+        const current = (commission?.salesPeople || []).find((person) => person.id === id);
+        try {
+          if (act === "remove") {
+            const label = current?.name || "this sales person";
+            if (!confirm(`Remove ${label}? Their businesses stay. They just stop earning commission.`)) return;
+            await api(`/sales-people/${id}`, { method: "DELETE" });
+            setMsg(`${label} removed.`, "ok");
+          } else if (act === "rename") {
+            const name = box.querySelector(".personName").value.trim();
+            if (!name) {
+              setMsg("Enter a name.", "err");
+              return;
+            }
+            await api(`/sales-people/${id}`, { method: "PATCH", body: JSON.stringify({ name }) });
+            setMsg("Name saved.", "ok");
+          }
+          await loadOverview();
+        } catch (err) {
+          setMsg(err.message || String(err), "err");
+        }
+      });
 
       document.getElementById("unlock").addEventListener("click", unlock);
       secretInput.addEventListener("keydown", (e) => { if (e.key === "Enter") unlock(); });
@@ -444,7 +597,15 @@
         const plan = PLAN_NAMES[planId];
         try {
           showKey(null);
-          if (act === "issue") {
+          if (act === "sales") {
+            const salesPersonId = card.querySelector(".salesPick")?.value || "";
+            await api(`/companies/${id}/sales-person`, {
+              method: "PUT",
+              body: JSON.stringify({ salesPersonId: salesPersonId || null }),
+            });
+            const chosen = (commission?.salesPeople || []).find((person) => person.id === salesPersonId);
+            setMsg(salesPersonId ? `${chosen ? chosen.name : "Sales person"} is attached to ${name}.` : `Sales person cleared on ${name}.`, "ok");
+          } else if (act === "issue") {
             if (!confirm(`Issue a ${plan} licence key for ${name}? Their plan becomes paid ${plan} straight away.`)) return;
             const res = await api(`/stores/${id}/license/issue`, { method: "POST", body: JSON.stringify({ planId, activate: true }) });
             showKey(res.licenseKey, name);

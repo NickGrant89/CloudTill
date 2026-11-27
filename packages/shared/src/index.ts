@@ -1,6 +1,11 @@
 /** Shared PurePOS domain types & constants (repo may still be named CloudTill). */
 
 export * from "./brand.js";
+export * from "./catalogSort.js";
+export * from "./modifierPricing.js";
+export * from "./pizzaTill.js";
+export * from "./pizzaHalfAndHalfWizard.js";
+export * from "./textPayMessage.js";
 
 export const ROLES = ["owner", "manager", "cashier"] as const;
 export type Role = (typeof ROLES)[number];
@@ -67,6 +72,8 @@ export interface ModifierGroupDto {
   name: string;
   minSelect: number;
   maxSelect: number;
+  /** Priced options included at £0 before extras are charged (per group). */
+  freeSelect: number;
   modifiers: ModifierDto[];
 }
 
@@ -235,6 +242,7 @@ export const API_PREFIX = "/api";
 
 export * from "./receipt.js";
 export * from "./plans.js";
+export * from "./planGates.js";
 
 export interface GiftCardDto {
   id: string;

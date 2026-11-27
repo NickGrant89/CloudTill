@@ -49,7 +49,6 @@ async function buildStoreBackup(storeId: string) {
         name: true,
         role: true,
         pinHash: true,
-        pinDisplay: true,
         active: true,
         createdAt: true,
       },
@@ -219,6 +218,7 @@ backupRouter.post("/restore", requireRole("owner"), async (req: AuthedRequest, r
           name: String(g.name || "Options"),
           minSelect: Number(g.minSelect ?? 0),
           maxSelect: Number(g.maxSelect ?? 1),
+          freeSelect: Number(g.freeSelect ?? 0),
           sortOrder: Number(g.sortOrder ?? 0),
           modifiers: {
             create: mods.map((m, index) => ({

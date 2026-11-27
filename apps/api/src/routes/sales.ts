@@ -54,6 +54,8 @@ function mapSale(s: {
 
 salesRouter.get("/", async (req: AuthedRequest, res) => {
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  const limitRaw = typeof req.query.limit === "string" ? Number(req.query.limit) : 100;
+  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 100) : 100;
   const sales = await prisma.sale.findMany({
     where: {
       storeId: req.user!.storeId,
@@ -68,7 +70,7 @@ salesRouter.get("/", async (req: AuthedRequest, res) => {
     },
     include: { lines: true, payments: true, employee: true, customer: true },
     orderBy: { createdAt: "desc" },
-    take: 100,
+    take: limit,
   });
   res.json(sales.map(mapSale));
 });
@@ -79,6 +81,57 @@ salesRouter.get("/:id", owned("sale"), async (req, res) => {
     include: { lines: true, payments: true, employee: true, customer: true, register: true },
   });
   res.json({ ...mapSale(sale), registerName: sale.register.name });
+});
+
+/** Copy a completed sale onto a new open till ticket (does not void/refund the original). */
+salesRouter.post("/:id/reopen", owned("sale"), async (req: AuthedRequest, res) => {
+  const body = z.object({ registerId: z.string().min(1) }).parse(req.body);
+  const register = await prisma.register.findFirst({
+    where: { id: body.registerId, storeId: req.user!.storeId },
+  });
+  if (!register) return res.status(404).json({ error: "Register not found" });
+
+  const sale = await prisma.sale.findUniqueOrThrow({
+    where: { id: String(req.params.id) },
+    include: { lines: true, customer: true },
+  });
+  if (sale.storeId !== req.user!.storeId) return res.status(404).json({ error: "Sale not found" });
+
+  const copyable = sale.lines.filter((line) => Boolean(line.variantId));
+  if (!copyable.length) {
+    return res.status(400).json({ error: "That sale has no items that can be opened on the till" });
+  }
+
+  const ticket = await prisma.ticket.create({
+    data: {
+      storeId: sale.storeId,
+      registerId: register.id,
+      employeeId: req.user!.sub,
+      customerId: sale.customerId,
+      name: `Recall · ${sale.receiptNumber}`,
+      note: `Reopened from ${sale.receiptNumber}`,
+      status: "open",
+      lines: {
+        create: copyable.map((line) => ({
+          variantId: line.variantId!,
+          name: line.name,
+          quantity: line.quantity,
+          unitPriceCents: line.unitPriceCents,
+          discountCents: line.discountCents,
+          modifiersJson: line.modifiersJson || "[]",
+        })),
+      },
+    },
+  });
+
+  const { serializeTicket } = await import("./pos.js");
+  const serialized = await serializeTicket(ticket.id);
+  res.status(201).json({
+    ...serialized,
+    sourceSaleId: sale.id,
+    sourceReceiptNumber: sale.receiptNumber,
+    skippedLines: sale.lines.length - copyable.length,
+  });
 });
 
 salesRouter.post("/:id/void", owned("sale"), requireRole("owner", "manager"), async (req: AuthedRequest, res) => {

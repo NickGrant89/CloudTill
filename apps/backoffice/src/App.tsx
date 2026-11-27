@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { backOfficeNavAllowed } from "@cloudtill/shared";
 import { api, getToken, setToken } from "./api";
 import { Pages, switchStore, type PageId } from "./Pages";
 import { LowStockToast } from "./ExtrasPages";
+import { watchBackOfficeTables } from "./stackTables";
 
 interface User {
   id: string;
@@ -17,14 +19,41 @@ export function App() {
   const [storeName, setStoreName] = useState("");
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
   const [page, setPage] = useState<PageId>("dashboard");
+  const [planFeatures, setPlanFeatures] = useState<string[]>([]);
   const [navOpen, setNavOpen] = useState(false);
   const [email, setEmail] = useState(() => new URLSearchParams(window.location.search).get("email") || "");
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
+  const mainRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     setNavOpen(false);
   }, [page]);
+
+  useEffect(() => {
+    if (!user) return;
+    return watchBackOfficeTables(mainRef.current);
+  }, [user, page]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (backOfficeNavAllowed(page, planFeatures)) return;
+    setPage("dashboard");
+  }, [user, page, planFeatures]);
+
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setNavOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [navOpen]);
 
   useEffect(() => {
     const token = getToken();
@@ -32,11 +61,18 @@ export function App() {
       setLoading(false);
       return;
     }
-    api<{ user: User; store: { name: string }; stores?: { id: string; name: string }[] }>("/auth/me")
+    api<{
+      user: User;
+      store: { name: string };
+      stores?: { id: string; name: string }[];
+    }>("/auth/me")
       .then((d) => {
         setUser(d.user);
         setStoreName(d.store.name);
         setBranches(d.stores ?? []);
+        return api<{ features: string[] }>("/billing")
+          .then((b) => setPlanFeatures(b.features))
+          .catch(() => setPlanFeatures([]));
       })
       .catch(() => setToken(null))
       .finally(() => setLoading(false));
@@ -53,12 +89,18 @@ export function App() {
         stores?: { id: string; name: string }[];
       }>("/auth/login", {
         method: "POST",
-        body: JSON.stringify({ email, pin }),
+        body: JSON.stringify({ email, pin, client: "backoffice" }),
       });
       setToken(data.token);
       setUser(data.user);
       setStoreName(data.store.name);
       setBranches(data.stores ?? []);
+      try {
+        const billing = await api<{ features: string[] }>("/billing");
+        setPlanFeatures(billing.features);
+      } catch {
+        setPlanFeatures([]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     }
@@ -80,7 +122,7 @@ export function App() {
       <div className="login">
         <form className="login-card" onSubmit={(e) => void login(e)}>
           <h1>PurePOS</h1>
-          <p>Back office · desktop management</p>
+          <p>Owners and managers · email + PIN (not the till alone)</p>
           <div className="field">
             <label htmlFor="bo-email">Email</label>
             <input
@@ -141,7 +183,7 @@ export function App() {
     { id: "kitchen", label: "Kitchen / delivery" },
     { id: "employees", label: "Employees" },
     { id: "timeclock", label: "Time clock" },
-    { id: "stores", label: "Stores & registers" },
+    { id: "stores", label: "Stores & tills" },
     { id: "sales", label: "Sales history" },
     { id: "eod", label: "End of day" },
     { id: "reports", label: "Reports" },
@@ -151,7 +193,8 @@ export function App() {
     { id: "settings", label: "Settings" },
   ];
 
-  const pageLabel = nav.find((n) => n.id === page)?.label ?? "Back office";
+  const visibleNav = nav.filter((n) => backOfficeNavAllowed(n.id, planFeatures));
+  const pageLabel = visibleNav.find((n) => n.id === page)?.label ?? nav.find((n) => n.id === page)?.label ?? "Back office";
 
   return (
     <div className={`shell${navOpen ? " nav-open" : ""}`}>
@@ -209,7 +252,7 @@ export function App() {
             <p className="sub">{storeName}</p>
           )}
           <nav className="sidebar-nav">
-            {nav.map((n) => (
+            {visibleNav.map((n) => (
               <button
                 key={n.id}
                 type="button"
@@ -239,8 +282,8 @@ export function App() {
             </button>
           </div>
         </aside>
-        <main className="main">
-          <Pages page={page} onNavigate={setPage} />
+        <main className="main" ref={mainRef}>
+          <Pages page={page} onNavigate={setPage} planFeatures={planFeatures} />
         </main>
       </div>
       <LowStockToast onOpenInventory={() => setPage("inventory")} />

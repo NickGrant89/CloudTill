@@ -17,6 +17,9 @@ import {
 } from "./billing.js";
 
 import { companyStoreIds, DEMO_COMPANY } from "../company.js";
+import { loadCommissionReport } from "../commissionReport.js";
+import { tidyGaPizzaCatalog } from "../gaPizzaCatalogTidy.js";
+import { repairPizzaTillLayout } from "../pizzaTillConsolidate.js";
 
 export const adminRouter = Router();
 
@@ -139,6 +142,22 @@ adminRouter.get("/overview", async (_req, res) => {
   });
 });
 
+adminRouter.post("/stores/:storeId/pizza-till-repair", async (req, res) => {
+  const store = await prisma.store.findUnique({ where: { id: req.params.storeId } });
+  if (!store) return res.status(404).json({ error: "Store not found" });
+  const result = await repairPizzaTillLayout(store.id);
+  res.json({ ok: true, ...result });
+});
+
+adminRouter.post("/stores/:storeId/ga-pizza-catalog-tidy", async (req, res) => {
+  const body = z.object({ dryRun: z.boolean().optional() }).safeParse(req.body ?? {});
+  if (!body.success) return res.status(400).json({ error: body.error.flatten() });
+  const store = await prisma.store.findUnique({ where: { id: req.params.storeId } });
+  if (!store) return res.status(404).json({ error: "Store not found" });
+  const result = await tidyGaPizzaCatalog(store.id, Boolean(body.data.dryRun));
+  res.json({ ok: true, ...result });
+});
+
 adminRouter.get("/stores/:storeId", async (req, res) => {
   const store = await prisma.store.findUnique({
     where: { id: req.params.storeId },
@@ -199,7 +218,7 @@ adminRouter.post("/stores/:storeId/trial", async (req, res) => {
   await writeCompanySetting(store.id, BILLING_STATUS_KEY, body.data.status || "trialing");
   await appendBillingAudit(store.id, {
     type: "admin_extend_trial",
-    detail: { trialEndsAt: ends, days: body.data.days || null },
+    detail: { trialEndsAt: ends, days: body.data.days || null, status: body.data.status || "trialing" },
   });
 
   res.json({ ok: true, storeId: store.id, billing: await readBilling(store.id) });
@@ -230,7 +249,7 @@ adminRouter.post("/stores/:storeId/license/issue", async (req, res) => {
   }
   await appendBillingAudit(store.id, {
     type: "admin_issue_license",
-    detail: { planId, licenseKey },
+    detail: { planId, licenseKey, activate: body.data.activate !== false },
   });
 
   res.json({
@@ -282,6 +301,8 @@ adminRouter.delete("/companies/:storeId", async (req, res) => {
   if (body.data.confirmName.trim() !== first?.name) {
     return res.status(400).json({ error: `Type the business name exactly: ${first?.name}` });
   }
+  const companyKey = store.companyKey || first?.id || store.id;
+  await prisma.salesAttribution.deleteMany({ where: { companyKey } });
   // Sales, ticket lines and online orders point at staff and products without cascades, so clear them first.
   const inBusiness = { storeId: { in: ids } };
   await prisma.$transaction([
@@ -291,4 +312,94 @@ adminRouter.delete("/companies/:storeId", async (req, res) => {
     prisma.store.deleteMany({ where: { id: { in: ids } } }),
   ]);
   res.json({ ok: true, deletedStores: ids.length, name: first?.name });
+});
+
+function blankToNull(value: string | undefined) {
+  const trimmed = value?.trim() || "";
+  return trimmed ? trimmed : null;
+}
+
+const salesPersonBody = z.object({
+  name: z.string().trim().min(1, "Enter the sales person's name").max(80),
+  email: z.string().trim().max(160).optional().default(""),
+  phone: z.string().trim().max(40).optional().default(""),
+});
+
+adminRouter.get("/commission", async (_req, res) => {
+  res.json(await loadCommissionReport());
+});
+
+adminRouter.post("/sales-people", async (req, res) => {
+  const body = salesPersonBody.safeParse(req.body ?? {});
+  if (!body.success) {
+    return res.status(400).json({ error: body.error.issues[0]?.message || "Check the sales person details" });
+  }
+  const email = blankToNull(body.data.email);
+  if (email && !z.string().email().safeParse(email).success) {
+    return res.status(400).json({ error: "Enter a valid email, or leave it blank." });
+  }
+  const salesPerson = await prisma.salesPerson.create({
+    data: { name: body.data.name, email, phone: blankToNull(body.data.phone) },
+  });
+  res.status(201).json({ ok: true, salesPerson });
+});
+
+adminRouter.patch("/sales-people/:id", async (req, res) => {
+  const body = z
+    .object({
+      name: z.string().trim().min(1, "Enter the sales person's name").max(80).optional(),
+      email: z.string().trim().max(160).optional(),
+      phone: z.string().trim().max(40).optional(),
+    })
+    .safeParse(req.body ?? {});
+  if (!body.success) {
+    return res.status(400).json({ error: body.error.issues[0]?.message || "Check the sales person details" });
+  }
+  const existing = await prisma.salesPerson.findUnique({ where: { id: req.params.id } });
+  if (!existing) return res.status(404).json({ error: "Sales person not found" });
+  const email = body.data.email === undefined ? undefined : blankToNull(body.data.email);
+  if (email && !z.string().email().safeParse(email).success) {
+    return res.status(400).json({ error: "Enter a valid email, or leave it blank." });
+  }
+  const salesPerson = await prisma.salesPerson.update({
+    where: { id: existing.id },
+    data: {
+      name: body.data.name,
+      email,
+      phone: body.data.phone === undefined ? undefined : blankToNull(body.data.phone),
+    },
+  });
+  res.json({ ok: true, salesPerson });
+});
+
+adminRouter.delete("/sales-people/:id", async (req, res) => {
+  const existing = await prisma.salesPerson.findUnique({ where: { id: req.params.id } });
+  if (!existing) return res.status(404).json({ error: "Sales person not found" });
+  await prisma.salesPerson.delete({ where: { id: existing.id } });
+  res.json({ ok: true });
+});
+
+adminRouter.put("/companies/:storeId/sales-person", async (req, res) => {
+  const body = z.object({ salesPersonId: z.string().min(1).nullable() }).safeParse(req.body ?? {});
+  if (!body.success) return res.status(400).json({ error: "Choose a sales person, or clear them." });
+  const store = await prisma.store.findUnique({ where: { id: req.params.storeId } });
+  if (!store) return res.status(404).json({ error: "Business not found" });
+  if (store.companyKey === DEMO_COMPANY) {
+    return res.status(400).json({ error: "The demo café can't be attached to a sales person." });
+  }
+  const companyKey = store.companyKey || store.id;
+  if (!body.data.salesPersonId) {
+    await prisma.salesAttribution.deleteMany({ where: { companyKey } });
+    return res.json({ ok: true, companyKey, salesPersonId: null });
+  }
+  const person = await prisma.salesPerson.findUnique({ where: { id: body.data.salesPersonId } });
+  if (!person) return res.status(404).json({ error: "Sales person not found" });
+  const ids = await companyStoreIds(store.id);
+  const hq = await prisma.store.findFirst({ where: { id: { in: ids } }, orderBy: { createdAt: "asc" } });
+  await prisma.salesAttribution.upsert({
+    where: { companyKey },
+    create: { salesPersonId: person.id, companyKey, storeId: hq?.id || store.id },
+    update: { salesPersonId: person.id, storeId: hq?.id || store.id },
+  });
+  res.json({ ok: true, companyKey, salesPersonId: person.id, salesPersonName: person.name });
 });

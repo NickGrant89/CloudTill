@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import { receiptModifierLines } from "@cloudtill/shared";
+import { buildKitchenTicketText, queueKitchenPrintJob } from "../kitchenTicket.js";
 import { owned } from "../tenant.js";
 import { soldOutItemIds } from "../services/soldOut.js";
 import { requireAuth, type AuthedRequest } from "../auth.js";
@@ -66,7 +67,7 @@ publicOrderingRouter.get("/stores/:slug/menu", async (req, res) => {
   if (!store) return res.status(404).json({ error: "Store not found" });
 
   const [categories, items, tax, settings, soldOut, popular] = await Promise.all([
-    prisma.category.findMany({ where: { storeId: store.id }, orderBy: { sortOrder: "asc" } }),
+    prisma.category.findMany({ where: { storeId: store.id }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
     prisma.item.findMany({
       where: { storeId: store.id, active: true },
       include: {
@@ -78,7 +79,7 @@ publicOrderingRouter.get("/stores/:slug/menu", async (req, res) => {
           },
         },
       },
-      orderBy: { name: "asc" },
+      orderBy: [{ category: { sortOrder: "asc" } }, { name: "asc" }],
     }),
     prisma.tax.findFirst({ where: { storeId: store.id, enabled: true } }),
     readOrderingSettings(store.id),
@@ -116,7 +117,7 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
   const store = await resolveStore(req.params.slug);
   if (!store) return res.status(404).json({ error: "Store not found" });
   if (!(await storeAllowsFeature(store.id, "online_ordering"))) {
-    return res.status(402).json({ error: "Online ordering needs an active Shop or Group plan. Upgrade in Settings → Billing." });
+    return res.status(402).json({ error: "Online ordering needs an active Complete or Multi plan. Upgrade in Settings → Billing." });
   }
 
   const body = z
@@ -181,9 +182,13 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
   if ("error" in card) return res.status(400).json({ error: card.error });
 
   const employee = await attributionEmployee(store.id);
-  const cardType = await prisma.paymentType.findFirst({
-    where: { storeId: store.id, type: "card", enabled: true },
-  });
+  const cardType =
+    (await prisma.paymentType.findFirst({
+      where: { storeId: store.id, type: "card", enabled: true },
+    })) ??
+    (await prisma.paymentType.findFirst({
+      where: { storeId: store.id, type: "card" },
+    }));
   if (!employee || !cardType) {
     return res.status(400).json({ error: "Card payments aren't set up for this café." });
   }
@@ -346,8 +351,11 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
     ...resolvedLines.map((l) => {
       let extra = "";
       try {
-        const lines = receiptModifierLines(JSON.parse(l.modifiersJson || "[]") as { name?: string; groupName?: string }[]);
-        extra = lines.length ? `\n${lines.map((line) => `  ${line}`).join("\n")}` : "";
+        const lines = receiptModifierLines(
+          JSON.parse(l.modifiersJson || "[]") as { name?: string; groupName?: string }[],
+          l.name
+        );
+        extra = lines.length ? `\n${lines.join("\n")}` : "";
       } catch {
         extra = "";
       }
@@ -520,6 +528,18 @@ publicOrderingRouter.get("/orders/:token", async (req, res) => {
 });
 
 kitchenRouter.use(requireAuth);
+kitchenRouter.use(async (req: AuthedRequest, res, next) => {
+  const storeId = req.user!.storeId;
+  const kitchen = await storeAllowsFeature(storeId, "kitchen");
+  const ordering = await storeAllowsFeature(storeId, "online_ordering");
+  if (!kitchen && !ordering) {
+    return res.status(402).json({
+      error: "Kitchen screen needs an active Complete or Multi plan. Upgrade in Settings → Billing.",
+      feature: "kitchen",
+    });
+  }
+  next();
+});
 
 kitchenRouter.get("/orders", async (req: AuthedRequest, res) => {
   const status = typeof req.query.status === "string" ? req.query.status : undefined;
@@ -601,6 +621,20 @@ kitchenRouter.post("/orders", async (req: AuthedRequest, res) => {
   if (body.ticketId) {
     await prisma.ticket.update({ where: { id: body.ticketId }, data: { kitchenStatus: "queued" } });
   }
+
+  const kitchenText = buildKitchenTicketText({
+    orderNumber: order.orderNumber,
+    customerName: body.name,
+    fulfillment: body.fulfillment,
+    lines: order.lines,
+    note: body.note,
+  });
+  await queueKitchenPrintJob({
+    storeId,
+    text: kitchenText,
+    ticketId: body.ticketId,
+  });
+
   res.status(201).json(order);
 });
 

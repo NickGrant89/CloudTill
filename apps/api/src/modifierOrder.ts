@@ -1,3 +1,4 @@
+import { preserveHalfAndHalfTicketGroupName, priceModifierPicks, type ModifierGroupPricing } from "@cloudtill/shared";
 import { prisma } from "./db.js";
 
 export type IncomingModifier = {
@@ -8,18 +9,21 @@ export type IncomingModifier = {
   groupName?: string;
 };
 
-/** Store a sale's modifiers in the order set on the item, with the group name kept for the kitchen and receipt. */
-export async function orderStoredModifiers(mods: IncomingModifier[]) {
+/** Store ticket/sale modifiers in BO order, with pizza free-topping rules and sized list prices. */
+export async function orderStoredModifiers(
+  mods: IncomingModifier[],
+  ctx?: { variantId?: string }
+) {
   const ids = mods.map((mod) => mod.modifierId || mod.id).filter((id): id is string => Boolean(id));
   const rows = ids.length
     ? await prisma.modifier.findMany({
         where: { id: { in: ids } },
-        include: { group: { select: { id: true, name: true, sortOrder: true } } },
+        include: { group: { select: { id: true, name: true, sortOrder: true, freeSelect: true, itemId: true } } },
       })
     : [];
   const byId = new Map(rows.map((row) => [row.id, row]));
 
-  return mods
+  const ordered = mods
     .map((mod, index) => ({ mod, index }))
     .sort((a, b) => {
       const left = byId.get(a.mod.modifierId || a.mod.id || "");
@@ -34,12 +38,56 @@ export async function orderStoredModifiers(mods: IncomingModifier[]) {
     })
     .map(({ mod }) => {
       const row = byId.get(mod.modifierId || mod.id || "");
-      const groupName = row?.group.name || mod.groupName?.trim() || "";
+      const groupName = preserveHalfAndHalfTicketGroupName(mod.groupName, row?.group.name);
+      const rawName = (row?.name?.trim() ? row.name : mod.name) || mod.name;
       return {
         ...(row ? { modifierId: row.id } : mod.modifierId ? { modifierId: mod.modifierId } : {}),
-        name: row?.name ?? mod.name,
-        priceCents: row?.priceCents ?? mod.priceCents,
-        ...(groupName ? { groupName } : {}),
+        name: rawName,
+        groupId: row?.group.id,
+        groupName,
       };
     });
+
+  let itemName = "";
+  let groups: ModifierGroupPricing[] = [];
+
+  if (ctx?.variantId) {
+    const variant = await prisma.variant.findUnique({
+      where: { id: ctx.variantId },
+      include: {
+        item: {
+          include: {
+            modifierGroups: {
+              orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+              include: {
+                modifiers: { where: { active: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (variant) {
+      itemName = variant.item.name;
+      groups = variant.item.modifierGroups.map((group) => ({
+        id: group.id,
+        name: group.name,
+        freeSelect: group.freeSelect ?? 0,
+        modifiers: group.modifiers.map((mod) => ({
+          id: mod.id,
+          name: mod.name,
+          priceCents: mod.priceCents,
+        })),
+      }));
+    }
+  }
+
+  if (groups.length && itemName) {
+    return priceModifierPicks(itemName, groups, ordered);
+  }
+
+  return ordered.map((pick) => ({
+    ...pick,
+    priceCents: byId.get(pick.modifierId ?? "")?.priceCents ?? 0,
+  }));
 }

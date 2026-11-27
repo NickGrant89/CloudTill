@@ -762,9 +762,14 @@ export function App() {
         {view === "menu" && (
           <section className="hero" aria-label={store?.name ?? "Store"}>
             <div className="hero-row">
-              <div>
-                <p className="eyebrow">Order online</p>
-                <h1 className="hero-brand">{store?.name ?? "Menu"}</h1>
+              <div className="hero-id">
+                <span className="mark" aria-hidden="true">
+                  {(store?.name || "Menu").trim().charAt(0).toUpperCase()}
+                </span>
+                <div>
+                  <p className="eyebrow">Order online</p>
+                  <h1 className="hero-brand">{store?.name ?? "Menu"}</h1>
+                </div>
               </div>
               <button type="button" className="cart-jump hero-cart" onClick={() => setView("cart")}>
                 Cart
@@ -772,8 +777,15 @@ export function App() {
               </button>
             </div>
             <p className="hero-address">
-              {ordering.open ? "Taking orders now" : pausedMessage(ordering)}
-              {store?.address ? ` · ${store.address}` : ""}
+              <span className={`open-pill${ordering.open ? "" : " is-closed"}`}>
+                <span className="dot" aria-hidden="true" />
+                {ordering.open ? "Open" : "Closed"}
+              </span>
+              <span className="hero-place">
+                {[store?.address, ordering.open && estimateLabel(fulfillment) ? `About ${estimateLabel(fulfillment)}` : ""]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
             </p>
           </section>
         )}

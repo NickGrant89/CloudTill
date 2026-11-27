@@ -69,16 +69,35 @@ customersRouter.post("/", async (req: AuthedRequest, res) => {
 });
 
 customersRouter.patch("/:id", owned("customer"), requireRole("owner", "manager"), async (req, res) => {
+  const id = String(req.params.id);
   const body = z
     .object({
-      name: z.string().optional(),
-      email: z.string().nullable().optional(),
+      name: z.string().min(1).optional(),
+      email: z.union([z.string().email(), z.literal(""), z.null()]).optional(),
       phone: z.string().nullable().optional(),
       note: z.string().nullable().optional(),
       loyaltyPoints: z.number().int().optional(),
       storeCreditCents: z.number().int().optional(),
     })
     .parse(req.body);
-  const customer = await prisma.customer.update({ where: { id: req.params.id }, data: body });
+  const data = {
+    ...body,
+    email: body.email === "" ? null : body.email,
+  };
+  const customer = await prisma.customer.update({ where: { id }, data });
   res.json(customer);
+});
+
+customersRouter.delete("/:id", owned("customer"), requireRole("owner", "manager"), async (req, res) => {
+  const id = String(req.params.id);
+  const sales = await prisma.sale.count({ where: { customerId: id } });
+  if (sales > 0) {
+    return res.status(400).json({
+      error: "Customer has sales history — edit details instead of deleting",
+    });
+  }
+  await prisma.ticket.updateMany({ where: { customerId: id }, data: { customerId: null } });
+  await prisma.giftCard.updateMany({ where: { customerId: id }, data: { customerId: null } });
+  await prisma.customer.delete({ where: { id } });
+  res.json({ ok: true });
 });

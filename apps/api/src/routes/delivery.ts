@@ -76,7 +76,7 @@ const normalizedSchema = z.object({
 async function assertDeliveryAllowed(storeId: string, res: Response) {
   if (!(await storeAllowsFeature(storeId, "online_ordering"))) {
     res.status(402).json({
-      error: "Delivery apps need Shop or Group (online ordering / kitchen). Upgrade in Billing.",
+      error: "Delivery apps need Complete or Multi (online ordering / kitchen). Upgrade in Billing.",
     });
     return false;
   }
@@ -383,6 +383,15 @@ publicDeliveryRouter.post("/:channel/webhook", async (req, res) => {
 });
 
 deliveryRouter.use(requireAuth);
+deliveryRouter.use(async (req: AuthedRequest, res, next) => {
+  if (!(await storeAllowsFeature(req.user!.storeId, "online_ordering"))) {
+    return res.status(402).json({
+      error: "Delivery apps need Complete or Multi (online ordering / kitchen). Upgrade in Settings → Billing.",
+      feature: "online_ordering",
+    });
+  }
+  next();
+});
 
 deliveryRouter.get("/config", async (req: AuthedRequest, res) => {
   const storeId = req.user!.storeId;

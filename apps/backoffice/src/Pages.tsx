@@ -1,6 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, getToken, money, setToken } from "./api";
-import { GiftCardsPage, ModifierEditor, ModifierLibrary, TimeClockPage } from "./MorePages";
+import {
+  DEFAULT_TEXT_PAY_MESSAGE,
+  getPlan,
+  renderTextPayMessage,
+  sortItemGroups,
+  sortTillMenuItems,
+  upgradeBillingHint,
+} from "@cloudtill/shared";
+import { BoEditSheet } from "./BoEditSheet";
+import { applyReorder, DragGrip, GiftCardsPage, ModifierEditor, ModifierLibrary, TimeClockPage } from "./MorePages";
 import { KitchenPage, PrintersPage } from "./KitchenPrinters";
 import { EodPage, ImportPage, LabelsPage, StocktakePage } from "./ExtrasPages";
 
@@ -25,16 +34,25 @@ export type PageId =
   | "eod"
   | "settings";
 
-export function Pages({ page, onNavigate }: { page: PageId; onNavigate?: (page: PageId) => void }) {
+export function Pages({
+  page,
+  onNavigate,
+  planFeatures = [],
+}: {
+  page: PageId;
+  onNavigate?: (page: PageId) => void;
+  planFeatures?: string[];
+}) {
+  const multiStore = planFeatures.includes("multi_store");
   switch (page) {
     case "dashboard":
-      return <Dashboard onNavigate={onNavigate} />;
+      return <Dashboard onNavigate={onNavigate} planFeatures={planFeatures} />;
     case "catalog":
-      return <CatalogPage />;
+      return <CatalogPage multiStore={multiStore} />;
     case "modifiers":
       return <ModifiersPage />;
     case "inventory":
-      return <InventoryPage />;
+      return <InventoryPage multiStore={multiStore} />;
     case "stocktake":
       return <StocktakePage />;
     case "import":
@@ -80,6 +98,7 @@ type DashData = {
   };
   week: { receiptCount: number; grossSalesCents: number; avgTicketCents: number };
   kitchen: {
+    entitled?: boolean;
     counts: { pending: number; preparing: number; ready: number; total: number };
     orders: {
       id: string;
@@ -111,16 +130,23 @@ function channelLabel(channel: string) {
   return map[channel] ?? channel;
 }
 
-function Dashboard({ onNavigate }: { onNavigate?: (page: PageId) => void }) {
+function Dashboard({
+  onNavigate,
+  planFeatures,
+}: {
+  onNavigate?: (page: PageId) => void;
+  planFeatures: string[];
+}) {
   const [data, setData] = useState<DashData | null>(null);
   const [err, setErr] = useState("");
+  const kitchenNav = planFeatures.includes("kitchen");
 
   async function load() {
     try {
       setData(await api<DashData>("/reports/dashboard"));
       setErr("");
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Could not load dashboard");
+      setErr(upgradeBillingHint(e instanceof Error ? e.message : "Could not load dashboard"));
     }
   }
 
@@ -188,16 +214,20 @@ function Dashboard({ onNavigate }: { onNavigate?: (page: PageId) => void }) {
             <div>
               <h3>Kitchen / delivery</h3>
               <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>
-                {k?.total
-                  ? `${k.pending} waiting · ${k.preparing} preparing · ${k.ready} ready`
-                  : "Queue clear"}
+                {!kitchenNav
+                  ? "Complete or Multi unlocks online orders and delivery-app tickets here."
+                  : k?.total
+                    ? `${k.pending} waiting · ${k.preparing} preparing · ${k.ready} ready`
+                    : "Queue clear"}
               </p>
             </div>
-            <button type="button" className="secondary" onClick={() => go("kitchen")}>
-              Open kitchen
-            </button>
+            {kitchenNav && (
+              <button type="button" className="secondary" onClick={() => go("kitchen")}>
+                Open kitchen
+              </button>
+            )}
           </div>
-          {data?.kitchen.orders.length ? (
+          {kitchenNav && data?.kitchen.orders.length ? (
             <ul className="dash-order-list">
               {data.kitchen.orders.map((o) => (
                 <li key={o.id}>
@@ -234,9 +264,13 @@ function Dashboard({ onNavigate }: { onNavigate?: (page: PageId) => void }) {
                 </li>
               ))}
             </ul>
-          ) : (
+          ) : kitchenNav ? (
             <p style={{ color: "var(--muted)", margin: "8px 0 0" }}>
               No open kitchen orders. Web and delivery-app orders appear here.
+            </p>
+          ) : (
+            <p style={{ color: "var(--muted)", margin: "8px 0 0" }}>
+              Upgrade in <strong>Settings → Billing</strong> for kitchen and delivery tracking.
             </p>
           )}
         </section>
@@ -311,7 +345,7 @@ function Dashboard({ onNavigate }: { onNavigate?: (page: PageId) => void }) {
   );
 }
 
-function CatalogPage() {
+function CatalogPage({ multiStore }: { multiStore: boolean }) {
   const [items, setItems] = useState<
     {
       id: string;
@@ -323,7 +357,7 @@ function CatalogPage() {
       modifierGroups: { id: string; name: string; modifiers: { name: string }[] }[];
     }[]
   >([]);
-  const [categories, setCategories] = useState<{ id: string; name: string; color?: string }[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string; color?: string; sortOrder?: number }[]>([]);
   const [q, setQ] = useState("");
   const [groupFilter, setGroupFilter] = useState<string | "all" | "none">("all");
   const [showForm, setShowForm] = useState(false);
@@ -331,7 +365,23 @@ function CatalogPage() {
   const [newGroupName, setNewGroupName] = useState("");
   const [groupBusy, setGroupBusy] = useState(false);
   const [groupMsg, setGroupMsg] = useState("");
+  const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
+  const [renameGroupValue, setRenameGroupValue] = useState("");
+  const [deleteGroupId, setDeleteGroupId] = useState<string | null>(null);
+  const [deleteMoveToId, setDeleteMoveToId] = useState("");
   const [editMods, setEditMods] = useState<{ id: string; name: string } | null>(null);
+  const [editItem, setEditItem] = useState<(typeof items)[number] | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    categoryId: "",
+    price: "0.00",
+    sku: "",
+    barcode: "",
+    trackStock: true,
+  });
+  const [pizzaMsg, setPizzaMsg] = useState("");
+  const [itemMsg, setItemMsg] = useState("");
+  const [pizzaBusy, setPizzaBusy] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [branchStores, setBranchStores] = useState<{ id: string; name: string; slug?: string }[]>([]);
   const [currentStoreId, setCurrentStoreId] = useState("");
@@ -362,7 +412,7 @@ function CatalogPage() {
       }>("/catalog/items/store-presence").catch(() => null),
     ]);
     setItems(its);
-    setCategories(cats);
+    setCategories(sortItemGroups(cats));
     if (presence) {
       setCurrentStoreId(presence.currentStoreId);
       setBranchStores(presence.stores);
@@ -411,7 +461,7 @@ function CatalogPage() {
       setSelectedIds([]);
       await load();
     } catch (err) {
-      setAssignMsg(err instanceof Error ? err.message : "Could not assign items");
+      setAssignMsg(upgradeBillingHint(err instanceof Error ? err.message : "Could not assign items"));
     } finally {
       setAssignBusy(false);
     }
@@ -420,17 +470,20 @@ function CatalogPage() {
   const groupName = (categoryId: string | null) =>
     categoryId ? categories.find((c) => c.id === categoryId)?.name ?? "Group" : "Ungrouped";
 
-  const filtered = items.filter((i) => {
-    if (groupFilter === "none" && i.categoryId) return false;
-    if (groupFilter !== "all" && groupFilter !== "none" && i.categoryId !== groupFilter) return false;
-    if (!q) return true;
-    const needle = q.toLowerCase();
-    return (
-      i.name.toLowerCase().includes(needle) ||
-      groupName(i.categoryId).toLowerCase().includes(needle) ||
-      i.variants.some((v) => v.sku.toLowerCase().includes(needle))
-    );
-  });
+  const filtered = useMemo(() => {
+    const list = items.filter((i) => {
+      if (groupFilter === "none" && i.categoryId) return false;
+      if (groupFilter !== "all" && groupFilter !== "none" && i.categoryId !== groupFilter) return false;
+      if (!q) return true;
+      const needle = q.toLowerCase();
+      return (
+        i.name.toLowerCase().includes(needle) ||
+        groupName(i.categoryId).toLowerCase().includes(needle) ||
+        i.variants.some((v) => v.sku.toLowerCase().includes(needle))
+      );
+    });
+    return groupFilter === "all" ? sortTillMenuItems(list, categories) : list;
+  }, [items, groupFilter, q, categories]);
 
   async function createItem(e: React.FormEvent) {
     e.preventDefault();
@@ -449,6 +502,79 @@ function CatalogPage() {
     setShowForm(false);
     setForm({ name: "", categoryId: "", price: "5.00", sku: "", barcode: "", stockQty: "20", trackStock: true });
     await load();
+  }
+
+  function openEdit(item: (typeof items)[number]) {
+    const variant = item.variants[0];
+    setEditMods(null);
+    setShowForm(false);
+    setEditItem(item);
+    setEditForm({
+      name: item.name,
+      categoryId: item.categoryId ?? "",
+      price: ((variant?.priceCents ?? 0) / 100).toFixed(2),
+      sku: variant?.sku ?? "",
+      barcode: variant?.barcode ?? "",
+      trackStock: variant?.trackStock ?? true,
+    });
+  }
+
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editItem) return;
+    await api(`/catalog/items/${editItem.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: editForm.name.trim(),
+        categoryId: editForm.categoryId || null,
+        priceCents: Math.round(parseFloat(editForm.price) * 100),
+        sku: editForm.sku.trim() || undefined,
+        barcode: editForm.barcode.trim() || null,
+        trackStock: editForm.trackStock,
+      }),
+    });
+    setEditItem(null);
+    await load();
+  }
+
+  async function removeItem(item: (typeof items)[number]) {
+    if (
+      !window.confirm(
+        `Delete ${item.name}? If it has sales history it will be hidden from the till instead of removed permanently.`
+      )
+    ) {
+      return;
+    }
+    setItemMsg("");
+    try {
+      const result = await api<{ deactivated?: boolean; deleted?: boolean; message?: string }>(`/catalog/items/${item.id}`, {
+        method: "DELETE",
+      });
+      setEditItem((cur) => (cur?.id === item.id ? null : cur));
+      setEditMods((cur) => (cur?.id === item.id ? null : cur));
+      setSelectedIds((prev) => prev.filter((id) => id !== item.id));
+      setItemMsg(result.message || (result.deactivated ? `${item.name} hidden from till.` : `${item.name} deleted.`));
+      await load();
+    } catch (err) {
+      setItemMsg(err instanceof Error ? err.message : "Could not delete item");
+    }
+  }
+
+  async function addPizzaMenu() {
+    setPizzaBusy(true);
+    setPizzaMsg("");
+    try {
+      const result = await api<{ message: string; created: string[]; skipped: string[] }>("/catalog/pizza-menu", {
+        method: "POST",
+        body: "{}",
+      });
+      setPizzaMsg(result.message);
+      await load();
+    } catch (err) {
+      setPizzaMsg(err instanceof Error ? err.message : "Could not add pizza menu");
+    } finally {
+      setPizzaBusy(false);
+    }
   }
 
   async function createGroup(e: React.FormEvent) {
@@ -472,6 +598,97 @@ function CatalogPage() {
     }
   }
 
+  function itemCountInGroup(categoryId: string) {
+    return items.filter((i) => i.categoryId === categoryId).length;
+  }
+
+  async function renameGroup(categoryId: string, name: string) {
+    const cleaned = name.trim();
+    if (!cleaned) return;
+    setGroupBusy(true);
+    setGroupMsg("");
+    try {
+      await api(`/catalog/categories/${categoryId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name: cleaned }),
+      });
+      setRenamingGroupId(null);
+      setRenameGroupValue("");
+      setGroupMsg(`Renamed to “${cleaned}”.`);
+      await load();
+    } catch (err) {
+      setGroupMsg(err instanceof Error ? err.message : "Could not rename group");
+    } finally {
+      setGroupBusy(false);
+    }
+  }
+
+  async function saveGroupOrder(ordered: { id: string }[]) {
+    setGroupBusy(true);
+    setGroupMsg("");
+    try {
+      await api("/catalog/categories/order", {
+        method: "POST",
+        body: JSON.stringify({ categoryIds: ordered.map((c) => c.id) }),
+      });
+      setGroupMsg("Group order saved — till chips follow this order.");
+      await load();
+    } catch (err) {
+      setGroupMsg(err instanceof Error ? err.message : "Could not reorder groups");
+    } finally {
+      setGroupBusy(false);
+    }
+  }
+
+  async function reorderGroups(from: number, to: number) {
+    const next = applyReorder(categories, from, to);
+    if (!next) return;
+    setCategories(next);
+    await saveGroupOrder(next);
+  }
+
+  async function deleteGroup(categoryId: string) {
+    const count = itemCountInGroup(categoryId);
+    const cat = categories.find((c) => c.id === categoryId);
+    const label = cat?.name ?? "Group";
+    if (count > 0 && !deleteMoveToId && deleteMoveToId !== "__ungrouped__") {
+      setGroupMsg(`Pick where to move ${count} item${count === 1 ? "" : "s"} before deleting “${label}”.`);
+      return;
+    }
+  if (
+      count > 0 &&
+      !window.confirm(
+        `Delete “${label}”? ${count} item${count === 1 ? "" : "s"} will move to ${
+          deleteMoveToId === "__ungrouped__"
+            ? "Ungrouped"
+            : categories.find((c) => c.id === deleteMoveToId)?.name ?? "another group"
+        }.`
+      )
+    ) {
+      return;
+    }
+    if (count === 0 && !window.confirm(`Delete empty group “${label}”?`)) return;
+
+    setGroupBusy(true);
+    setGroupMsg("");
+    try {
+      await api(`/catalog/categories/${categoryId}`, {
+        method: "DELETE",
+        body: JSON.stringify({
+          moveToCategoryId: count > 0 ? (deleteMoveToId === "__ungrouped__" ? null : deleteMoveToId) : undefined,
+        }),
+      });
+      setDeleteGroupId(null);
+      setDeleteMoveToId("");
+      setGroupMsg(`Deleted “${label}”.`);
+      await load();
+    } catch (err) {
+      setGroupMsg(err instanceof Error ? err.message : "Could not delete group");
+    } finally {
+      setGroupBusy(false);
+    }
+  }
+
   return (
     <div>
       <div className="page-head">
@@ -483,17 +700,22 @@ function CatalogPage() {
           <button type="button" className="secondary" onClick={() => setShowGroups((v) => !v)}>
             {showGroups ? "Hide groups" : "Manage groups"}
           </button>
+          <button type="button" className="secondary" disabled={pizzaBusy} onClick={() => void addPizzaMenu()}>
+            {pizzaBusy ? "Adding pizzas…" : "Add pizza menu"}
+          </button>
           <button type="button" onClick={() => setShowForm((v) => !v)}>
             {showForm ? "Close" : "Add item"}
           </button>
         </div>
       </div>
+      {pizzaMsg && <p style={{ color: "var(--muted)" }}>{pizzaMsg}</p>}
+      {itemMsg && <p className="panel-box" style={{ marginBottom: 12 }}>{itemMsg}</p>}
 
       {showGroups && (
         <form className="panel-box" onSubmit={(e) => void createGroup(e)}>
           <h3>Item groups</h3>
           <p style={{ color: "var(--muted)", marginTop: 0 }}>
-            Groups organise the menu (Drinks, Food, Retail…). Same groups appear as chips on the till.
+            Groups organise the menu (Drinks, Food, Retail…). Drag to reorder — the till uses the same chip order.
           </p>
           <div className="toolbar" style={{ marginBottom: 12 }}>
             <input
@@ -510,14 +732,112 @@ function CatalogPage() {
           {categories.length === 0 ? (
             <p style={{ color: "var(--muted)" }}>No groups yet — add one above.</p>
           ) : (
-            <ul style={{ margin: 0, paddingLeft: "1.1rem", color: "var(--muted)" }}>
-              {categories.map((c) => (
-                <li key={c.id}>
-                  <strong style={{ color: "var(--ink)" }}>{c.name}</strong>
-                  {" · "}
-                  {items.filter((i) => i.categoryId === c.id).length} items
-                </li>
-              ))}
+            <ul
+              data-drag-group="item-groups"
+              className="item-group-list"
+              style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}
+            >
+              {categories.map((c, groupIndex) => {
+                const count = itemCountInGroup(c.id);
+                const deleting = deleteGroupId === c.id;
+                return (
+                  <li
+                    key={c.id}
+                    data-drag-index={groupIndex}
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 6,
+                      padding: "10px 12px",
+                      border: "1px solid var(--line)",
+                      borderRadius: 10,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      {categories.length > 1 && renamingGroupId !== c.id && !deleting && (
+                        <DragGrip
+                          index={groupIndex}
+                          listLength={categories.length}
+                          group="item-groups"
+                          label={c.name}
+                          onDrop={(from, to) => void reorderGroups(from, to)}
+                        />
+                      )}
+                      {renamingGroupId === c.id ? (
+                        <>
+                          <input
+                            value={renameGroupValue}
+                            onChange={(e) => setRenameGroupValue(e.target.value)}
+                            aria-label="Group name"
+                            style={{ flex: 1, minWidth: 140 }}
+                          />
+                          <button type="button" className="secondary" disabled={groupBusy} onClick={() => void renameGroup(c.id, renameGroupValue)}>
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary"
+                            onClick={() => {
+                              setRenamingGroupId(null);
+                              setRenameGroupValue("");
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <strong style={{ color: "var(--ink)", flex: 1 }}>{c.name}</strong>
+                          <span style={{ color: "var(--muted)", fontSize: "0.88rem" }}>
+                            {count} item{count === 1 ? "" : "s"}
+                          </span>
+                          <button
+                            type="button"
+                            className="linkish"
+                            onClick={() => {
+                              setRenamingGroupId(c.id);
+                              setRenameGroupValue(c.name);
+                            }}
+                          >
+                            Rename
+                          </button>
+                          <button
+                            type="button"
+                            className="linkish"
+                            onClick={() => {
+                              setDeleteGroupId(deleting ? null : c.id);
+                              setDeleteMoveToId("");
+                            }}
+                          >
+                            {deleting ? "Cancel" : "Delete"}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    {deleting && count > 0 && (
+                      <div className="field" style={{ margin: 0 }}>
+                        <label>Move items to</label>
+                        <select value={deleteMoveToId} onChange={(e) => setDeleteMoveToId(e.target.value)}>
+                          <option value="">Choose…</option>
+                          <option value="__ungrouped__">Ungrouped</option>
+                          {categories
+                            .filter((other) => other.id !== c.id)
+                            .map((other) => (
+                              <option key={other.id} value={other.id}>
+                                {other.name}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    )}
+                    {deleting && (
+                      <button type="button" className="secondary" disabled={groupBusy} onClick={() => void deleteGroup(c.id)}>
+                        {count > 0 ? "Move items and delete group" : "Delete empty group"}
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </form>
@@ -576,48 +896,111 @@ function CatalogPage() {
         <span style={{ color: "var(--muted)" }}>{filtered.length} items</span>
       </div>
 
-      <div className="chip-row" role="tablist" aria-label="Filter by group" style={{ marginBottom: 12 }}>
-        <button
-          type="button"
-          className={`chip${groupFilter === "all" ? " active" : ""}`}
-          onClick={() => setGroupFilter("all")}
-        >
-          All
-        </button>
-        <button
-          type="button"
-          className={`chip${groupFilter === "none" ? " active" : ""}`}
-          onClick={() => setGroupFilter("none")}
-        >
-          Ungrouped
-        </button>
-        {categories.map((c) => (
+      <div className="items-group-filters" style={{ marginBottom: 12 }}>
+        <div className="items-group-filter-mobile">
+          <div className="items-group-filter-quick" role="group" aria-label="Quick filters">
+            <button
+              type="button"
+              className={`chip${groupFilter === "all" ? " active" : ""}`}
+              onClick={() => setGroupFilter("all")}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              className={`chip${groupFilter === "none" ? " active" : ""}`}
+              onClick={() => setGroupFilter("none")}
+            >
+              Ungrouped
+            </button>
+          </div>
+          <label className="items-group-filter-select-field">
+            <span className="items-group-filter-label">Filter group</span>
+            <select
+              aria-label="Filter by group"
+              value={groupFilter === "all" || groupFilter === "none" ? "" : groupFilter}
+              onChange={(e) => {
+                const next = e.target.value;
+                setGroupFilter(next ? next : "all");
+              }}
+            >
+              <option value="">All groups (overview)</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="chip-row items-group-filters-chips" role="tablist" aria-label="Filter by group">
           <button
-            key={c.id}
             type="button"
-            className={`chip${groupFilter === c.id ? " active" : ""}`}
-            onClick={() => setGroupFilter(c.id)}
+            className={`chip${groupFilter === "all" ? " active" : ""}`}
+            onClick={() => setGroupFilter("all")}
           >
-            {c.name}
+            All
           </button>
-        ))}
+          <button
+            type="button"
+            className={`chip${groupFilter === "none" ? " active" : ""}`}
+            onClick={() => setGroupFilter("none")}
+          >
+            Ungrouped
+          </button>
+          {categories.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              className={`chip${groupFilter === c.id ? " active" : ""}`}
+              onClick={() => setGroupFilter(c.id)}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {editMods && (
-        <ModifierEditor itemId={editMods.id} itemName={editMods.name} onClose={() => { setEditMods(null); void load(); }} />
-      )}
+      <BoEditSheet
+        open={Boolean(editMods)}
+        onClose={() => {
+          setEditMods(null);
+          void load();
+        }}
+        title={editMods ? `Modifiers · ${editMods.name}` : ""}
+        wide
+      >
+        {editMods && (
+          <ModifierEditor
+            embedded
+            itemId={editMods.id}
+            itemName={editMods.name}
+            onClose={() => {
+              setEditMods(null);
+              void load();
+            }}
+          />
+        )}
+      </BoEditSheet>
 
       <form className="panel-box" onSubmit={(e) => void assignToBranches(e)}>
         <h3>Send items to branches</h3>
+        {!multiStore ? (
+          <p style={{ color: "var(--muted)", marginTop: 0 }}>
+            Assigning items to branches is part of the <strong>Multi</strong> plan. Upgrade in{" "}
+            <strong>Settings → Billing</strong>.
+          </p>
+        ) : (
         <p style={{ color: "var(--muted)", marginTop: 0 }}>
           Tick items below, pick branches, then send. Copies the item (and its group) onto those stores by SKU —
           skips if already there. Opening stock on the new branch starts at 0.
         </p>
-        {otherStores.length === 0 ? (
+        )}
+        {multiStore && otherStores.length === 0 ? (
           <p style={{ color: "var(--muted)" }}>
             Only one store in this account. Add another branch under <strong>Stores &amp; registers</strong> first.
           </p>
-        ) : (
+        ) : multiStore ? (
           <>
             <div className="chip-row" style={{ marginBottom: 12 }} aria-label="Destination branches">
               {otherStores.map((s) => {
@@ -648,18 +1031,19 @@ function CatalogPage() {
               </button>
             </div>
           </>
-        )}
+        ) : null}
         {assignMsg && <p style={{ color: "var(--muted)" }}>{assignMsg}</p>}
       </form>
 
-      <div className="table-wrap">
-        <table>
+      <div className="table-wrap stack-cards">
+        <table className="items-table stack-on-phone">
           <thead>
             <tr>
               <th>
                 <input
                   type="checkbox"
                   aria-label="Select all filtered items"
+                  disabled={!multiStore}
                   checked={filtered.length > 0 && filtered.every((i) => selectedIds.includes(i.id))}
                   onChange={() => toggleAllFiltered()}
                 />
@@ -677,7 +1061,7 @@ function CatalogPage() {
           </thead>
           <tbody>
             {filtered.length === 0 && (
-              <tr>
+              <tr className="stack-empty">
                 <td colSpan={10} style={{ color: "var(--muted)" }}>
                   No items in this group — add an item or choose another group.
                 </td>
@@ -688,7 +1072,7 @@ function CatalogPage() {
               const elsewhere = presenceByItem[item.id] ?? [];
               return (
                 <tr key={item.id}>
-                  <td>
+                  <td data-label="Select" className="stack-select">
                     <input
                       type="checkbox"
                       checked={selectedIds.includes(item.id)}
@@ -696,36 +1080,42 @@ function CatalogPage() {
                       aria-label={`Select ${item.name}`}
                     />
                   </td>
-                  <td>
+                  <td data-label="Item" className="stack-title">
                     <strong>{item.name}</strong>
                     {item.isComposite && <span className="badge" style={{ marginLeft: 8 }}>Kit</span>}
                   </td>
-                  <td>
+                  <td data-label="Group">
                     <span className="badge">{groupName(item.categoryId)}</span>
                   </td>
-                  <td style={{ color: "var(--muted)", fontSize: "0.88rem" }}>
+                  <td data-label="Also on" style={{ color: "var(--muted)", fontSize: "0.88rem" }}>
                     {elsewhere.length
                       ? elsewhere.map((s) => s.name).join(", ")
                       : "This store only"}
                   </td>
-                  <td>{v?.sku}</td>
-                  <td>{v?.barcode ?? "—"}</td>
-                  <td>{money(v?.priceCents ?? 0)}</td>
-                  <td>
+                  <td data-label="SKU">{v?.sku}</td>
+                  <td data-label="Barcode">{v?.barcode ?? "—"}</td>
+                  <td data-label="Price">{money(v?.priceCents ?? 0)}</td>
+                  <td data-label="Stock">
                     {v?.trackStock ? v.stockQty : <span className="badge">Not tracked</span>}
                   </td>
-                  <td>
+                  <td data-label="Modifiers">
                     {item.modifierGroups.length
                       ? item.modifierGroups.map((g) => g.name).join(", ")
                       : "—"}
                   </td>
-                  <td>
+                  <td data-label="" className="stack-actions" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <button type="button" className="secondary" onClick={() => openEdit(item)}>
+                      Edit
+                    </button>
                     <button
                       type="button"
                       className="secondary"
                       onClick={() => setEditMods({ id: item.id, name: item.name })}
                     >
-                      Edit modifiers
+                      Options
+                    </button>
+                    <button type="button" className="danger" onClick={() => void removeItem(item)}>
+                      Delete
                     </button>
                   </td>
                 </tr>
@@ -734,6 +1124,70 @@ function CatalogPage() {
           </tbody>
         </table>
       </div>
+
+      <BoEditSheet
+        open={Boolean(editItem)}
+        onClose={() => setEditItem(null)}
+        title={editItem ? `Edit · ${editItem.name}` : ""}
+      >
+        {editItem && (
+          <form onSubmit={(e) => void saveEdit(e)}>
+            <div className="grid-2">
+              <div className="field">
+                <label>Name</label>
+                <input required value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>Group</label>
+                <select value={editForm.categoryId} onChange={(e) => setEditForm({ ...editForm, categoryId: e.target.value })}>
+                  <option value="">Ungrouped</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>Price</label>
+                <input value={editForm.price} onChange={(e) => setEditForm({ ...editForm, price: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>SKU</label>
+                <input value={editForm.sku} onChange={(e) => setEditForm({ ...editForm, sku: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>Barcode</label>
+                <input value={editForm.barcode} onChange={(e) => setEditForm({ ...editForm, barcode: e.target.value })} />
+              </div>
+            </div>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+              <input
+                type="checkbox"
+                checked={editForm.trackStock}
+                onChange={(e) => setEditForm({ ...editForm, trackStock: e.target.checked })}
+              />
+              Track stock
+            </label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <button type="submit">Save item</button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  setEditMods({ id: editItem.id, name: editForm.name });
+                  setEditItem(null);
+                }}
+              >
+                Edit options
+              </button>
+              <button type="button" className="danger" onClick={() => void removeItem(editItem)}>
+                Delete item
+              </button>
+            </div>
+          </form>
+        )}
+      </BoEditSheet>
     </div>
   );
 }
@@ -761,7 +1215,7 @@ function ModifiersPage() {
       <div className="page-head">
         <div>
           <h2>Modifiers</h2>
-          <p>Create modifier menus and assign them to items from the left list</p>
+          <p>Pick a menu on the left to edit options and items. Search to find one quickly.</p>
         </div>
       </div>
       {error && <p className="error">{error}</p>}
@@ -770,7 +1224,7 @@ function ModifiersPage() {
   );
 }
 
-function InventoryPage() {
+function InventoryPage({ multiStore }: { multiStore: boolean }) {
   const [levels, setLevels] = useState<
     {
       id: string;
@@ -804,11 +1258,15 @@ function InventoryPage() {
   const [receive, setReceive] = useState({ variantId: "", quantity: "10", note: "" });
   const [xfer, setXfer] = useState({ fromStoreId: "", toStoreId: "", variantId: "", quantity: "5", note: "" });
 
+  const [xferMsg, setXferMsg] = useState("");
+
   async function load() {
     const [lv, hist, xfers, allStores] = await Promise.all([
       api<typeof levels>(`/inventory/levels${lowOnly ? "?low=1" : ""}`),
       api<typeof history>("/inventory/history"),
-      api<typeof transfers>("/inventory/transfers"),
+      multiStore
+        ? api<typeof transfers>("/inventory/transfers")
+        : Promise.resolve([] as typeof transfers),
       api<{ id: string; name: string }[]>("/auth/stores"),
     ]);
     setLevels(lv);
@@ -828,7 +1286,7 @@ function InventoryPage() {
 
   useEffect(() => {
     void load();
-  }, [lowOnly]);
+  }, [lowOnly, multiStore]);
 
   async function doReceive(e: React.FormEvent) {
     e.preventDefault();
@@ -845,17 +1303,22 @@ function InventoryPage() {
 
   async function doTransfer(e: React.FormEvent) {
     e.preventDefault();
-    await api("/inventory/transfers", {
-      method: "POST",
-      body: JSON.stringify({
-        fromStoreId: xfer.fromStoreId,
-        toStoreId: xfer.toStoreId,
-        variantId: xfer.variantId,
-        quantity: parseFloat(xfer.quantity),
-        note: xfer.note || undefined,
-      }),
-    });
-    await load();
+    setXferMsg("");
+    try {
+      await api("/inventory/transfers", {
+        method: "POST",
+        body: JSON.stringify({
+          fromStoreId: xfer.fromStoreId,
+          toStoreId: xfer.toStoreId,
+          variantId: xfer.variantId,
+          quantity: parseFloat(xfer.quantity),
+          note: xfer.note || undefined,
+        }),
+      });
+      await load();
+    } catch (err) {
+      setXferMsg(upgradeBillingHint(err instanceof Error ? err.message : "Transfer failed"));
+    }
   }
 
   const uniqueVariants = Array.from(
@@ -901,6 +1364,12 @@ function InventoryPage() {
 
       <form className="panel-box" onSubmit={(e) => void doTransfer(e)}>
         <h3>Store-to-store transfer</h3>
+        {!multiStore ? (
+          <p style={{ color: "var(--muted)", marginTop: 0 }}>
+            Stock transfers between branches need the <strong>Multi</strong> plan —{" "}
+            <strong>Settings → Billing</strong>.
+          </p>
+        ) : (
         <div className="grid-2">
           <div className="field">
             <label>From</label>
@@ -941,9 +1410,16 @@ function InventoryPage() {
             <input value={xfer.note} onChange={(e) => setXfer({ ...xfer, note: e.target.value })} />
           </div>
         </div>
-        <button type="submit">Transfer</button>
+        )}
+        {multiStore && (
+          <>
+            <button type="submit">Transfer</button>
+            {xferMsg && <p className="error">{xferMsg}</p>}
+          </>
+        )}
       </form>
 
+      {multiStore && (
       <div className="table-wrap" style={{ marginBottom: 16 }}>
         <table>
           <thead>
@@ -974,6 +1450,7 @@ function InventoryPage() {
           </tbody>
         </table>
       </div>
+      )}
 
       <div className="table-wrap" style={{ marginBottom: 16 }}>
         <table>
@@ -1034,24 +1511,34 @@ function InventoryPage() {
 }
 
 function CustomersPage() {
-  const [customers, setCustomers] = useState<
-    {
-      id: string;
-      name: string;
-      email: string | null;
-      phone: string | null;
-      loyaltyPoints: number;
-      storeCreditCents: number;
-      totalSpentCents: number;
-      visitCount: number;
-    }[]
-  >([]);
+  type Cust = {
+    id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    note?: string | null;
+    loyaltyPoints: number;
+    storeCreditCents: number;
+    totalSpentCents: number;
+    visitCount: number;
+  };
+  const [customers, setCustomers] = useState<Cust[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<{
     name: string;
     sales: { receiptNumber: string; totalCents: number; createdAt: string; status: string }[];
   } | null>(null);
   const [form, setForm] = useState({ name: "", email: "", phone: "", storeCreditCents: "0" });
+  const [editing, setEditing] = useState<Cust | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    note: "",
+    loyaltyPoints: "0",
+    storeCreditCents: "0",
+  });
+  const [msg, setMsg] = useState("");
 
   async function load() {
     setCustomers(await api("/customers"));
@@ -1068,17 +1555,79 @@ function CustomersPage() {
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
-    await api("/customers", {
-      method: "POST",
-      body: JSON.stringify({
-        name: form.name,
-        email: form.email || undefined,
-        phone: form.phone || undefined,
-        storeCreditCents: Math.round(parseFloat(form.storeCreditCents || "0") * 100),
-      }),
+    setMsg("");
+    try {
+      await api("/customers", {
+        method: "POST",
+        body: JSON.stringify({
+          name: form.name,
+          email: form.email || undefined,
+          phone: form.phone || undefined,
+          storeCreditCents: Math.round(parseFloat(form.storeCreditCents || "0") * 100),
+        }),
+      });
+      setForm({ name: "", email: "", phone: "", storeCreditCents: "0" });
+      setMsg("Customer added.");
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not add customer");
+    }
+  }
+
+  function openEdit(c: Cust) {
+    setEditing(c);
+    setSelected(c.id);
+    setEditForm({
+      name: c.name,
+      email: c.email ?? "",
+      phone: c.phone ?? "",
+      note: c.note ?? "",
+      loyaltyPoints: String(c.loyaltyPoints),
+      storeCreditCents: (c.storeCreditCents / 100).toFixed(2),
     });
-    setForm({ name: "", email: "", phone: "", storeCreditCents: "0" });
-    await load();
+    setMsg("");
+  }
+
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editing) return;
+    setMsg("");
+    try {
+      await api(`/customers/${editing.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: editForm.name.trim(),
+          email: editForm.email.trim() || null,
+          phone: editForm.phone.trim() || null,
+          note: editForm.note.trim() || null,
+          loyaltyPoints: Math.round(parseFloat(editForm.loyaltyPoints || "0")),
+          storeCreditCents: Math.round(parseFloat(editForm.storeCreditCents || "0") * 100),
+        }),
+      });
+      setEditing(null);
+      setMsg("Customer updated.");
+      await load();
+      void api<typeof detail>(`/customers/${editing.id}`).then(setDetail);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not update customer");
+    }
+  }
+
+  async function removeCustomer(c: Cust) {
+    if (!window.confirm(`Delete ${c.name}? Only works if they have no sales history.`)) return;
+    setMsg("");
+    try {
+      await api(`/customers/${c.id}`, { method: "DELETE" });
+      if (selected === c.id) {
+        setSelected(null);
+        setDetail(null);
+      }
+      setEditing((cur) => (cur?.id === c.id ? null : cur));
+      setMsg(`${c.name} deleted.`);
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not delete customer");
+    }
   }
 
   return (
@@ -1086,9 +1635,10 @@ function CustomersPage() {
       <div className="page-head">
         <div>
           <h2>Customers</h2>
-          <p>Purchase history, loyalty points, store credit</p>
+          <p>Add, edit, or remove · loyalty and store credit</p>
         </div>
       </div>
+      {msg && <p className="panel-box" style={{ marginBottom: 12 }}>{msg}</p>}
       <form className="panel-box" onSubmit={(e) => void create(e)}>
         <h3>Add customer</h3>
         <div className="grid-2">
@@ -1109,8 +1659,9 @@ function CustomersPage() {
             <input value={form.storeCreditCents} onChange={(e) => setForm({ ...form, storeCreditCents: e.target.value })} />
           </div>
         </div>
-        <button type="submit">Save</button>
+        <button type="submit">Add</button>
       </form>
+
       <div className="grid-2">
         <div className="table-wrap">
           <table>
@@ -1120,6 +1671,7 @@ function CustomersPage() {
                 <th>Points</th>
                 <th>Credit</th>
                 <th>Spent</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -1129,6 +1681,14 @@ function CustomersPage() {
                   <td>{c.loyaltyPoints}</td>
                   <td>{money(c.storeCreditCents)}</td>
                   <td>{money(c.totalSpentCents)}</td>
+                  <td style={{ whiteSpace: "nowrap" }} onClick={(ev) => ev.stopPropagation()}>
+                    <button type="button" className="secondary" onClick={() => openEdit(c)}>
+                      Edit
+                    </button>{" "}
+                    <button type="button" className="secondary" onClick={() => void removeCustomer(c)}>
+                      Delete
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1160,15 +1720,60 @@ function CustomersPage() {
           )}
         </div>
       </div>
+
+      <BoEditSheet
+        open={Boolean(editing)}
+        onClose={() => setEditing(null)}
+        title={editing ? `Edit · ${editing.name}` : ""}
+      >
+        {editing && (
+          <form onSubmit={(e) => void saveEdit(e)}>
+            <div className="grid-2">
+              <div className="field">
+                <label>Name</label>
+                <input required value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>Email</label>
+                <input value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>Phone</label>
+                <input value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>Store credit (£)</label>
+                <input value={editForm.storeCreditCents} onChange={(e) => setEditForm({ ...editForm, storeCreditCents: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>Loyalty points</label>
+                <input value={editForm.loyaltyPoints} onChange={(e) => setEditForm({ ...editForm, loyaltyPoints: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>Note</label>
+                <input value={editForm.note} onChange={(e) => setEditForm({ ...editForm, note: e.target.value })} />
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="submit">Save changes</button>
+              <button type="button" className="secondary" onClick={() => void removeCustomer(editing)}>
+                Delete
+              </button>
+            </div>
+          </form>
+        )}
+      </BoEditSheet>
     </div>
   );
 }
 
 function EmployeesPage() {
-  const [employees, setEmployees] = useState<
-    { id: string; name: string; email: string; role: string; active: boolean; pinDisplay: string }[]
-  >([]);
-  const [form, setForm] = useState({ name: "", email: "", pin: "3333", role: "cashier" });
+  type Emp = { id: string; name: string; email: string; role: string; active: boolean; hasPin?: boolean };
+  const [employees, setEmployees] = useState<Emp[]>([]);
+  const [form, setForm] = useState({ name: "", email: "", pin: "", role: "cashier" });
+  const [editing, setEditing] = useState<Emp | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", email: "", pin: "", role: "cashier", active: true });
+  const [msg, setMsg] = useState("");
 
   async function load() {
     setEmployees(await api("/employees"));
@@ -1180,11 +1785,82 @@ function EmployeesPage() {
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
-    await api("/employees", {
-      method: "POST",
-      body: JSON.stringify(form),
+    setMsg("");
+    try {
+      await api("/employees", {
+        method: "POST",
+        body: JSON.stringify(form),
+      });
+      setForm({ name: "", email: "", pin: "", role: "cashier" });
+      setMsg("Employee added. PIN is stored hashed and is not shown again.");
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not add employee");
+    }
+  }
+
+  function openEdit(emp: Emp) {
+    setEditing(emp);
+    setEditForm({
+      name: emp.name,
+      email: emp.email,
+      pin: "",
+      role: emp.role,
+      active: emp.active,
     });
-    await load();
+    setMsg("");
+  }
+
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editing) return;
+    setMsg("");
+    try {
+      await api(`/employees/${editing.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: editForm.name.trim(),
+          email: editForm.email.trim(),
+          role: editForm.role,
+          active: editForm.active,
+          ...(editForm.pin.trim() ? { pin: editForm.pin.trim() } : {}),
+        }),
+      });
+      setEditing(null);
+      setMsg("Employee updated.");
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not update employee");
+    }
+  }
+
+  async function setActive(emp: Emp, active: boolean) {
+    setMsg("");
+    try {
+      await api(`/employees/${emp.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ active }),
+      });
+      setMsg(active ? `${emp.name} reactivated.` : `${emp.name} deactivated.`);
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not update status");
+    }
+  }
+
+  async function removeEmp(emp: Emp) {
+    if (!window.confirm(`Remove ${emp.name}? If they have sales history they will be deactivated instead.`)) return;
+    setMsg("");
+    try {
+      const result = await api<{ deactivated?: boolean; deleted?: boolean; message?: string }>(`/employees/${emp.id}`, {
+        method: "DELETE",
+      });
+      setEditing((cur) => (cur?.id === emp.id ? null : cur));
+      setMsg(result.message || (result.deactivated ? `${emp.name} deactivated.` : `${emp.name} deleted.`));
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not remove employee");
+    }
   }
 
   return (
@@ -1192,9 +1868,10 @@ function EmployeesPage() {
       <div className="page-head">
         <div>
           <h2>Employees</h2>
-          <p>Roles (owner / manager / cashier) and PIN login</p>
+          <p>Back office uses email + PIN. The till needs a unique PIN per person.</p>
         </div>
       </div>
+      {msg && <p className="panel-box" style={{ marginBottom: 12 }}>{msg}</p>}
       <form className="panel-box" onSubmit={(e) => void create(e)}>
         <h3>Add employee</h3>
         <div className="grid-2">
@@ -1204,11 +1881,20 @@ function EmployeesPage() {
           </div>
           <div className="field">
             <label>Email</label>
-            <input required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           </div>
           <div className="field">
-            <label>PIN</label>
-            <input required value={form.pin} onChange={(e) => setForm({ ...form, pin: e.target.value })} />
+            <label>PIN (unique on the till)</label>
+            <input
+              required
+              type="password"
+              inputMode="numeric"
+              autoComplete="new-password"
+              minLength={4}
+              maxLength={8}
+              value={form.pin}
+              onChange={(e) => setForm({ ...form, pin: e.target.value })}
+            />
           </div>
           <div className="field">
             <label>Role</label>
@@ -1219,8 +1905,9 @@ function EmployeesPage() {
             </select>
           </div>
         </div>
-        <button type="submit">Save</button>
+        <button type="submit">Add</button>
       </form>
+
       <div className="table-wrap">
         <table>
           <thead>
@@ -1228,8 +1915,9 @@ function EmployeesPage() {
               <th>Name</th>
               <th>Email</th>
               <th>Role</th>
-              <th>PIN (demo)</th>
+              <th>PIN</th>
               <th>Status</th>
+              <th />
             </tr>
           </thead>
           <tbody>
@@ -1238,13 +1926,90 @@ function EmployeesPage() {
                 <td>{e.name}</td>
                 <td>{e.email}</td>
                 <td>{e.role}</td>
-                <td>{e.pinDisplay}</td>
+                <td>
+                  <span className="badge">{e.hasPin === false ? "Not set" : "Hidden"}</span>
+                </td>
                 <td>{e.active ? <span className="badge">Active</span> : <span className="badge danger">Inactive</span>}</td>
+                <td style={{ whiteSpace: "nowrap" }}>
+                  <button type="button" className="secondary" onClick={() => openEdit(e)}>
+                    Edit
+                  </button>{" "}
+                  {e.active ? (
+                    <button type="button" className="secondary" onClick={() => void setActive(e, false)}>
+                      Deactivate
+                    </button>
+                  ) : (
+                    <button type="button" className="secondary" onClick={() => void setActive(e, true)}>
+                      Reactivate
+                    </button>
+                  )}{" "}
+                  <button type="button" className="secondary" onClick={() => void removeEmp(e)}>
+                    Delete
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      <BoEditSheet
+        open={Boolean(editing)}
+        onClose={() => setEditing(null)}
+        title={editing ? `Edit · ${editing.name}` : ""}
+      >
+        {editing && (
+          <form onSubmit={(e) => void saveEdit(e)}>
+            <div className="grid-2">
+              <div className="field">
+                <label>Name</label>
+                <input required value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>Email</label>
+                <input required type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>New PIN (leave blank to keep)</label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="new-password"
+                  minLength={4}
+                  maxLength={8}
+                  value={editForm.pin}
+                  onChange={(e) => setEditForm({ ...editForm, pin: e.target.value })}
+                  placeholder="••••"
+                />
+              </div>
+              <div className="field">
+                <label>Role</label>
+                <select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}>
+                  <option value="cashier">Cashier</option>
+                  <option value="manager">Manager</option>
+                  <option value="owner">Owner</option>
+                </select>
+              </div>
+              <div className="field">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={editForm.active}
+                    onChange={(e) => setEditForm({ ...editForm, active: e.target.checked })}
+                  />{" "}
+                  Active (can sign in)
+                </label>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="submit">Save changes</button>
+              <button type="button" className="secondary" onClick={() => void removeEmp(editing)}>
+                Delete
+              </button>
+            </div>
+          </form>
+        )}
+      </BoEditSheet>
     </div>
   );
 }
@@ -1258,29 +2023,90 @@ export async function switchStore(storeId: string) {
   window.location.reload();
 }
 
+type TillDeviceRow = {
+  id: string;
+  label: string;
+  registerId: string | null;
+  registerName: string | null;
+  lastEmployeeName: string | null;
+  lastUserAgent: string | null;
+  lastSeenAt: string;
+  supportNote: string | null;
+  online: boolean;
+};
+
+type RegisterRow = {
+  id: string;
+  name: string;
+  createdAt?: string;
+  lastSeenAt?: string | null;
+  lastEmployeeName?: string | null;
+  lastDeviceLabel?: string | null;
+  online?: boolean;
+};
+
+type OpenTicketRow = {
+  id: string;
+  name: string;
+  status: string;
+  registerName: string;
+  customerName: string | null;
+  lineCount: number;
+  lines: { name: string; quantity: number }[];
+  updatedAt: string;
+};
+
+function formatSeenAt(iso: string | null | undefined) {
+  if (!iso) return "Never";
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "—";
+  const mins = Math.round((Date.now() - t) / 60_000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 48) return `${hours} h ago`;
+  return new Date(iso).toLocaleString("en-GB", { timeZone: "Europe/London" });
+}
+
 function StoresPage() {
   const [settings, setSettings] = useState<{
     store: { id: string; name: string; address: string | null; currency: string };
     registers: { id: string; name: string }[];
   } | null>(null);
   const [stores, setStores] = useState<{ id: string; name: string; address: string | null; registers: { name: string }[] }[]>([]);
+  const [registers, setRegisters] = useState<RegisterRow[]>([]);
+  const [devices, setDevices] = useState<TillDeviceRow[]>([]);
+  const [openTickets, setOpenTickets] = useState<OpenTicketRow[]>([]);
   const [regName, setRegName] = useState("");
+  const [editingRegister, setEditingRegister] = useState<RegisterRow | null>(null);
+  const [registerFormName, setRegisterFormName] = useState("");
+  const [editingDevice, setEditingDevice] = useState<TillDeviceRow | null>(null);
+  const [deviceForm, setDeviceForm] = useState({ label: "", supportNote: "" });
+  const [tillMsg, setTillMsg] = useState("");
   const [branch, setBranch] = useState({ name: "", address: "", phone: "" });
   const [branchMsg, setBranchMsg] = useState("");
   const [role, setRole] = useState("");
   const [hasBranches, setHasBranches] = useState(false);
+  const tillUrl = `${window.location.origin}/pos/`;
+  const kitchenUrl = `${window.location.origin}/pos/kitchen`;
 
   async function load() {
-    const [sett, all, me, billing] = await Promise.all([
+    const [sett, all, me, billing, regs, devs, board] = await Promise.all([
       api<NonNullable<typeof settings>>("/settings"),
       api<typeof stores>("/auth/stores"),
       api<{ user: { role: string } }>("/auth/me"),
       api<{ features: string[] }>("/billing").catch(() => ({ features: [] as string[] })),
+      api<RegisterRow[]>("/employees/registers"),
+      api<TillDeviceRow[]>("/employees/devices").catch(() => [] as TillDeviceRow[]),
+      api<OpenTicketRow[]>("/extras/tickets-board").catch(() => [] as OpenTicketRow[]),
     ]);
     setSettings(sett);
     setStores(all);
     setRole(me.user.role);
     setHasBranches(billing.features.includes("multi_store"));
+    setRegisters(Array.isArray(regs) ? regs : []);
+    setDevices(Array.isArray(devs) ? devs : []);
+    setOpenTickets(Array.isArray(board) ? board : []);
   }
 
   async function addBranch(e: React.FormEvent) {
@@ -1309,26 +2135,384 @@ function StoresPage() {
 
   async function addRegister(e: React.FormEvent) {
     e.preventDefault();
-    await api("/employees/registers", { method: "POST", body: JSON.stringify({ name: regName }) });
-    setRegName("");
-    await load();
+    setTillMsg("");
+    try {
+      await api("/employees/registers", { method: "POST", body: JSON.stringify({ name: regName.trim() }) });
+      setRegName("");
+      setTillMsg("Till added. Open /pos/ on a device, sign in — it auto-registers here. Use this iPad as… to pin it.");
+      await load();
+    } catch (err) {
+      setTillMsg(err instanceof Error ? err.message : "Could not add till");
+    }
   }
+
+  async function saveRegisterName(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingRegister) return;
+    const name = registerFormName.trim();
+    if (!name) return;
+    setTillMsg("");
+    try {
+      await api(`/employees/registers/${editingRegister.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+      });
+      setEditingRegister(null);
+      setRegisterFormName("");
+      setTillMsg("Till name saved.");
+      await load();
+    } catch (err) {
+      setTillMsg(err instanceof Error ? err.message : "Could not rename till");
+    }
+  }
+
+  async function saveDevice(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingDevice) return;
+    setTillMsg("");
+    try {
+      await api(`/employees/devices/${editingDevice.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          label: deviceForm.label.trim() || undefined,
+          supportNote: deviceForm.supportNote.trim() || null,
+        }),
+      });
+      setEditingDevice(null);
+      setTillMsg("Device details saved.");
+      await load();
+    } catch (err) {
+      setTillMsg(err instanceof Error ? err.message : "Could not update device");
+    }
+  }
+
+  function copySupportPack() {
+    const storeName = settings?.store.name ?? "Store";
+    const online = devices.filter((d) => d.online).length;
+    const lines = [
+      `PurePOS till support — ${storeName}`,
+      `Till URL: ${tillUrl}`,
+      `Kitchen URL: ${kitchenUrl}`,
+      `Registers: ${registers.map((r) => r.name).join(", ") || "(none)"}`,
+      `Devices seen: ${devices.length} (${online} online now)`,
+      ...devices.slice(0, 12).map(
+        (d) =>
+          `• ${d.label}${d.online ? " [online]" : ""} — ${d.registerName ?? "unpinned"} — ${d.lastEmployeeName ?? "—"} — ${formatSeenAt(d.lastSeenAt)}${d.supportNote ? ` — note: ${d.supportNote}` : ""}`
+      ),
+    ];
+    void navigator.clipboard?.writeText(lines.join("\n")).then(() => setTillMsg("Status pack copied — paste into a ticket or chat"));
+  }
+
+  useEffect(() => {
+    if (!(role === "owner" || role === "manager")) return;
+    const refreshLive = () => {
+      void api<TillDeviceRow[]>("/employees/devices")
+        .then((devs) => setDevices(Array.isArray(devs) ? devs : []))
+        .catch(() => undefined);
+      void api<RegisterRow[]>("/employees/registers")
+        .then((regs) => setRegisters(Array.isArray(regs) ? regs : []))
+        .catch(() => undefined);
+      void api<OpenTicketRow[]>("/extras/tickets-board")
+        .then((board) => setOpenTickets(Array.isArray(board) ? board : []))
+        .catch(() => undefined);
+    };
+    const timer = window.setInterval(refreshLive, 15_000);
+    return () => window.clearInterval(timer);
+  }, [role]);
 
   return (
     <div>
       <div className="page-head">
         <div>
-          <h2>Stores & registers</h2>
-          <p>Your business’s stores · registers for the active store</p>
+          <h2>Stores & tills</h2>
+          <p>Live open tickets, devices, and till registers</p>
         </div>
       </div>
+
+      <div className="panel-box" style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 8 }}>
+          <h3 style={{ margin: 0, flex: "1 1 auto" }}>Open tickets</h3>
+          <button type="button" className="secondary" onClick={() => void load()}>
+            Refresh
+          </button>
+        </div>
+        <p style={{ color: "var(--muted)", marginTop: 0 }}>
+          Live sales across tills — same board the till app uses. Updates about every 15 seconds.
+        </p>
+        {openTickets.length === 0 ? (
+          <p style={{ color: "var(--muted)", marginBottom: 12 }}>No open or held tickets right now.</p>
+        ) : (
+          <ul style={{ listStyle: "none", padding: 0, margin: "0 0 12px" }}>
+            {openTickets.map((ticket) => {
+              const preview = ticket.lines
+                .slice(0, 3)
+                .map((line) => `${line.quantity}× ${line.name}`)
+                .join(", ");
+              const extra = ticket.lineCount > 3 ? ` +${ticket.lineCount - 3} more` : "";
+              return (
+                <li
+                  key={ticket.id}
+                  style={{
+                    marginBottom: 10,
+                    paddingBottom: 10,
+                    borderBottom: "1px solid var(--line)",
+                  }}
+                >
+                  <strong>
+                    {ticket.name || "Sale"}
+                    {ticket.status === "held" ? " · held" : ""}
+                  </strong>
+                  <div style={{ color: "var(--muted)", fontSize: "0.9rem", marginTop: 2 }}>
+                    {ticket.registerName}
+                    {ticket.customerName ? ` · ${ticket.customerName}` : ""}
+                    {" · "}
+                    {ticket.lineCount} line{ticket.lineCount === 1 ? "" : "s"}
+                    {" · "}
+                    {formatSeenAt(ticket.updatedAt)}
+                  </div>
+                  {(preview || extra) && (
+                    <div style={{ fontSize: "0.9rem", marginTop: 4 }}>
+                      {preview}
+                      {extra}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <a className="secondary" href={tillUrl} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none", padding: "8px 12px", borderRadius: 10 }}>
+            Open till
+          </a>
+          <a className="secondary" href={kitchenUrl} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none", padding: "8px 12px", borderRadius: 10 }}>
+            Kitchen
+          </a>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => void navigator.clipboard?.writeText(tillUrl).then(() => setTillMsg("Till link copied"))}
+          >
+            Copy till link
+          </button>
+          <button type="button" className="secondary" onClick={copySupportPack}>
+            Copy status pack
+          </button>
+        </div>
+        {tillMsg && <p style={{ marginBottom: 0 }}>{tillMsg}</p>}
+      </div>
+
+      {(role === "owner" || role === "manager") && (
+        <div className="panel-box" style={{ marginBottom: 16 }}>
+          <h3 style={{ marginTop: 0 }}>Devices signed in</h3>
+          <p style={{ color: "var(--muted)", marginTop: 0 }}>
+            Every phone or iPad that opens the till. Online = heartbeat in the last 3 minutes. This list is separate
+            from <strong>Tills</strong> below (named slots like Front Counter).
+          </p>
+          {devices.length === 0 ? (
+            <p style={{ color: "var(--muted)" }}>
+              No devices yet — open the till app on a phone or iPad and sign in with a PIN. It will show up here.
+            </p>
+          ) : (
+            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+              {devices.map((dev) => (
+                <li
+                  key={dev.id}
+                  style={{
+                    marginBottom: 12,
+                    paddingBottom: 12,
+                    borderBottom: "1px solid var(--line)",
+                  }}
+                >
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-start" }}>
+                      <span
+                        title={dev.online ? "Online" : "Offline"}
+                        style={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: "50%",
+                          marginTop: 6,
+                          background: dev.online ? "#2F6F4E" : "#9aa3ad",
+                          flex: "0 0 auto",
+                        }}
+                      />
+                      <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+                        <strong>{dev.label}</strong>
+                        <div style={{ color: "var(--muted)", fontSize: "0.9rem", marginTop: 2 }}>
+                          {dev.registerName ? `Till: ${dev.registerName}` : "Not pinned to a till yet"}
+                          {" · "}
+                          {dev.lastEmployeeName ? `Last: ${dev.lastEmployeeName}` : "No staff yet"}
+                          {" · "}
+                          {formatSeenAt(dev.lastSeenAt)}
+                          {dev.online ? " · Online" : ""}
+                        </div>
+                        {dev.supportNote && (
+                          <div style={{ fontSize: "0.9rem", marginTop: 4 }}>{dev.supportNote}</div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => {
+                          setEditingDevice(dev);
+                          setDeviceForm({ label: dev.label, supportNote: dev.supportNote ?? "" });
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => {
+                          if (!window.confirm(`Remove ${dev.label} from this list? It will reappear if they open the till again.`)) return;
+                          void api(`/employees/devices/${dev.id}`, { method: "DELETE" })
+                            .then(() => {
+                              setTillMsg(`${dev.label} removed.`);
+                              return load();
+                            })
+                            .catch((err) => setTillMsg(err instanceof Error ? err.message : "Could not remove device"));
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      <div className="panel-box" style={{ marginBottom: 16 }}>
+        <h3 style={{ marginTop: 0 }}>Tills on {settings?.store.name ?? "this store"}</h3>
+        <p style={{ color: "var(--muted)", marginTop: 0 }}>
+          Tills are named slots (Front Counter, Patio…). Phones and iPads appear under the till they are pinned to —
+          add another till below if the phone should be its own station.
+        </p>
+        {registers.length === 0 && (
+          <p style={{ color: "var(--muted)" }}>
+            No tills yet — the first till login creates Front Counter, or add one below.
+          </p>
+        )}
+        <ul style={{ listStyle: "none", padding: 0, margin: "0 0 12px" }}>
+          {registers.map((reg) => {
+            const onTill = devices.filter((dev) => dev.registerId === reg.id);
+            return (
+            <li
+              key={reg.id}
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 8,
+                alignItems: "flex-start",
+                marginBottom: 10,
+                paddingBottom: 10,
+                borderBottom: "1px solid var(--line)",
+              }}
+            >
+              <>
+                  <span
+                    title={reg.online ? "Online" : "Offline"}
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: "50%",
+                      marginTop: 6,
+                      background: reg.online ? "#2F6F4E" : "#9aa3ad",
+                      flex: "0 0 auto",
+                    }}
+                  />
+                  <div style={{ flex: "1 1 160px", minWidth: 0 }}>
+                    <strong>{reg.name}</strong>
+                    <div style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: 2 }}>
+                      {reg.lastSeenAt
+                        ? `${formatSeenAt(reg.lastSeenAt)}${reg.lastEmployeeName ? ` · ${reg.lastEmployeeName}` : ""}`
+                        : "No device signed in yet"}
+                    </div>
+                    {onTill.length > 0 ? (
+                      <div style={{ fontSize: "0.9rem", marginTop: 6 }}>
+                        {onTill.map((dev) => (
+                          <span key={dev.id} style={{ display: "inline-block", marginRight: 12, marginBottom: 4 }}>
+                            <span
+                              title={dev.online ? "Online" : "Offline"}
+                              style={{
+                                display: "inline-block",
+                                width: 8,
+                                height: 8,
+                                borderRadius: "50%",
+                                marginRight: 6,
+                                background: dev.online ? "#2F6F4E" : "#9aa3ad",
+                              }}
+                            />
+                            {dev.label}
+                            {!dev.online ? ` · ${formatSeenAt(dev.lastSeenAt)}` : " · online"}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: 4 }}>
+                        No phones or iPads pinned here yet
+                      </div>
+                    )}
+                  </div>
+                  {(role === "owner" || role === "manager") && (
+                    <>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => {
+                          setEditingRegister(reg);
+                          setRegisterFormName(reg.name);
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => {
+                          if (!window.confirm(`Delete till ${reg.name}? Only works if it has no sales history.`)) return;
+                          void api(`/employees/registers/${reg.id}`, { method: "DELETE" })
+                            .then(() => {
+                              setTillMsg(`${reg.name} deleted.`);
+                              return load();
+                            })
+                            .catch((err) => setTillMsg(err instanceof Error ? err.message : "Could not delete till"));
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
+              </>
+            </li>
+            );
+          })}
+        </ul>
+        {(role === "owner" || role === "manager") && (
+          <form onSubmit={(e) => void addRegister(e)}>
+            <div className="field">
+              <label htmlFor="new-till-name">Add a till / kiosk</label>
+              <input
+                id="new-till-name"
+                required
+                placeholder="e.g. Patio Kiosk or Drive-thru"
+                value={regName}
+                onChange={(e) => setRegName(e.target.value)}
+              />
+            </div>
+            <button type="submit">Add till</button>
+          </form>
+        )}
+      </div>
+
       <div className="table-wrap" style={{ marginBottom: 16 }}>
         <table>
           <thead>
             <tr>
               <th>Store</th>
               <th>Address</th>
-              <th>Registers</th>
+              <th>Tills</th>
               <th />
             </tr>
           </thead>
@@ -1339,7 +2523,7 @@ function StoresPage() {
                   {s.name}
                   {settings?.store.id === s.id && <span className="badge" style={{ marginLeft: 8 }}>Current</span>}
                   <div style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: 4 }}>
-                    {s.registers.length ? s.registers.map((r) => r.name).join(", ") : "No register yet"}
+                    {s.registers.length ? s.registers.map((r) => r.name).join(", ") : "No till yet"}
                   </div>
                 </td>
                 <td>{s.address}</td>
@@ -1397,20 +2581,62 @@ function StoresPage() {
             </>
           ) : (
             <p style={{ color: "var(--muted)", marginTop: 0 }}>
-              Branches are part of the <strong>Group</strong> plan. Upgrade in Settings → Billing to add more sites.
+              Branches are part of the <strong>Multi</strong> plan. Upgrade in Settings → Billing to add more sites.
             </p>
           )}
           {branchMsg && <p style={{ marginBottom: 0 }}>{branchMsg}</p>}
         </form>
       )}
-      <form className="panel-box" onSubmit={(e) => void addRegister(e)}>
-        <h3>Add register to current store</h3>
-        <div className="field">
-          <label>Name</label>
-          <input required value={regName} onChange={(e) => setRegName(e.target.value)} />
-        </div>
-        <button type="submit">Add register</button>
-      </form>
+
+      <BoEditSheet
+        open={Boolean(editingRegister)}
+        onClose={() => setEditingRegister(null)}
+        title={editingRegister ? `Edit till · ${editingRegister.name}` : ""}
+      >
+        {editingRegister && (
+          <form onSubmit={(e) => void saveRegisterName(e)}>
+            <div className="field">
+              <label htmlFor="till-edit-name">Till name</label>
+              <input
+                id="till-edit-name"
+                required
+                value={registerFormName}
+                onChange={(e) => setRegisterFormName(e.target.value)}
+              />
+            </div>
+            <button type="submit">Save till</button>
+          </form>
+        )}
+      </BoEditSheet>
+
+      <BoEditSheet
+        open={Boolean(editingDevice)}
+        onClose={() => setEditingDevice(null)}
+        title={editingDevice ? `Edit device · ${editingDevice.label}` : ""}
+      >
+        {editingDevice && (
+          <form onSubmit={(e) => void saveDevice(e)}>
+            <div className="field">
+              <label htmlFor="dev-edit-label">Device name</label>
+              <input
+                id="dev-edit-label"
+                value={deviceForm.label}
+                onChange={(e) => setDeviceForm({ ...deviceForm, label: e.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="dev-edit-note">Support note</label>
+              <input
+                id="dev-edit-note"
+                placeholder="e.g. Patio iPad — Guided Access on"
+                value={deviceForm.supportNote}
+                onChange={(e) => setDeviceForm({ ...deviceForm, supportNote: e.target.value })}
+              />
+            </div>
+            <button type="submit">Save device</button>
+          </form>
+        )}
+      </BoEditSheet>
     </div>
   );
 }
@@ -1593,34 +2819,50 @@ function ReportsPage() {
   const [byEmp, setByEmp] = useState<{ name: string; receipts: number; salesCents: number }[]>([]);
   const [payments, setPayments] = useState<{ name: string; count: number; amountCents: number }[]>([]);
   const [taxes, setTaxes] = useState<{ totalTaxCents: number; taxableSalesCents: number } | null>(null);
+  const [advancedBlocked, setAdvancedBlocked] = useState("");
+
+  async function loadAdvanced<T>(path: string): Promise<T | null> {
+    try {
+      return await api<T>(path);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Blocked";
+      if (/Richer reports|Complete or Multi|402/i.test(msg)) {
+        setAdvancedBlocked(upgradeBillingHint(msg));
+      }
+      return null;
+    }
+  }
 
   useEffect(() => {
-    void Promise.all([
-      api<Record<string, number | string>>("/reports/summary"),
-      api<typeof byItem>("/reports/by-item"),
-      api<typeof byCat>("/reports/by-category"),
-      api<typeof byEmp>("/reports/by-employee"),
-      api<typeof payments>("/reports/payments"),
-      api<NonNullable<typeof taxes>>("/reports/taxes"),
-    ]).then(([s, i, c, e, p, t]) => {
-      setSummary(s);
-      setByItem(i);
-      setByCat(c);
-      setByEmp(e);
-      setPayments(p);
-      setTaxes(t);
-    });
+    void (async () => {
+      setAdvancedBlocked("");
+      const s = await api<Record<string, number | string>>("/reports/summary").catch(() => null);
+      if (s) setSummary(s);
+      const [i, c, e, p, t] = await Promise.all([
+        loadAdvanced<typeof byItem>("/reports/by-item"),
+        loadAdvanced<typeof byCat>("/reports/by-category"),
+        loadAdvanced<typeof byEmp>("/reports/by-employee"),
+        loadAdvanced<typeof payments>("/reports/payments"),
+        loadAdvanced<NonNullable<typeof taxes>>("/reports/taxes"),
+      ]);
+      if (i) setByItem(i);
+      if (c) setByCat(c);
+      if (e) setByEmp(e);
+      if (p) setPayments(p);
+      if (t) setTaxes(t);
+    })();
   }, []);
 
   return (
-    <div>
+    <div className="reports-page">
       <div className="page-head">
         <div>
           <h2>Reports</h2>
-          <p>Sales, by item / category / employee, payments, taxes, shifts</p>
+          <p>Sales, by item / category / employee, payments, taxes</p>
         </div>
       </div>
-      <div className="cards">
+      {advancedBlocked && <p className="error">{advancedBlocked}</p>}
+      <div className="cards reports-cards">
         <div className="stat">
           <div className="label">Gross</div>
           <div className="value">{money(Number(summary?.grossSalesCents ?? 0))}</div>
@@ -1639,7 +2881,7 @@ function ReportsPage() {
         </div>
       </div>
 
-      <div className="grid-2">
+      <div className="reports-grid">
         <ReportTable title="By item" rows={byItem.map((r) => [r.name, String(r.qty), money(r.salesCents)])} headers={["Item", "Qty", "Sales"]} />
         <ReportTable title="By category" rows={byCat.map((r) => [r.name, String(r.qty), money(r.salesCents)])} headers={["Category", "Qty", "Sales"]} />
         <ReportTable title="By employee" rows={byEmp.map((r) => [r.name, String(r.receipts), money(r.salesCents)])} headers={["Employee", "Receipts", "Sales"]} />
@@ -1651,28 +2893,34 @@ function ReportsPage() {
 
 function ReportTable({ title, headers, rows }: { title: string; headers: string[]; rows: string[][] }) {
   return (
-    <div className="panel-box">
+    <div className="panel-box reports-panel">
       <h3>{title}</h3>
-      <div className="table-wrap" style={{ border: "none" }}>
-        <table>
-          <thead>
-            <tr>
-              {headers.map((h) => (
-                <th key={h}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={i}>
-                {r.map((c, j) => (
-                  <td key={j}>{c}</td>
+      {rows.length === 0 ? (
+        <p className="reports-empty">Nothing yet.</p>
+      ) : (
+        <div className="table-wrap reports-table-wrap">
+          <table className="reports-table">
+            <thead>
+              <tr>
+                {headers.map((h) => (
+                  <th key={h}>{h}</th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i}>
+                  {r.map((c, j) => (
+                    <td key={j} title={c}>
+                      {c}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -1880,9 +3128,11 @@ function SettingsPage() {
   const [settings, setSettings] = useState<{
     store: StoreDetails;
     orderingHost: string;
-    receipt: { header: string; footer: string; showTaxBreakdown: boolean };
-    taxes: { id: string; name: string; rateBps: number; enabled: boolean }[];
+    receipt: { header: string; footer: string; showTaxBreakdown: boolean; printCustomer: boolean };
+    taxes: { id: string; name: string; rateBps: number; enabled: boolean; inclusive: boolean }[];
     paymentTypes: { id: string; name: string; type: string; enabled: boolean; opensDrawer: boolean }[];
+    currencySymbol: string;
+    textPay: { message: string };
   } | null>(null);
   const [billing, setBilling] = useState<{
     planId: string;
@@ -1893,9 +3143,26 @@ function SettingsPage() {
     plan: { name: string; monthlyGbp: number; highlights: string[]; features: string[] };
   } | null>(null);
   const [billingMsg, setBillingMsg] = useState("");
-  const [receipt, setReceipt] = useState({ header: "", footer: "" });
-  const [taxForm, setTaxForm] = useState({ name: "VAT", rate: "20" });
-  const [ptForm, setPtForm] = useState({ name: "", type: "other" });
+  const [receipt, setReceipt] = useState({ header: "", footer: "", printCustomer: true });
+  const [editingTax, setEditingTax] = useState<
+    { id: string; name: string; rateBps: number; enabled: boolean; inclusive: boolean } | "new" | null
+  >(null);
+  const [taxEditForm, setTaxEditForm] = useState({
+    name: "VAT",
+    rate: "20",
+    inclusive: false,
+    enabled: true,
+  });
+  const [editingPay, setEditingPay] = useState<
+    { id: string; name: string; type: string; enabled: boolean; opensDrawer: boolean } | "new" | null
+  >(null);
+  const [payEditForm, setPayEditForm] = useState({
+    name: "",
+    type: "other",
+    enabled: true,
+    opensDrawer: false,
+  });
+  const [settingsMsg, setSettingsMsg] = useState("");
   const [pilotMsg, setPilotMsg] = useState("");
   const [backupMsg, setBackupMsg] = useState("");
   const [backupBusy, setBackupBusy] = useState(false);
@@ -1910,6 +3177,8 @@ function SettingsPage() {
   const [textPayRecent, setTextPayRecent] = useState<
     { id: string; amountCents: number; status: string; payUrl: string; phone: string | null; createdAt: string }[]
   >([]);
+  const [textPayMessage, setTextPayMessage] = useState(DEFAULT_TEXT_PAY_MESSAGE);
+  const [textPayMessageMsg, setTextPayMessageMsg] = useState("");
 
   async function load() {
     const [s, b, tp, links] = await Promise.all([
@@ -1922,12 +3191,150 @@ function SettingsPage() {
     setBilling(b);
     setTextPayStatus(tp);
     setTextPayRecent(Array.isArray(links) ? links.slice(0, 8) : []);
-    setReceipt({ header: s.receipt.header, footer: s.receipt.footer });
+    setReceipt({
+      header: s.receipt.header,
+      footer: s.receipt.footer,
+      printCustomer: s.receipt.printCustomer !== false,
+    });
+    setTextPayMessage(s.textPay?.message?.trim() || DEFAULT_TEXT_PAY_MESSAGE);
   }
 
   useEffect(() => {
     void load();
   }, []);
+
+  function openTaxEdit(t: NonNullable<typeof settings>["taxes"][number]) {
+    setEditingTax(t);
+    setTaxEditForm({
+      name: t.name,
+      rate: (t.rateBps / 100).toFixed(2),
+      inclusive: t.inclusive,
+      enabled: t.enabled,
+    });
+  }
+
+  function openTaxAdd() {
+    setEditingTax("new");
+    setTaxEditForm({ name: "VAT", rate: "20", inclusive: false, enabled: true });
+  }
+
+  async function saveTaxEdit(e: React.FormEvent) {
+    e.preventDefault();
+    setSettingsMsg("");
+    const rateBps = Math.round(parseFloat(taxEditForm.rate) * 100);
+    if (!taxEditForm.name.trim() || !Number.isFinite(rateBps)) {
+      setSettingsMsg("Tax name and rate are required.");
+      return;
+    }
+    try {
+      const payload = {
+        name: taxEditForm.name.trim(),
+        rateBps,
+        inclusive: taxEditForm.inclusive,
+        enabled: taxEditForm.enabled,
+      };
+      if (editingTax === "new") {
+        await api("/settings/taxes", { method: "POST", body: JSON.stringify(payload) });
+      } else if (editingTax) {
+        await api(`/settings/taxes/${editingTax.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+      }
+      setEditingTax(null);
+      await load();
+    } catch (err) {
+      setSettingsMsg(err instanceof Error ? err.message : "Could not save tax");
+    }
+  }
+
+  async function deleteTax() {
+    if (!editingTax || editingTax === "new") return;
+    if (!window.confirm(`Delete tax ${editingTax.name}?`)) return;
+    setSettingsMsg("");
+    try {
+      await api(`/settings/taxes/${editingTax.id}`, { method: "DELETE" });
+      setEditingTax(null);
+      await load();
+    } catch (err) {
+      setSettingsMsg(err instanceof Error ? err.message : "Could not delete tax");
+    }
+  }
+
+  function openPayEdit(p: NonNullable<typeof settings>["paymentTypes"][number]) {
+    setEditingPay(p);
+    setPayEditForm({
+      name: p.name,
+      type: p.type,
+      enabled: p.enabled,
+      opensDrawer: p.opensDrawer,
+    });
+  }
+
+  function openPayAdd() {
+    setEditingPay("new");
+    setPayEditForm({ name: "", type: "other", enabled: true, opensDrawer: false });
+  }
+
+  async function savePayEdit(e: React.FormEvent) {
+    e.preventDefault();
+    setSettingsMsg("");
+    if (!payEditForm.name.trim()) {
+      setSettingsMsg("Payment method name is required.");
+      return;
+    }
+    try {
+      if (editingPay === "new") {
+        const type = payEditForm.type === "store_credit" || payEditForm.type === "gift_card" ? payEditForm.type : "other";
+        await api("/settings/payment-types", {
+          method: "POST",
+          body: JSON.stringify({
+            name: payEditForm.name.trim(),
+            type,
+            enabled: payEditForm.enabled,
+            opensDrawer: payEditForm.opensDrawer,
+          }),
+        });
+      } else if (editingPay) {
+        await api(`/settings/payment-types/${editingPay.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            name: payEditForm.name.trim(),
+            enabled: payEditForm.enabled,
+            opensDrawer: payEditForm.opensDrawer,
+          }),
+        });
+      }
+      setEditingPay(null);
+      await load();
+    } catch (err) {
+      setSettingsMsg(err instanceof Error ? err.message : "Could not save payment method");
+    }
+  }
+
+  async function setPayEnabled(p: NonNullable<typeof settings>["paymentTypes"][number], enabled: boolean) {
+    setSettingsMsg("");
+    try {
+      await api(`/settings/payment-types/${p.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ enabled }),
+      });
+      await load();
+    } catch (err) {
+      setSettingsMsg(err instanceof Error ? err.message : "Could not update payment method");
+    }
+  }
+
+  async function deletePay() {
+    if (!editingPay || editingPay === "new") return;
+    if (editingPay.type === "cash" || editingPay.type === "card") return;
+    if (!window.confirm(`Delete ${editingPay.name}? Past sales keep the name they were paid with.`)) return;
+    setSettingsMsg("");
+    try {
+      await api(`/settings/payment-types/${editingPay.id}`, { method: "DELETE" });
+      setEditingPay(null);
+      await load();
+    } catch (err) {
+      setSettingsMsg(err instanceof Error ? err.message : "Could not delete payment method");
+    }
+  }
 
   if (!settings) return <p>Loading…</p>;
 
@@ -1936,7 +3343,7 @@ function SettingsPage() {
       <div className="page-head">
         <div>
           <h2>Settings</h2>
-          <p>Taxes, payment types, receipt, currency, billing</p>
+          <p>Taxes, payment methods, receipt, currency, billing</p>
         </div>
       </div>
 
@@ -1985,7 +3392,7 @@ function SettingsPage() {
                           .catch((err) => setBillingMsg(err instanceof Error ? err.message : "Could not change plan"));
                       }}
                     >
-                      {planId === "starter" ? "Solo" : planId === "pro" ? "Shop" : "Group"}
+                      {getPlan(planId).name}
                     </button>
                   ))}
               </div>
@@ -2024,8 +3431,8 @@ function SettingsPage() {
           </form>
           {billingMsg && <p style={{ marginBottom: 0 }}>{billingMsg}</p>}
           <p style={{ marginTop: 10, fontSize: "0.88rem", color: "var(--muted)" }}>
-            Solo: the till, items, live sync and backups. Shop adds online ordering, kitchen screens, delivery
-            apps (Just Eat, Deliveroo, Uber Eats), spreadsheet import and fuller reports. Group adds extra
+            Essential: the till, items, live sync and backups. Complete adds online ordering, kitchen screens, delivery
+            apps (Just Eat, Deliveroo, Uber Eats), spreadsheet import and fuller reports. Multi adds extra
             branches, stock transfers between them and choosing which items each branch sells.
           </p>
         </div>
@@ -2051,6 +3458,62 @@ function SettingsPage() {
             messages: {textPayStatus.twilio.configured ? "on" : "off, so copy the link and send it yourself"}
           </p>
         )}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const message = textPayMessage.trim();
+            if (!message) {
+              setTextPayMessageMsg("Write the text the customer is sent.");
+              return;
+            }
+            setTextPayMessageMsg("");
+            void api("/settings/text-pay", { method: "PATCH", body: JSON.stringify({ message }) })
+              .then(() => {
+                setTextPayMessage(message);
+                setTextPayMessageMsg("Saved");
+                return load();
+              })
+              .catch((err) =>
+                setTextPayMessageMsg(err instanceof Error ? err.message : "Could not save the text")
+              );
+          }}
+        >
+          <div className="field">
+            <label htmlFor="text-pay-message">Text the customer is sent</label>
+            <textarea
+              id="text-pay-message"
+              rows={3}
+              maxLength={320}
+              autoComplete="off"
+              value={textPayMessage}
+              onChange={(e) => {
+                setTextPayMessage(e.target.value);
+                setTextPayMessageMsg("");
+              }}
+            />
+          </div>
+          <p style={{ color: "var(--muted)", fontSize: "0.88rem", marginTop: 0 }}>
+            Saved for this business and used when a pay link is texted. {"{store}"}, {"{amount}"}, {"{name}"} and{" "}
+            {"{link}"} are filled in for each customer. The pay link is included even if {"{link}"} is left out. Card
+            payments and texting stay set up for the shop — nothing to paste here.
+          </p>
+          <p style={{ fontSize: "0.88rem", whiteSpace: "pre-wrap" }}>
+            <strong>Example. </strong>
+            {renderTextPayMessage(textPayMessage, {
+              store: settings.store.name,
+              amount: `${settings.currencySymbol || "£"}10.00`,
+              link: `${textPayStatus?.publicPayBase ?? "https://purepos.co.uk/pay"}/example`,
+              name: "Alex",
+            })}
+          </p>
+          <div className="toolbar">
+            <button type="submit">Save text</button>
+            <button type="button" className="secondary" onClick={() => setTextPayMessage(DEFAULT_TEXT_PAY_MESSAGE)}>
+              Use standard text
+            </button>
+            {textPayMessageMsg && <span style={{ color: "var(--muted)" }}>{textPayMessageMsg}</span>}
+          </div>
+        </form>
         <div className="toolbar" style={{ alignItems: "flex-end" }}>
           <div className="field" style={{ margin: 0 }}>
             <label>Amount (£)</label>
@@ -2274,102 +3737,234 @@ function SettingsPage() {
           <label>Footer</label>
           <input value={receipt.footer} onChange={(e) => setReceipt({ ...receipt, footer: e.target.value })} />
         </div>
+        <label style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 14 }}>
+          <input
+            type="checkbox"
+            checked={receipt.printCustomer}
+            onChange={(e) => setReceipt({ ...receipt, printCustomer: e.target.checked })}
+          />
+          Show and print customer receipt after payment
+        </label>
+        <p style={{ color: "var(--muted)", marginTop: 0, fontSize: "0.9rem" }}>
+          Turn off to skip the customer receipt on the till. Kitchen tickets still print. You can reprint a sale from
+          Receipts anytime.
+        </p>
         <button type="submit">Save receipt</button>
       </form>
 
+      {settingsMsg && (
+        <p className="panel-box" style={{ marginBottom: 12, color: "var(--muted)" }}>
+          {settingsMsg}
+        </p>
+      )}
+
       <div className="grid-2">
         <div className="panel-box">
-          <h3>Taxes</h3>
+          <div className="page-head" style={{ marginBottom: 8 }}>
+            <h3 style={{ margin: 0 }}>Taxes</h3>
+            <button type="button" onClick={openTaxAdd}>
+              Add tax
+            </button>
+          </div>
           <table>
             <thead>
               <tr>
                 <th>Name</th>
                 <th>Rate</th>
                 <th>Enabled</th>
+                <th />
               </tr>
             </thead>
             <tbody>
               {settings.taxes.map((t) => (
                 <tr key={t.id}>
-                  <td>{t.name}</td>
+                  <td>
+                    {t.name}
+                    {t.inclusive && <span className="badge" style={{ marginLeft: 6 }}>Inclusive</span>}
+                  </td>
                   <td>{(t.rateBps / 100).toFixed(2)}%</td>
                   <td>{t.enabled ? "Yes" : "No"}</td>
+                  <td>
+                    <button type="button" className="secondary" onClick={() => openTaxEdit(t)}>
+                      Edit
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <form
-            style={{ marginTop: 12 }}
-            onSubmit={(e) => {
-              e.preventDefault();
-              void api("/settings/taxes", {
-                method: "POST",
-                body: JSON.stringify({
-                  name: taxForm.name,
-                  rateBps: Math.round(parseFloat(taxForm.rate) * 100),
-                }),
-              }).then(() => load());
-            }}
-          >
-            <div className="field">
-              <label>Name</label>
-              <input value={taxForm.name} onChange={(e) => setTaxForm({ ...taxForm, name: e.target.value })} />
-            </div>
-            <div className="field">
-              <label>Rate %</label>
-              <input value={taxForm.rate} onChange={(e) => setTaxForm({ ...taxForm, rate: e.target.value })} />
-            </div>
-            <button type="submit">Add tax</button>
-          </form>
         </div>
 
         <div className="panel-box">
-          <h3>Payment types</h3>
+          <div className="page-head" style={{ marginBottom: 8 }}>
+            <h3 style={{ margin: 0 }}>Payment methods</h3>
+            <button type="button" onClick={openPayAdd}>
+              Add payment method
+            </button>
+          </div>
+          <p style={{ color: "var(--muted)", marginTop: 0, fontSize: "0.9rem" }}>
+            These show on the till Charge screen. Add your own, rename them, or turn one off. Cash and Card stay in the
+            list so existing sales keep working.
+          </p>
           <table>
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Type</th>
-                <th>Drawer</th>
+                <th>On till</th>
+                <th />
               </tr>
             </thead>
             <tbody>
               {settings.paymentTypes.map((p) => (
                 <tr key={p.id}>
-                  <td>{p.name}</td>
-                  <td>{p.type}</td>
-                  <td>{p.opensDrawer ? "Yes" : "No"}</td>
+                  <td>
+                    {p.name}
+                    {(p.type === "cash" || p.type === "card") && (
+                      <span className="badge" style={{ marginLeft: 6 }}>Built-in</span>
+                    )}
+                  </td>
+                  <td>
+                    <label className="check-row" style={{ margin: 0 }}>
+                      <input
+                        type="checkbox"
+                        checked={p.enabled}
+                        aria-label={`${p.enabled ? "Turn off" : "Turn on"} ${p.name}`}
+                        onChange={(e) => void setPayEnabled(p, e.target.checked)}
+                      />
+                      <span>{p.enabled ? "On" : "Off"}</span>
+                    </label>
+                  </td>
+                  <td>
+                    <button type="button" className="secondary" onClick={() => openPayEdit(p)}>
+                      Rename
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <form
-            style={{ marginTop: 12 }}
-            onSubmit={(e) => {
-              e.preventDefault();
-              void api("/settings/payment-types", {
-                method: "POST",
-                body: JSON.stringify(ptForm),
-              }).then(() => load());
-            }}
-          >
-            <div className="field">
-              <label>Name</label>
-              <input value={ptForm.name} onChange={(e) => setPtForm({ ...ptForm, name: e.target.value })} required />
-            </div>
-            <div className="field">
-              <label>Type</label>
-              <select value={ptForm.type} onChange={(e) => setPtForm({ ...ptForm, type: e.target.value })}>
-                <option value="cash">Cash</option>
-                <option value="card">Card</option>
-                <option value="other">Other</option>
-                <option value="store_credit">Store credit</option>
-              </select>
-            </div>
-            <button type="submit">Add payment type</button>
-          </form>
         </div>
       </div>
+
+      <BoEditSheet
+        open={editingTax !== null}
+        onClose={() => setEditingTax(null)}
+        title={editingTax === "new" ? "Add tax" : editingTax ? `Edit · ${editingTax.name}` : ""}
+      >
+        {editingTax !== null && (
+          <form onSubmit={(e) => void saveTaxEdit(e)}>
+            <div className="field">
+              <label>Name</label>
+              <input
+                required
+                value={taxEditForm.name}
+                onChange={(e) => setTaxEditForm({ ...taxEditForm, name: e.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label>Rate %</label>
+              <input
+                required
+                value={taxEditForm.rate}
+                onChange={(e) => setTaxEditForm({ ...taxEditForm, rate: e.target.value })}
+              />
+            </div>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+              <input
+                type="checkbox"
+                checked={taxEditForm.inclusive}
+                onChange={(e) => setTaxEditForm({ ...taxEditForm, inclusive: e.target.checked })}
+              />
+              Prices include this tax (inclusive)
+            </label>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16 }}>
+              <input
+                type="checkbox"
+                checked={taxEditForm.enabled}
+                onChange={(e) => setTaxEditForm({ ...taxEditForm, enabled: e.target.checked })}
+              />
+              Enabled on till
+            </label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="submit">{editingTax === "new" ? "Add tax" : "Save tax"}</button>
+              {editingTax !== "new" && (
+                <button type="button" className="danger" onClick={() => void deleteTax()}>
+                  Delete
+                </button>
+              )}
+            </div>
+          </form>
+        )}
+      </BoEditSheet>
+
+      <BoEditSheet
+        open={editingPay !== null}
+        onClose={() => setEditingPay(null)}
+        title={editingPay === "new" ? "Add payment method" : editingPay ? `Rename · ${editingPay.name}` : ""}
+      >
+        {editingPay !== null && (
+          <form onSubmit={(e) => void savePayEdit(e)}>
+            <div className="field">
+              <label htmlFor="pay-method-name">Name</label>
+              <input
+                id="pay-method-name"
+                required
+                maxLength={40}
+                value={payEditForm.name}
+                onChange={(e) => setPayEditForm({ ...payEditForm, name: e.target.value })}
+              />
+            </div>
+            {editingPay === "new" ? (
+              <div className="field">
+                <label htmlFor="pay-method-behaviour">Behaviour</label>
+                <select
+                  id="pay-method-behaviour"
+                  value={payEditForm.type === "gift_card" || payEditForm.type === "store_credit" ? payEditForm.type : "other"}
+                  onChange={(e) => setPayEditForm({ ...payEditForm, type: e.target.value })}
+                >
+                  <option value="other">Normal payment</option>
+                  <option value="store_credit">Store credit</option>
+                  <option value="gift_card">Gift card</option>
+                </select>
+              </div>
+            ) : (
+              <p style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
+                {payEditForm.type === "cash" || payEditForm.type === "card"
+                  ? "Built-in tender. Rename it or turn it off. It is not deleted, so older sales stay intact."
+                  : payEditForm.type === "gift_card"
+                    ? "The till asks for a gift card code when this is used."
+                    : payEditForm.type === "store_credit"
+                      ? "Uses the customer’s store credit."
+                      : "Shows on the till Charge screen while it is on."}
+              </p>
+            )}
+            <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+              <input
+                type="checkbox"
+                checked={payEditForm.opensDrawer}
+                onChange={(e) => setPayEditForm({ ...payEditForm, opensDrawer: e.target.checked })}
+              />
+              Opens cash drawer when used
+            </label>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16 }}>
+              <input
+                type="checkbox"
+                checked={payEditForm.enabled}
+                onChange={(e) => setPayEditForm({ ...payEditForm, enabled: e.target.checked })}
+              />
+              On the till
+            </label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="submit">{editingPay === "new" ? "Add payment method" : "Save"}</button>
+              {editingPay !== "new" && editingPay.type !== "cash" && editingPay.type !== "card" && (
+                <button type="button" className="danger" onClick={() => void deletePay()}>
+                  Delete
+                </button>
+              )}
+            </div>
+          </form>
+        )}
+      </BoEditSheet>
     </div>
   );
 }

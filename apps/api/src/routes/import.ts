@@ -4,7 +4,7 @@ import { prisma } from "../db.js";
 import { requireAuth, requireRole, type AuthedRequest } from "../auth.js";
 import { csvEscape, parseBool, parseCsv, parseNumber, parsePoundsToCents } from "../csv.js";
 import { storeAllowsFeature } from "./billing.js";
-import { LoyverseApiError, pullLoyverse } from "../loyverseApi.js";
+import { catalogStats, LoyverseApiError, pullLoyverse } from "../loyverseApi.js";
 import {
   applyLoyverse,
   applyLoyverseAccount,
@@ -22,7 +22,7 @@ importRouter.use(async (req: AuthedRequest, res, next) => {
   const allowed = await storeAllowsFeature(req.user!.storeId, "csv_import");
   if (!allowed) {
     return res.status(402).json({
-      error: "CSV import needs an active Shop or Group plan. Upgrade in Settings → Billing.",
+      error: "CSV import needs an active Complete or Multi plan. Upgrade in Settings → Billing.",
       feature: "csv_import",
     });
   }
@@ -160,14 +160,19 @@ importRouter.post("/loyverse/preview", async (req: AuthedRequest, res) => {
   if (!body.success) return res.status(400).json({ error: "Paste a Loyverse access token." });
   const catalog = await loyverseAccount(body.data.token);
   if (catalog instanceof LoyverseApiError) return res.status(catalog.status).json({ error: catalog.message });
+  const stats = catalogStats(catalog);
   const preview = await previewLoyverseAccount(req.user!.storeId, catalog);
+  const valid = preview.rows.filter((row) => row.action !== "error");
+  const errors = preview.rows.filter((row) => row.action === "error");
+  const warningNotes = stats.warnings.length ? ` ${stats.warnings.join(" ")}` : "";
   res.json({
     kind: "loyverse",
     detected: "api",
-    notes: preview.notes,
+    notes: `${preview.notes}${warningNotes}`,
+    pulled: stats,
     total: preview.rows.length,
-    valid: preview.rows.filter((row) => row.action !== "error").length,
-    errors: preview.rows.filter((row) => row.action === "error").length,
+    valid: valid.length,
+    errors: errors.length,
     rows: preview.rows,
   });
 });
@@ -178,16 +183,24 @@ importRouter.post("/loyverse/apply", async (req: AuthedRequest, res) => {
   const catalog = await loyverseAccount(body.data.token);
   if (catalog instanceof LoyverseApiError) return res.status(catalog.status).json({ error: catalog.message });
   const preview = await previewLoyverseAccount(req.user!.storeId, catalog);
+  const ready = preview.rows.filter((row) => row.action !== "error");
   const blockers = preview.rows.filter((row) => row.action === "error");
-  if (blockers.length) {
+  if (!ready.length) {
     return res.status(400).json({
-      error: `Fix ${blockers.length} row error(s) before importing`,
+      error: blockers.length
+        ? `Every row has an error (${blockers.length}). Fix the preview list first.`
+        : "Nothing to import — Loyverse returned no usable items or customers.",
       errors: blockers.length,
       rows: blockers.slice(0, 25),
     });
   }
-  const result = await applyLoyverseAccount(req.user!.storeId, preview.rows);
-  res.json({ kind: "loyverse", detected: "api", ...result });
+  const result = await applyLoyverseAccount(req.user!.storeId, ready, catalog);
+  res.json({
+    kind: "loyverse",
+    detected: "api",
+    skippedErrors: blockers.length,
+    ...result,
+  });
 });
 
 importRouter.post("/preview", async (req: AuthedRequest, res) => {

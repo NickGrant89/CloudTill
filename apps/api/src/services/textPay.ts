@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
+import { DEFAULT_TEXT_PAY_MESSAGE, TEXT_PAY_MESSAGE_KEY, renderTextPayMessage } from "@cloudtill/shared";
 import { prisma } from "../db.js";
-import { lineSubtotal } from "../money.js";
+import { currencySymbol, formatMoney, lineSubtotal } from "../money.js";
 import { attributionEmployee } from "../company.js";
 
 export function publicBaseUrl() {
@@ -21,6 +22,14 @@ export function twilioConfigured() {
       process.env.TWILIO_AUTH_TOKEN?.trim() &&
       process.env.TWILIO_FROM_NUMBER?.trim()
   );
+}
+
+export async function textPayMessageTemplate(storeId: string) {
+  const row = await prisma.setting.findUnique({
+    where: { storeId_key: { storeId, key: TEXT_PAY_MESSAGE_KEY } },
+  });
+  const value = row?.value?.trim();
+  return value || DEFAULT_TEXT_PAY_MESSAGE;
 }
 
 export function textPayEnvStatus() {
@@ -159,6 +168,9 @@ export async function completeTextPay(linkId: string, opts?: { employeeId?: stri
     })) ??
     (await prisma.paymentType.findFirst({
       where: { storeId: link.storeId, type: "card", enabled: true },
+    })) ??
+    (await prisma.paymentType.findFirst({
+      where: { storeId: link.storeId, type: "card" },
     })) ??
     (await prisma.paymentType.create({
       data: {
@@ -366,23 +378,27 @@ export async function createTextPayLink(opts: {
     }
   }
 
+  const template = await textPayMessageTemplate(opts.storeId);
+  const smsBody = renderTextPayMessage(template, {
+    store: store.name,
+    amount: formatMoney(opts.amountCents, currencySymbol(store.currency)),
+    link: payUrl,
+    name: opts.customerName ?? undefined,
+  });
+
   let status = "pending";
   let smsSid: string | null = null;
   let smsError: string | null = null;
   if (opts.sendSms !== false && opts.phone?.trim()) {
     if (twilioConfigured()) {
       try {
-        const pounds = (opts.amountCents / 100).toFixed(2);
-        smsSid = await sendTwilioSms(
-          opts.phone.trim(),
-          `${store.name}: pay £${pounds} securely ${payUrl}`
-        );
+        smsSid = await sendTwilioSms(opts.phone.trim(), smsBody);
         status = "sent";
       } catch (e) {
         smsError = e instanceof Error ? e.message : "SMS failed";
       }
     } else {
-      smsError = "Twilio not configured — copy the link to send manually";
+      smsError = "Text messages are off — copy the link to send it yourself";
     }
   }
 
@@ -408,6 +424,7 @@ export async function createTextPayLink(opts: {
     link,
     provider,
     hostedPayUrl,
+    smsBody,
     smsError,
     env: textPayEnvStatus(),
   };

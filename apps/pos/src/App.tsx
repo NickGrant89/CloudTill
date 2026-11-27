@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, getToken, setToken } from "./api";
 import { Login } from "./Login";
 import { Register } from "./Register";
 import { KitchenScreen } from "./KitchenScreen";
 import { resolveRegisterId } from "./pinnedTill";
+import { sendTillHeartbeat } from "./deviceIdentity";
 
 const KITCHEN_MODE = /\/kitchen\/?$/.test(window.location.pathname);
 
@@ -41,15 +42,46 @@ export function App() {
       return;
     }
     api<{ user: SessionUser; store: SessionStore; registers: SessionRegister[] }>("/auth/me")
-      .then((data) => {
+      .then(async (data) => {
         setUser(data.user);
         setStore(data.store);
-        setRegisters(data.registers);
-        setRegisterId(resolveRegisterId(data.store.id, data.registers));
+        let regs = data.registers;
+        const resolved = resolveRegisterId(data.store.id, regs);
+        setRegisterId(resolved);
+        if (!KITCHEN_MODE) {
+          const regName = regs.find((register) => register.id === resolved)?.name ?? null;
+          const beat = await sendTillHeartbeat(api, resolved || null, regName);
+          if (beat?.registers?.length) {
+            regs = beat.registers;
+            setRegisters(regs);
+            if (beat.registerId) setRegisterId(beat.registerId);
+          } else {
+            setRegisters(regs);
+          }
+        } else {
+          setRegisters(regs);
+        }
       })
       .catch(() => setToken(null))
       .finally(() => setLoading(false));
   }, []);
+
+  const registersRef = useRef(registers);
+  registersRef.current = registers;
+
+  useEffect(() => {
+    if (KITCHEN_MODE || !user || !store || !registerId) return;
+    const beatName = () => registersRef.current.find((register) => register.id === registerId)?.name ?? null;
+    void sendTillHeartbeat(api, registerId, beatName()).then((beat) => {
+      if (beat?.registers?.length) setRegisters(beat.registers);
+    });
+    const timer = window.setInterval(() => {
+      void sendTillHeartbeat(api, registerId, beatName()).then((beat) => {
+        if (beat?.registers?.length) setRegisters(beat.registers);
+      });
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [user, store, registerId]);
 
   if (loading) {
     return (
@@ -70,7 +102,15 @@ export function App() {
           setUser(data.user);
           setStore(data.store);
           setRegisters(data.registers);
-          setRegisterId(resolveRegisterId(data.store.id, data.registers));
+          const resolved = resolveRegisterId(data.store.id, data.registers);
+          setRegisterId(resolved);
+          const regName = data.registers.find((register) => register.id === resolved)?.name ?? null;
+          void sendTillHeartbeat(api, resolved || null, regName).then((beat) => {
+            if (beat?.registers?.length) {
+              setRegisters(beat.registers);
+              if (beat.registerId) setRegisterId(beat.registerId);
+            }
+          });
         }}
       />
     );
@@ -90,7 +130,6 @@ export function App() {
       store={store}
       registers={registers}
       registerId={registerId}
-      onRegisterChange={setRegisterId}
       onLogout={logout}
     />
   );

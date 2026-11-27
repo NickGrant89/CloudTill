@@ -1,6 +1,38 @@
-import { groupModifierLines } from "@cloudtill/shared";
+import {
+  displayModifierGroupLabel,
+  groupHalfAndHalfModifierLines,
+  groupModifierLines,
+  isConsolidatedPizzaItem,
+  halfAndHalfRemoveSelectionGroupId,
+  halfAndHalfRemoveSelectionKey,
+  halfAndHalfSaucesMirrored,
+  pickerStateFromLineModifiers,
+  halfAndHalfSelectedModifierPicks,
+  halfAndHalfSauceGroups,
+  normalizeHalfAndHalfRemoveSelectionState,
+  isHalfAndHalfRemoveGroup,
+  isHalfAndHalfRemoveSelectionKey,
+  isHalfAndHalfWizardItem,
+  mirrorSauceModifier,
+  modifierListPriceCents,
+  pizzaSizeInchesFromSelection,
+  prepareHalfAndHalfLineModifiers,
+  priceModifierPicks,
+  receiptModifierLines,
+  buildTillMenuSections,
+  sortItemGroups,
+  sortTillFavoriteItems,
+  sortTillMenuItems,
+  tillPizzaModGroupLabel,
+  visiblePizzaModifierGroups,
+  withLinkedHalfAndHalfSauces,
+} from "@cloudtill/shared";
+import { HalfAndHalfWizard } from "./HalfAndHalfWizard";
+import { OptionsPickerBottomBar } from "./OptionsPickerBottomBar";
+import { ModifierOptionButton } from "./ModifierOptionButton";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, getToken, loadCatalogSnapshot, money, OfflineError, saveCatalogSnapshot } from "./api";
+import { TILL_BUILD_VERSION } from "./tillVersion";
 import type { SessionRegister, SessionStore, SessionUser } from "./App";
 import { nanoid } from "./offline/id";
 import type { OfflineStatus } from "./offline/sync";
@@ -17,12 +49,21 @@ import {
   withTotals,
 } from "./offline/ticket";
 import { readLocalTicket, type LocalTicket } from "./offline/db";
-import { readPinnedTill, registerTone, registerToneIndex, writePinnedTill } from "./pinnedTill";
+import {
+  readPinnedTill,
+  readTillHintLevel,
+  registerTone,
+  registerToneIndex,
+  writePinnedTill,
+  writeTillHintLevel,
+  type TillHintLevel,
+} from "./pinnedTill";
 
 interface Category {
   id: string;
   name: string;
   color: string;
+  sortOrder?: number;
 }
 
 interface Modifier {
@@ -36,7 +77,22 @@ interface ModGroup {
   name: string;
   minSelect: number;
   maxSelect: number;
+  freeSelect: number;
   modifiers: Modifier[];
+}
+
+function priceSelectedModifiers(item: Item, selectedMods: Record<string, Modifier[]>) {
+  const picks = isHalfAndHalfWizardItem(item.name)
+    ? halfAndHalfSelectedModifierPicks(item.name, item.modifierGroups, selectedMods)
+    : item.modifierGroups.flatMap((group) =>
+        (selectedMods[group.id] ?? []).map((option) => ({
+          modifierId: option.id,
+          name: option.name,
+          groupId: group.id,
+          groupName: group.name,
+        }))
+      );
+  return priceModifierPicks(item.name, item.modifierGroups, picks);
 }
 
 interface Item {
@@ -67,21 +123,105 @@ interface TicketLine {
   modifiers: { name: string; priceCents: number; modifierId?: string; groupName?: string }[];
 }
 
-function ModifierList({ mods }: { mods: { name: string; groupName?: string }[] }) {
-  const blocks = groupModifierLines(mods);
-  if (!blocks.length) return null;
+/** Sale / ticket modifier order — H&H uses L-before-R; others follow BO group order. */
+function sortModsByItemGroups<T extends { groupName?: string }>(
+  mods: T[],
+  groups: { name: string }[],
+  itemName?: string
+): T[] {
+  if (itemName && isHalfAndHalfWizardItem(itemName)) {
+    return prepareHalfAndHalfLineModifiers(itemName, mods).mods;
+  }
+  if (!groups.length || mods.length < 2) return mods;
+  const rank = new Map(groups.map((group, index) => [group.name.toLowerCase(), index]));
+  return [...mods].sort((a, b) => {
+    const ra = rank.get((a.groupName || "").toLowerCase()) ?? 10_000;
+    const rb = rank.get((b.groupName || "").toLowerCase()) ?? 10_000;
+    if (ra !== rb) return ra - rb;
+    return 0;
+  });
+}
+
+function ModifierList({
+  mods,
+  groups,
+  itemName,
+  variant = "default",
+}: {
+  mods: { name: string; groupName?: string }[];
+  groups?: { name: string }[];
+  itemName?: string;
+  /** Footer on H&H halves step: compact lines, no duplicate LEFT/RIGHT column headers. */
+  variant?: "default" | "halves-footer";
+}) {
+  const { mods: ordered, mirroredSauces } = prepareHalfAndHalfLineModifiers(itemName, mods);
+  const sorted =
+    itemName && isHalfAndHalfWizardItem(itemName)
+      ? ordered
+      : groups?.length
+        ? sortModsByItemGroups(mods, groups, itemName)
+        : mods;
+  const hhBlocks =
+    itemName && isHalfAndHalfWizardItem(itemName)
+      ? groupHalfAndHalfModifierLines(itemName, sorted, { mirroredSauces })
+      : null;
+  const legacyBlocks = groupModifierLines(sorted);
+  const displayBlocks = hhBlocks
+    ? hhBlocks.map((b) => ({ groupName: b.groupName, names: b.names, heading: b.heading }))
+    : legacyBlocks.map((b) => ({
+        ...b,
+        heading: displayModifierGroupLabel(itemName, b.groupName, { mirroredSauces }) ?? b.groupName,
+      }));
+  if (!displayBlocks.length) return null;
+  if (variant === "halves-footer") {
+    return (
+      <ul className="mod-list mod-list--halves-footer">
+        {displayBlocks
+          .filter((block) => block.names.some((name) => Boolean(name?.trim())))
+          .map((block, index) => {
+            const heading = block.heading;
+            const names = block.names.filter((name) => Boolean(name?.trim()));
+            const isHalfSide = heading === "Left half" || heading === "Right half";
+            if (isHalfSide) {
+              return (
+                <li key={`${block.groupName ?? "mods"}-${index}`} className="mod-half-summary">
+                  <span className="mod-side-tag">{heading}</span>
+                  <span className="mod-side-picks">{names.join(" · ")}</span>
+                </li>
+              );
+            }
+            return (
+              <li key={`${block.groupName ?? "mods"}-${index}`}>
+                {heading && <div className="mod-group">{heading}</div>}
+                {names.map((name, nameIndex) => (
+                  <div key={`${name}-${nameIndex}`} className="mod-name">
+                    {name}
+                  </div>
+                ))}
+              </li>
+            );
+          })}
+      </ul>
+    );
+  }
   return (
     <ul className="mod-list">
-      {blocks.map((block, index) => (
-        <li key={`${block.groupName ?? "mods"}-${index}`}>
-          {block.groupName && <div className="mod-group">{block.groupName}</div>}
-          {block.names.map((name, nameIndex) => (
-            <div key={`${name}-${nameIndex}`} className="mod-name">
-              {name}
-            </div>
-          ))}
-        </li>
-      ))}
+      {displayBlocks
+        .filter((block) => block.names.some((name) => Boolean(name?.trim())))
+        .map((block, index) => (
+          <li key={`${block.groupName ?? "mods"}-${index}`}>
+            {block.heading && (
+              <div className="mod-group">{block.heading}</div>
+            )}
+            {block.names
+              .filter((name) => Boolean(name?.trim()))
+              .map((name, nameIndex) => (
+                <div key={`${name}-${nameIndex}`} className="mod-name">
+                  {name}
+                </div>
+              ))}
+          </li>
+        ))}
     </ul>
   );
 }
@@ -119,6 +259,21 @@ interface PaymentType {
   opensDrawer: boolean;
 }
 
+function chargeMethodRank(type: string) {
+  if (type === "cash") return 0;
+  if (type === "card") return 1;
+  if (type === "other") return 2;
+  if (type === "store_credit") return 3;
+  if (type === "gift_card") return 4;
+  return 9;
+}
+
+function sortChargeMethods(types: PaymentType[]) {
+  return [...types].sort(
+    (a, b) => chargeMethodRank(a.type) - chargeMethodRank(b.type) || a.name.localeCompare(b.name, "en")
+  );
+}
+
 interface Customer {
   id: string;
   name: string;
@@ -132,21 +287,34 @@ interface Props {
   store: SessionStore;
   registers: SessionRegister[];
   registerId: string;
-  onRegisterChange: (id: string) => void;
   onLogout: () => void;
 }
+
+type RecentSale = {
+  id: string;
+  receiptNumber: string;
+  employeeName: string;
+  customerName: string | null;
+  totalCents: number;
+  status: string;
+  createdAt: string;
+  lines: { name: string; quantity: number; totalCents: number; modifiersJson?: string }[];
+};
 
 type Modal =
   | null
   | { type: "pay" }
   | { type: "phoneOrder" }
+  | { type: "more" }
   | { type: "held" }
   | { type: "customers" }
   | { type: "discount" }
   | { type: "tip" }
-  | { type: "receipt"; text: string; changeCents: number; saleId: string }
+  | { type: "receipt"; text: string; changeCents: number; saleId: string; kitchenText?: string }
+  | { type: "recentSales" }
   | { type: "shift" }
   | { type: "board" }
+  | { type: "openTickets" }
   | { type: "kitchen" }
   | { type: "kitchenSend" }
   | { type: "message"; title: string; body: string };
@@ -176,8 +344,14 @@ interface KitchenOrder {
   lines: { name: string; quantity: number }[];
 }
 
-export function Register({ user, store, registers, registerId, onRegisterChange, onLogout }: Props) {
+export function Register({ user, store, registers, registerId, onLogout }: Props) {
   const [pinnedId, setPinnedId] = useState(() => readPinnedTill(store.id)?.registerId ?? "");
+  const [hintLevel, setHintLevel] = useState<TillHintLevel>(() => {
+    const saved = readTillHintLevel();
+    if (saved !== "full") return saved;
+    const pinned = readPinnedTill(store.id)?.registerId;
+    return pinned && pinned === registerId ? "compact" : "full";
+  });
   const [fullScreen, setFullScreen] = useState(false);
   useEffect(() => {
     const sync = () => setFullScreen(Boolean(document.fullscreenElement));
@@ -186,15 +360,27 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   }, []);
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<Item[]>([]);
-  const [categoryId, setCategoryId] = useState<string | "all">("all");
+  const [categoryId, setCategoryId] = useState<string | "all" | "home">("home");
   const [query, setQuery] = useState("");
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [paymentTypes, setPaymentTypes] = useState<PaymentType[]>([]);
-  const [settings, setSettings] = useState<{ receipt: { header: string; footer: string }; tipPresetsPercent: number[] } | null>(null);
+  const [settings, setSettings] = useState<{
+    receipt: { header: string; footer: string; printCustomer?: boolean };
+    tipPresetsPercent: number[];
+  } | null>(null);
   const [shift, setShift] = useState<{ id: string; openingFloatCents: number } | null>(null);
   const [modal, setModal] = useState<Modal>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customerQuery, setCustomerQuery] = useState("");
+  const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerPhone, setNewCustomerPhone] = useState("");
+  const [customerFormMsg, setCustomerFormMsg] = useState("");
+  const [callerMatches, setCallerMatches] = useState<Customer[]>([]);
   const [held, setHeld] = useState<Ticket[]>([]);
+  const [recentSales, setRecentSales] = useState<RecentSale[]>([]);
+  const [recentSaleQuery, setRecentSaleQuery] = useState("");
+  const [selectedRecentSale, setSelectedRecentSale] = useState<RecentSale | null>(null);
+  const [recentSaleMsg, setRecentSaleMsg] = useState("");
   const [openTickets, setOpenTickets] = useState<Ticket[]>([]);
   const [liveSyncLabel, setLiveSyncLabel] = useState("");
   const [payAmounts, setPayAmounts] = useState<Record<string, number>>({});
@@ -207,6 +393,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     payUrl: string;
     status: string;
     hostedPayUrl?: string;
+    smsBody?: string;
   } | null>(null);
   const [selectedMods, setSelectedMods] = useState<Record<string, Modifier[]>>({});
   const [busy, setBusy] = useState(false);
@@ -228,6 +415,8 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   >([]);
   const [mobilePane, setMobilePane] = useState<"items" | "ticket">("items");
   const [modifierItem, setModifierItem] = useState<Item | null>(null);
+  const [hhSauceLinked, setHhSauceLinked] = useState(true);
+  const [editingLineKey, setEditingLineKey] = useState<string | null>(null);
   const [modifierGroupId, setModifierGroupId] = useState("");
   const [offline, setOffline] = useState<OfflineStatus>({
     online: true,
@@ -239,6 +428,19 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   const offlineRef = useRef<OfflineStatus>(offline);
   offlineRef.current = offline;
   const [taxRateBps, setTaxRateBps] = useState(825);
+  const [liveApiVersion, setLiveApiVersion] = useState<string | null>(null);
+  const tillVersionLabel = liveApiVersion?.trim() || TILL_BUILD_VERSION;
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const body = await api<{ version?: string }>("/health");
+        if (body?.version?.trim()) setLiveApiVersion(body.version.trim());
+      } catch {
+        /* badge still shows TILL_BUILD_VERSION */
+      }
+    })();
+  }, []);
 
   function setCurrentTicket(next: Ticket | null) {
     ticketRef.current = next;
@@ -290,7 +492,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
       api<Item[]>("/catalog/items"),
       api<PaymentType[]>("/pos/payment-types"),
       api<{
-        receipt: { header: string; footer: string };
+        receipt: { header: string; footer: string; printCustomer?: boolean };
         tipPresetsPercent: number[];
         taxes?: { rateBps: number; enabled: boolean; inclusive: boolean }[];
       }>("/settings"),
@@ -298,7 +500,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
       api<{ clockedIn: boolean }>("/time-clock/status"),
       api<Item[]>("/extras/favorites"),
     ]);
-    if (cats.status === "fulfilled") setCategories(cats.value);
+    if (cats.status === "fulfilled") setCategories(sortItemGroups(cats.value));
     if (its.status === "fulfilled") setItems(its.value);
     if (pts.status === "fulfilled") setPaymentTypes(pts.value);
     if (sett.status === "fulfilled") {
@@ -324,7 +526,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     } else {
       const cached = await loadCatalogSnapshot();
       if (cached) {
-        setCategories(cached.categories as Category[]);
+        setCategories(sortItemGroups(cached.categories as Category[]));
         setItems(cached.items as Item[]);
         setPaymentTypes(cached.paymentTypes as PaymentType[]);
         if (cached.settings) setSettings(cached.settings as typeof settings);
@@ -450,9 +652,45 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     })();
   }, [registerId]);
 
-  const filtered = useMemo(() => {
+  const sectionedAllGroups = !showFavorites && categoryId === "all";
+  const showGroupHome = !modifierItem && !showFavorites && categoryId === "home" && !query.trim();
+
+  const itemCountByCategory = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of items) {
+      if (!item.categoryId) continue;
+      counts.set(item.categoryId, (counts.get(item.categoryId) ?? 0) + 1);
+    }
+    return counts;
+  }, [items]);
+
+  const ungroupedItemCount = useMemo(() => items.filter((item) => !item.categoryId).length, [items]);
+
+  function openGroupHome() {
+    setShowFavorites(false);
+    setCategoryId("home");
+    setQuery("");
+  }
+
+  function openCategory(catId: string) {
+    setShowFavorites(false);
+    setCategoryId(catId);
+    setQuery("");
+  }
+
+  function openAllGroupsMenu() {
+    setShowFavorites(false);
+    setCategoryId("all");
+    setQuery("");
+  }
+
+  const itemsMatchingFilter = useMemo(() => {
     return items.filter((item) => {
-      if (categoryId !== "all" && item.categoryId !== categoryId) return false;
+      if (categoryId === "__none__") {
+        if (item.categoryId) return false;
+      } else if (categoryId !== "all" && categoryId !== "home" && item.categoryId !== categoryId) {
+        return false;
+      }
       if (!query.trim()) return true;
       const q = query.toLowerCase();
       return (
@@ -464,30 +702,131 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     });
   }, [items, categoryId, query]);
 
+  const filtered = useMemo(() => {
+    if (categoryId === "all" && sectionedAllGroups) return itemsMatchingFilter;
+    if (categoryId === "all") return sortTillMenuItems(itemsMatchingFilter, categories);
+    return itemsMatchingFilter;
+  }, [itemsMatchingFilter, categoryId, categories, sectionedAllGroups]);
+
+  const menuSections = useMemo(() => {
+    if (!sectionedAllGroups) return [];
+    return buildTillMenuSections(itemsMatchingFilter, categories);
+  }, [sectionedAllGroups, itemsMatchingFilter, categories]);
+
+  const sortedFavorites = useMemo(
+    () => sortTillFavoriteItems(favorites, categories, favorites.map((item) => item.id)),
+    [favorites, categories]
+  );
+
   function openModifierMenu(item: Item) {
     const initial: Record<string, Modifier[]> = {};
-    for (const group of item.modifierGroups) {
+    const groups = visiblePizzaModifierGroups(item.name, item.modifierGroups, initial);
+    for (const group of groups) {
+      if (isHalfAndHalfWizardItem(item.name)) {
+        if (isHalfAndHalfRemoveGroup(group.name)) {
+          initial[halfAndHalfRemoveSelectionKey(group.id, "left")] = [];
+          initial[halfAndHalfRemoveSelectionKey(group.id, "right")] = [];
+        } else {
+          initial[group.id] = [];
+        }
+        continue;
+      }
       initial[group.id] = group.minSelect > 0 && group.modifiers[0] ? [group.modifiers[0]] : [];
     }
-    setSelectedMods(initial);
-    setModifierGroupId(item.modifierGroups[0]?.id ?? "");
+    setEditingLineKey(null);
+  const normalized = normalizeHalfAndHalfRemoveSelectionState(item.name, item.modifierGroups, initial);
+    setSelectedMods(normalized as Record<string, Modifier[]>);
+    setModifierGroupId(groups[0]?.id ?? "");
     setModifierItem(item);
+    setHhSauceLinked(true);
     setMobilePane("items");
   }
 
+  function applySelectedMods(next: Record<string, Modifier[]>) {
+    if (!modifierItem) {
+      setSelectedMods(next);
+      return;
+    }
+    const normalized = normalizeHalfAndHalfRemoveSelectionState(
+      modifierItem.name,
+      modifierItem.modifierGroups,
+      next
+    ) as Record<string, Modifier[]>;
+    const visibleIds = new Set(
+      visiblePizzaModifierGroups(modifierItem.name, modifierItem.modifierGroups, normalized).map((g) => g.id)
+    );
+    const cleaned = { ...normalized };
+    for (const key of Object.keys(cleaned)) {
+      if (isHalfAndHalfRemoveSelectionKey(key)) {
+        const groupId = halfAndHalfRemoveSelectionGroupId(key);
+        if (!visibleIds.has(groupId)) delete cleaned[key];
+        continue;
+      }
+      if (!visibleIds.has(key)) delete cleaned[key];
+    }
+    setSelectedMods(cleaned);
+  }
+
+  function chooseHalfAndHalfRemove(group: ModGroup, modifier: Modifier, side: "left" | "right") {
+    const key = halfAndHalfRemoveSelectionKey(group.id, side);
+    setSelectedMods((prev) => {
+      const current = prev[key] ?? [];
+      let nextSelection: Modifier[];
+      if (group.maxSelect <= 1) {
+        nextSelection = current.some((option) => option.id === modifier.id) ? [] : [modifier];
+      } else if (current.some((option) => option.id === modifier.id)) {
+        nextSelection = current.filter((option) => option.id !== modifier.id);
+      } else if (current.length >= group.maxSelect) {
+        return prev;
+      } else {
+        nextSelection = [...current, modifier];
+      }
+      const next = { ...prev, [key]: nextSelection };
+      delete next[group.id];
+      if (!modifierItem) return next;
+      return normalizeHalfAndHalfRemoveSelectionState(
+        modifierItem.name,
+        modifierItem.modifierGroups,
+        next
+      ) as Record<string, Modifier[]>;
+    });
+  }
+
   function chooseModifier(group: ModGroup, modifier: Modifier) {
+    if (modifierItem && isHalfAndHalfWizardItem(modifierItem.name) && isHalfAndHalfRemoveGroup(group.name)) {
+      return;
+    }
     setSelectedMods((prev) => {
       const current = prev[group.id] ?? [];
-      if (group.maxSelect <= 1) return { ...prev, [group.id]: [modifier] };
-      if (current.some((option) => option.id === modifier.id)) {
-        return { ...prev, [group.id]: current.filter((option) => option.id !== modifier.id) };
+      let next: Record<string, Modifier[]>;
+      if (group.maxSelect <= 1) next = { ...prev, [group.id]: [modifier] };
+      else if (current.some((option) => option.id === modifier.id)) {
+        next = { ...prev, [group.id]: current.filter((option) => option.id !== modifier.id) };
+      } else if (current.length >= group.maxSelect) return prev;
+      else next = { ...prev, [group.id]: [...current, modifier] };
+
+      if (group.name.trim().toLowerCase() === "size" && modifierItem) {
+        const visibleIds = new Set(
+          visiblePizzaModifierGroups(modifierItem.name, modifierItem.modifierGroups, next).map((g) => g.id)
+        );
+        for (const key of Object.keys(next)) {
+          if (isHalfAndHalfRemoveSelectionKey(key)) {
+            const groupId = halfAndHalfRemoveSelectionGroupId(key);
+            if (!visibleIds.has(groupId)) delete next[key];
+            continue;
+          }
+          if (!visibleIds.has(key)) delete next[key];
+        }
       }
-      if (current.length >= group.maxSelect) return prev;
-      return { ...prev, [group.id]: [...current, modifier] };
+      return next;
     });
     if (group.maxSelect <= 1 && modifierItem) {
-      const index = modifierItem.modifierGroups.findIndex((entry) => entry.id === group.id);
-      const next = modifierItem.modifierGroups[index + 1];
+      const visible = visiblePizzaModifierGroups(modifierItem.name, modifierItem.modifierGroups, {
+        ...selectedMods,
+        [group.id]: [modifier],
+      });
+      const index = visible.findIndex((entry) => entry.id === group.id);
+      const next = visible[index + 1];
       if (next) setModifierGroupId(next.id);
     }
   }
@@ -571,10 +910,108 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     }
   }
 
+  function openLineEditor(line: TicketLine) {
+    const item = items.find((entry) => entry.variants.some((variant) => variant.id === line.variantId));
+    if (!item || item.modifierGroups.length === 0) {
+      fail(line.name, new Error("This item has no options to edit"));
+      return;
+    }
+    const initial = pickerStateFromLineModifiers(item.name, item.modifierGroups, line.modifiers) as Record<
+      string,
+      Modifier[]
+    >;
+    if (isHalfAndHalfWizardItem(item.name)) {
+      setHhSauceLinked(halfAndHalfSaucesMirrored(line.modifiers));
+    }
+    setEditingLineKey(line.key);
+    setSelectedMods(initial);
+    setModifierGroupId(item.modifierGroups[0]?.id ?? "");
+    setModifierItem(item);
+    setMobilePane("items");
+  }
+
+  function closeModifierPicker() {
+    setModifierItem(null);
+    setEditingLineKey(null);
+    setSelectedMods({});
+    setModifierGroupId("");
+  }
+
+  function leavePizzaOptionsToGroups() {
+    const editing = editingLineKey;
+    closeModifierPicker();
+    if (editing) setMobilePane("ticket");
+    else {
+      openGroupHome();
+      setMobilePane("items");
+    }
+  }
+
+  async function saveLineModifiers(
+    lineKey: string,
+    mods: { modifierId?: string; name: string; priceCents: number; groupName?: string }[]
+  ) {
+    try {
+      await enqueue(async () => {
+        const t = await ensureTicket();
+        if (isLocalTicket(t) || !offline.online) {
+          const local = await ensureLocalTicket(registerId);
+          const line = local.lines.find((entry) => entry.key === lineKey);
+          if (!line) throw new Error("Line not found");
+          line.modifiers = mods;
+          const saved = await persistLocalTicket(local);
+          setCurrentTicket(localToTicket(saved));
+          closeModifierPicker();
+          setMobilePane("ticket");
+          return;
+        }
+        const updated = await api<Ticket>(`/pos/tickets/${t.id}/lines/${lineKey}`, {
+          method: "PATCH",
+          body: JSON.stringify({ modifiers: mods }),
+        });
+        setCurrentTicket(updated);
+        closeModifierPicker();
+        setMobilePane("ticket");
+      });
+      return true;
+    } catch (error) {
+      if (error instanceof OfflineError) {
+        try {
+          const local = await ensureLocalTicket(registerId);
+          const line = local.lines.find((entry) => entry.key === lineKey);
+          if (!line) throw new Error("Line not found");
+          line.modifiers = mods;
+          const saved = await persistLocalTicket(local);
+          setCurrentTicket(localToTicket(saved));
+          closeModifierPicker();
+          setMobilePane("ticket");
+          return true;
+        } catch (inner) {
+          fail("Could not update item", inner);
+          return false;
+        }
+      }
+      fail("Could not update item", error);
+      return false;
+    }
+  }
+
   async function confirmModifiers() {
     if (!modifierItem) return;
-    for (const group of modifierItem.modifierGroups) {
-      const picked = selectedMods[group.id] ?? [];
+    const groups = visiblePizzaModifierGroups(modifierItem.name, modifierItem.modifierGroups, selectedMods);
+    const pickedByGroup =
+      isHalfAndHalfWizardItem(modifierItem.name) && hhSauceLinked
+        ? withLinkedHalfAndHalfSauces(groups, selectedMods, true)
+        : selectedMods;
+    if (pickedByGroup !== selectedMods) setSelectedMods(pickedByGroup);
+    for (const group of groups) {
+      const picked =
+        isHalfAndHalfWizardItem(modifierItem.name) && isHalfAndHalfRemoveGroup(group.name)
+          ? [
+              ...(pickedByGroup[halfAndHalfRemoveSelectionKey(group.id, "left")] ?? []),
+              ...(pickedByGroup[halfAndHalfRemoveSelectionKey(group.id, "right")] ?? []),
+            ]
+          : (pickedByGroup[group.id] ?? []);
       if (picked.length < group.minSelect) {
         setModifierGroupId(group.id);
         fail(
@@ -584,15 +1021,19 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
         return;
       }
     }
-    const mods = modifierItem.modifierGroups.flatMap((group) =>
-      (selectedMods[group.id] ?? []).map((option) => ({
-        modifierId: option.id,
-        name: option.name,
-        priceCents: option.priceCents,
-        groupName: group.name,
-      }))
+    const mods = sortModsByItemGroups(
+      priceSelectedModifiers(modifierItem, pickedByGroup).map(({ groupId: _g, ...mod }) => mod),
+      modifierItem.modifierGroups,
+      modifierItem.name
     );
-    if (await addVariant(modifierItem, mods)) setModifierItem(null);
+    if (editingLineKey) {
+      await saveLineModifiers(editingLineKey, mods);
+      return;
+    }
+    if (await addVariant(modifierItem, mods)) {
+      setModifierItem(null);
+      setEditingLineKey(null);
+    }
   }
 
   async function onSearchKey(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -680,6 +1121,118 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     }
   }
 
+  async function openRecentSales() {
+    setRecentSaleMsg("");
+    setSelectedRecentSale(null);
+    setRecentSaleQuery("");
+    try {
+      const list = await api<RecentSale[]>("/sales?limit=40");
+      setRecentSales(Array.isArray(list) ? list : []);
+      setModal({ type: "recentSales" });
+    } catch (error) {
+      fail("Receipts", error);
+    }
+  }
+
+  async function searchRecentSales(q: string) {
+    setRecentSaleQuery(q);
+    try {
+      const list = await api<RecentSale[]>(
+        `/sales?limit=40${q.trim() ? `&q=${encodeURIComponent(q.trim())}` : ""}`
+      );
+      setRecentSales(Array.isArray(list) ? list : []);
+    } catch (error) {
+      fail("Receipts", error);
+    }
+  }
+
+  async function reopenRecentSale(sale: RecentSale) {
+    if (!offline.online) {
+      setRecentSaleMsg("Go online to open a paid sale on the till");
+      return;
+    }
+    if (ticket?.lines.length) {
+      const ok = window.confirm(
+        "Replace the current sale with this receipt’s items? The paid receipt stays as-is — this opens a new editable ticket."
+      );
+      if (!ok) return;
+    }
+    setBusy(true);
+    setRecentSaleMsg("");
+    try {
+      const opened = await api<Ticket & { sourceReceiptNumber?: string; skippedLines?: number }>(
+        `/sales/${sale.id}/reopen`,
+        {
+          method: "POST",
+          body: JSON.stringify({ registerId }),
+        }
+      );
+      setCurrentTicket(opened);
+      setMobilePane("ticket");
+      setModal(null);
+      void refreshOpenTickets();
+      if (opened.skippedLines) {
+        setModal({
+          type: "message",
+          title: `Opened ${opened.sourceReceiptNumber || sale.receiptNumber}`,
+          body: `Some lines could not be copied (${opened.skippedLines}). Edit the ticket before charging again.`,
+        });
+      }
+    } catch (error) {
+      setRecentSaleMsg(error instanceof Error ? error.message : "Could not open sale");
+      fail("Could not open sale", error);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reprintRecentSale(sale: RecentSale, kind: "billing" | "kitchen") {
+    setRecentSaleMsg("");
+    try {
+      if (kind === "billing") {
+        await api("/printers/print-receipt", {
+          method: "POST",
+          body: JSON.stringify({ saleId: sale.id }),
+        });
+        setRecentSaleMsg(`Billing receipt ${sale.receiptNumber} sent`);
+      } else {
+        await api<{ preview?: string }>("/printers/print-kitchen", {
+          method: "POST",
+          body: JSON.stringify({ saleId: sale.id }),
+        });
+        setRecentSaleMsg(`Kitchen ticket ${sale.receiptNumber} sent`);
+      }
+    } catch (error) {
+      setRecentSaleMsg(error instanceof Error ? error.message : "Print failed");
+      fail(kind === "billing" ? "Billing receipt" : "Kitchen ticket", error);
+    }
+  }
+
+  async function voidOrRefundRecentSale(sale: RecentSale, action: "void" | "refund") {
+    if (user.role !== "owner" && user.role !== "manager") {
+      setRecentSaleMsg("Only an owner or manager can void or refund");
+      return;
+    }
+    const label = action === "void" ? "Void" : "Refund";
+    if (!window.confirm(`${label} ${sale.receiptNumber}? This cannot be undone from the till.`)) return;
+    setBusy(true);
+    setRecentSaleMsg("");
+    try {
+      await api(`/sales/${sale.id}/${action}`, {
+        method: "POST",
+        body: action === "refund" ? JSON.stringify({ full: true }) : undefined,
+      });
+      await searchRecentSales(recentSaleQuery);
+      setSelectedRecentSale(null);
+      setRecentSaleMsg(`${label}ed ${sale.receiptNumber}`);
+    } catch (error) {
+      setRecentSaleMsg(error instanceof Error ? error.message : `${label} failed`);
+      fail(label, error);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function recall(id: string) {
     try {
       const t = await api<Ticket>(`/pos/tickets/${id}/recall`, { method: "POST" });
@@ -709,6 +1262,16 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     }
   }
 
+  async function openOpenTicketsList() {
+    try {
+      await refreshOpenTickets();
+    } catch {
+      /* still open the sheet */
+    }
+    setModal({ type: "openTickets" });
+    setMobilePane("ticket");
+  }
+
   async function openTicketsBoard() {
     try {
       const b = await api<BoardTicket[]>("/extras/tickets-board");
@@ -735,24 +1298,153 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     try {
       const list = await api<Customer[]>("/customers");
       setCustomers(list);
+      setCustomerQuery("");
+      setNewCustomerName("");
+      setNewCustomerPhone(textPayPhone.trim());
+      setCustomerFormMsg("");
       setModal({ type: "customers" });
     } catch (error) {
       fail("Customers", error);
     }
   }
 
-  async function attachCustomer(c: Customer) {
+  async function searchCustomers(q: string) {
+    setCustomerQuery(q);
+    try {
+      const list = await api<Customer[]>(`/customers${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ""}`);
+      setCustomers(list);
+    } catch (error) {
+      fail("Customers", error);
+    }
+  }
+
+  async function attachCustomer(c: Customer, opts?: { closeModal?: boolean }) {
     try {
       const t = ticketRef.current ?? (await ensureTicket());
+      if (isLocalTicket(t) || !offline.online) {
+        fail("Customer", new Error("Attach a customer when the till is online"));
+        return false;
+      }
       const updated = await api<Ticket>(`/pos/tickets/${t.id}`, {
         method: "PATCH",
         body: JSON.stringify({ customerId: c.id }),
       });
       setCurrentTicket(updated);
-      setModal(null);
+      setTextPayName(c.name);
+      if (c.phone) setTextPayPhone(c.phone);
+      if (opts?.closeModal !== false) setModal(null);
+      return true;
     } catch (error) {
       fail("Could not attach customer", error);
+      return false;
     }
+  }
+
+  async function createCustomerFromTill(opts?: { name?: string; phone?: string; closeModal?: boolean }) {
+    const name = (opts?.name ?? newCustomerName).trim();
+    const phone = (opts?.phone ?? newCustomerPhone).trim();
+    if (!name) {
+      setCustomerFormMsg("Enter a name");
+      return null;
+    }
+    if (!offline.online) {
+      setCustomerFormMsg("Go online to add a customer");
+      return null;
+    }
+    setCustomerFormMsg("");
+    try {
+      const created = await api<Customer>("/customers", {
+        method: "POST",
+        body: JSON.stringify({ name, phone: phone || undefined }),
+      });
+      setCustomers((prev) => [created, ...prev.filter((row) => row.id !== created.id)]);
+      await attachCustomer(created, { closeModal: opts?.closeModal !== false });
+      setNewCustomerName("");
+      setNewCustomerPhone("");
+      return created;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not add customer";
+      setCustomerFormMsg(message);
+      fail("Could not add customer", error);
+      return null;
+    }
+  }
+
+  async function lookupCallerId(phone: string) {
+    const q = phone.trim();
+    if (q.replace(/\D/g, "").length < 7) {
+      setCallerMatches([]);
+      return;
+    }
+    try {
+      const list = await api<Customer[]>(`/customers?q=${encodeURIComponent(q)}`);
+      const digits = q.replace(/\D/g, "");
+      setCallerMatches(
+        list.filter((row) => (row.phone || "").replace(/\D/g, "").includes(digits) || digits.includes((row.phone || "").replace(/\D/g, "")))
+      );
+    } catch {
+      setCallerMatches([]);
+    }
+  }
+
+  async function saveCallerAsCustomer() {
+    const phone = textPayPhone.trim();
+    const name = textPayName.trim() || phone || "Caller";
+    if (!phone && !textPayName.trim()) {
+      setTextPayMsg("Enter a caller ID (phone) or name first");
+      return;
+    }
+    const existing = callerMatches[0];
+    if (existing) {
+      if (await attachCustomer(existing, { closeModal: false })) {
+        setTextPayMsg(`Attached ${existing.name}`);
+      }
+      return;
+    }
+    const created = await createCustomerFromTill({ name, phone, closeModal: false });
+    if (created) {
+      setTextPayMsg(`Saved ${created.name} and attached to this sale`);
+    }
+  }
+
+  async function ensureCallerCustomerOnTicket(current: Ticket) {
+    if (current.customerId || isLocalTicket(current) || !offline.online) return current;
+    const phone = textPayPhone.trim();
+    const name = textPayName.trim();
+    if (!phone && !name) return current;
+    try {
+      if (phone) {
+        const list = await api<Customer[]>(`/customers?q=${encodeURIComponent(phone)}`);
+        const digits = phone.replace(/\D/g, "");
+        const match = list.find((row) => {
+          const rowDigits = (row.phone || "").replace(/\D/g, "");
+          return rowDigits && digits && (rowDigits.includes(digits) || digits.includes(rowDigits));
+        });
+        if (match) {
+          const updated = await api<Ticket>(`/pos/tickets/${current.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ customerId: match.id }),
+          });
+          setCurrentTicket(updated);
+          return updated;
+        }
+      }
+      if (name && phone) {
+        const created = await api<Customer>("/customers", {
+          method: "POST",
+          body: JSON.stringify({ name, phone }),
+        });
+        const updated = await api<Ticket>(`/pos/tickets/${current.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ customerId: created.id }),
+        });
+        setCurrentTicket(updated);
+        return updated;
+      }
+    } catch {
+      /* pay link can still go without a saved customer */
+    }
+    return current;
   }
 
   async function applyDiscount(discountCents: number, discountPercent: number) {
@@ -801,18 +1493,44 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     setPayText((prev) => ({ ...prev, [id]: (safe / 100).toFixed(2) }));
   }
 
-  function openPay() {
-    if (!ticket || ticket.lines.length === 0) return;
-    const cash = paymentTypes.find((p) => p.type === "cash");
+  function fillPayAmounts(types: PaymentType[], totalCents: number) {
+    const cash = types.find((p) => p.type === "cash");
     const amounts: Record<string, number> = {};
     const text: Record<string, string> = {};
-    for (const type of paymentTypes) {
-      const cents = cash && type.id === cash.id ? ticket.totalCents : 0;
+    for (const type of types) {
+      const cents = cash && type.id === cash.id ? totalCents : 0;
       amounts[type.id] = cents;
       text[type.id] = (cents / 100).toFixed(2);
     }
     setPayAmounts(amounts);
     setPayText(text);
+  }
+
+  function takeOnMethod(id: string) {
+    if (!ticket) return;
+    const amounts: Record<string, number> = {};
+    const text: Record<string, string> = {};
+    for (const type of paymentTypes) {
+      const cents = type.id === id ? ticket.totalCents : 0;
+      amounts[type.id] = cents;
+      text[type.id] = (cents / 100).toFixed(2);
+    }
+    setPayAmounts(amounts);
+    setPayText(text);
+  }
+
+  async function openPay() {
+    if (!ticket || ticket.lines.length === 0) return;
+    let types = paymentTypes;
+    if (offline.online) {
+      try {
+        types = await api<PaymentType[]>("/pos/payment-types");
+        setPaymentTypes(types);
+      } catch {
+        /* keep the methods already on the till */
+      }
+    }
+    fillPayAmounts(types, ticket.totalCents);
     setTextPayPhone(ticket.customer?.phone ?? textPayPhone);
     setTextPayName(ticket.customer?.name ?? textPayName);
     setTextPayMsg("");
@@ -825,31 +1543,16 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   async function openPhoneOrder() {
     setTextPayMsg("");
     setTextPayLink(null);
-    try {
-      const t = ticketRef.current ?? (await ensureTicket());
-      const label =
-        textPayName.trim()
-          ? `Phone · ${textPayName.trim()}`
-          : t.name.startsWith("Phone")
-            ? t.name
-            : "Phone order";
-      if (!isLocalTicket(t) && offline.online) {
-        const updated = await api<Ticket>(`/pos/tickets/${t.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ name: label, note: "Phone order" }),
-        });
-        setCurrentTicket(updated);
-        setTextPayPhone((prev) => prev || updated.customer?.phone || "");
-        setTextPayName((prev) => prev || updated.customer?.name || textPayName);
-      } else {
-        setTextPayPhone((prev) => prev || t.customer?.phone || "");
-        setTextPayName((prev) => prev || t.customer?.name || "");
-      }
-      setMobilePane("ticket");
-      setModal({ type: "phoneOrder" });
-    } catch (e) {
-      fail("Phone order", e);
+    setCallerMatches([]);
+    // Don't create an empty Sale ticket just for opening the sheet — that filled Tickets with 0-line junk.
+    const t = ticketRef.current;
+    if (t) {
+      setTextPayPhone(textPayPhone || t.customer?.phone || "");
+      setTextPayName(textPayName || t.customer?.name || "");
+      if (t.customer?.phone || textPayPhone) void lookupCallerId(t.customer?.phone || textPayPhone);
     }
+    setMobilePane("ticket");
+    setModal({ type: "phoneOrder" });
   }
 
   async function sendTextToPay() {
@@ -864,27 +1567,29 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     setBusy(true);
     setTextPayMsg("");
     try {
+      let current = await ensureCallerCustomerOnTicket(ticket);
       const label = textPayName.trim()
         ? `Phone · ${textPayName.trim()}`
-        : ticket.name.startsWith("Phone")
-          ? ticket.name
+        : current.name.startsWith("Phone")
+          ? current.name
           : "Phone order";
-      if (ticket.name !== label || ticket.note !== "Phone order") {
-        const renamed = await api<Ticket>(`/pos/tickets/${ticket.id}`, {
+      if (current.name !== label || current.note !== "Phone order") {
+        current = await api<Ticket>(`/pos/tickets/${current.id}`, {
           method: "PATCH",
           body: JSON.stringify({ name: label, note: "Phone order" }),
         });
-        setCurrentTicket(renamed);
+        setCurrentTicket(current);
       }
       const result = await api<{
         message: string;
         link: { id: string; payUrl: string; status: string };
         hostedPayUrl: string;
+        smsBody?: string;
         smsError?: string | null;
       }>("/text-pay/links", {
         method: "POST",
         body: JSON.stringify({
-          ticketId: ticket.id,
+          ticketId: current.id,
           phone: textPayPhone.trim() || undefined,
           customerName: textPayName.trim() || undefined,
           note: "Phone order",
@@ -896,6 +1601,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
         payUrl: result.link.payUrl,
         status: result.link.status,
         hostedPayUrl: result.hostedPayUrl,
+        smsBody: result.smsBody,
       });
       setTextPayMsg(result.message);
     } catch (e) {
@@ -1014,6 +1720,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
           employeeName: string;
           customerName: string | null;
         };
+        kitchenTicket?: { preview: string; orderId: string | null; printJobId: string };
         changeCents: number;
         drawerOpened: boolean;
       }>(`/pos/tickets/${ticket.id}/pay`, {
@@ -1021,37 +1728,63 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
         body: JSON.stringify({ payments, tipCents: ticket.tipCents }),
       });
       const s = result.sale;
-      const lines = s.lines.map((l) => `${l.quantity} x ${l.name}`.padEnd(28) + money(l.totalCents)).join("\n");
-      const pays = s.payments.map((p) => `${p.paymentTypeName}`.padEnd(28) + money(p.amountCents)).join("\n");
-      const text = [
-        settings?.receipt.header ?? store.name,
-        "--------------------------------",
-        `Receipt ${s.receiptNumber}`,
-        `Cashier: ${s.employeeName}`,
-        s.customerName ? `Customer: ${s.customerName}` : null,
-        "--------------------------------",
-        lines,
-        "--------------------------------",
-        `Subtotal`.padEnd(28) + money(s.subtotalCents),
-        s.discountCents ? `Discount`.padEnd(28) + money(-s.discountCents) : null,
-        `Tax`.padEnd(28) + money(s.taxCents),
-        s.tipCents ? `Tip`.padEnd(28) + money(s.tipCents) : null,
-        `TOTAL`.padEnd(28) + money(s.totalCents),
-        pays,
-        result.changeCents > 0 ? `Change`.padEnd(28) + money(result.changeCents) : null,
-        result.drawerOpened ? "[Drawer opened]" : null,
-        "--------------------------------",
-        settings?.receipt.footer ?? "Thank you!",
-      ]
-        .filter(Boolean)
+      const lines = s.lines
+        .map((l, index) => {
+          const head = `${l.quantity} x ${l.name}`.padEnd(28) + money(l.totalCents);
+          const lineItemName = ticket.lines[index]?.name;
+          const modLines = receiptModifierLines(ticket.lines[index]?.modifiers ?? [], lineItemName);
+          return [head, ...modLines].join("\n");
+        })
         .join("\n");
+      const pays = s.payments.map((p) => `${p.paymentTypeName}`.padEnd(28) + money(p.amountCents)).join("\n");
+      const printCustomer = settings?.receipt.printCustomer !== false;
+      const text = printCustomer
+        ? [
+            settings?.receipt.header ?? store.name,
+            "--------------------------------",
+            `Receipt ${s.receiptNumber}`,
+            `Cashier: ${s.employeeName}`,
+            s.customerName ? `Customer: ${s.customerName}` : null,
+            "--------------------------------",
+            lines,
+            "--------------------------------",
+            `Subtotal`.padEnd(28) + money(s.subtotalCents),
+            s.discountCents ? `Discount`.padEnd(28) + money(-s.discountCents) : null,
+            `Tax`.padEnd(28) + money(s.taxCents),
+            s.tipCents ? `Tip`.padEnd(28) + money(s.tipCents) : null,
+            `TOTAL`.padEnd(28) + money(s.totalCents),
+            pays,
+            result.changeCents > 0 ? `Change`.padEnd(28) + money(result.changeCents) : null,
+            result.drawerOpened ? "[Drawer opened]" : null,
+            "--------------------------------",
+            settings?.receipt.footer ?? "Thank you!",
+          ]
+            .filter(Boolean)
+            .join("\n")
+        : [
+            `Paid · ${s.receiptNumber}`,
+            `TOTAL`.padEnd(28) + money(s.totalCents),
+            result.changeCents > 0 ? `Change`.padEnd(28) + money(result.changeCents) : null,
+            "Customer receipt off — reprint from Receipts if needed.",
+          ]
+            .filter(Boolean)
+            .join("\n");
+      const kitchenText = result.kitchenTicket?.preview;
       setCurrentTicket(null);
       setMobilePane("items");
-      setModal({ type: "receipt", text, changeCents: result.changeCents, saleId: s.id });
-      void api("/printers/print-receipt", {
-        method: "POST",
-        body: JSON.stringify({ saleId: s.id, openDrawer: result.drawerOpened }),
-      }).catch(() => undefined);
+      setModal({
+        type: "receipt",
+        text,
+        changeCents: result.changeCents,
+        saleId: s.id,
+        kitchenText,
+      });
+      if (printCustomer) {
+        void api("/printers/print-receipt", {
+          method: "POST",
+          body: JSON.stringify({ saleId: s.id, openDrawer: result.drawerOpened }),
+        }).catch(() => undefined);
+      }
       void loadCatalog();
     } catch (e) {
       setModal({ type: "message", title: "Payment failed", body: e instanceof Error ? e.message : "Error" });
@@ -1090,6 +1823,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
   }
 
   const paidSum = Object.values(payAmounts).reduce((a, b) => a + b, 0);
+  const chargeMethods = sortChargeMethods(paymentTypes);
   const lineCount = (ticket?.lines ?? []).reduce((n, line) => n + line.quantity, 0);
   const hasLines = lineCount > 0;
   const kitchenSent = ticket ? sentToKitchen[ticket.id] ?? {} : {};
@@ -1120,6 +1854,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
           name,
           fulfillment: kitchenForm.fulfillment,
           note: kitchenForm.note.trim() || undefined,
+          ticketId: ticket.id,
           lines: unsentLines.map(({ line, quantity }) => ({
             variantId: line.variantId,
             name: line.name,
@@ -1147,18 +1882,61 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
       setBusy(false);
     }
   }
-  const visibleItems = showFavorites && favorites.length ? favorites : filtered;
+  const visibleItems = showFavorites && favorites.length ? sortedFavorites : filtered;
+
+  function renderItemTile(item: Item) {
+    return (
+      <button
+        key={item.id}
+        type="button"
+        className="item-tile"
+        style={{ backgroundColor: item.color }}
+        onClick={() => void addItem(item)}
+      >
+        <span className="name">{item.name}</span>
+        <span className="price">
+          {isConsolidatedPizzaItem(item.name) ? `from ${money(800)}` : money(item.variants[0]?.priceCents ?? 0)}
+        </span>
+      </button>
+    );
+  }
+  const visibleModifierGroups = useMemo(() => {
+    if (!modifierItem) return [];
+    return visiblePizzaModifierGroups(modifierItem.name, modifierItem.modifierGroups, selectedMods);
+  }, [modifierItem, selectedMods]);
   const activeModGroup =
-    modifierItem?.modifierGroups.find((group) => group.id === modifierGroupId) ?? modifierItem?.modifierGroups[0];
-  const modifierExtra = Object.values(selectedMods)
-    .flat()
-    .reduce((sum, option) => sum + option.priceCents, 0);
+    visibleModifierGroups.find((group) => group.id === modifierGroupId) ?? visibleModifierGroups[0];
+  useEffect(() => {
+    if (!modifierItem || !visibleModifierGroups.length) return;
+    if (!visibleModifierGroups.some((group) => group.id === modifierGroupId)) {
+      setModifierGroupId(visibleModifierGroups[0]!.id);
+    }
+  }, [modifierItem, visibleModifierGroups, modifierGroupId]);
+  const pricedSelection = modifierItem ? priceSelectedModifiers(modifierItem, selectedMods) : [];
+  const chargedByModifierId = new Map(
+    pricedSelection.flatMap((row) => (row.modifierId ? [[row.modifierId, row.priceCents] as const] : []))
+  );
+  const modifierExtra = pricedSelection.reduce((sum, option) => sum + option.priceCents, 0);
   const modifierTotal = (modifierItem?.variants[0]?.priceCents ?? 0) + modifierExtra;
   const modifierPreview = modifierItem
-    ? modifierItem.modifierGroups.flatMap((group) =>
-        (selectedMods[group.id] ?? []).map((option) => ({ name: option.name, groupName: group.name }))
+    ? sortModsByItemGroups(
+        isHalfAndHalfWizardItem(modifierItem.name)
+          ? halfAndHalfSelectedModifierPicks(
+              modifierItem.name,
+              visibleModifierGroups,
+              selectedMods
+            ).map((row) => ({ name: row.name, groupName: row.groupName }))
+          : visibleModifierGroups.flatMap((group) =>
+              (selectedMods[group.id] ?? []).map((option) => ({
+                name: option.name,
+                groupName: group.name,
+              }))
+            ),
+        modifierItem.modifierGroups,
+        modifierItem.name
       )
     : [];
+  const showHalfAndHalfWizard = Boolean(modifierItem && isHalfAndHalfWizardItem(modifierItem.name));
   const tillPhase: "sale" | "options" | "pay" | "done" = modifierItem
     ? "options"
     : modal?.type === "pay"
@@ -1177,6 +1955,41 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
       toneIndex: registerToneIndex(currentRegister.id, registers),
     });
     setPinnedId(currentRegister.id);
+    setHintLevel("compact");
+    writeTillHintLevel("compact");
+  }
+
+  function dismissTillHint() {
+    setHintLevel("hidden");
+    writeTillHintLevel("hidden");
+  }
+
+  function showTillHintAgain() {
+    setHintLevel("compact");
+    writeTillHintLevel("compact");
+  }
+
+  useEffect(() => {
+    if (!currentRegister || pinnedId === currentRegister.id) return;
+    pinThisIpad();
+  }, [currentRegister?.id, pinnedId]);
+
+  useEffect(() => {
+    if (!currentRegister) {
+      document.title = "PurePOS";
+      return;
+    }
+    document.title = `${currentRegister.name} · PurePOS`;
+    writePinnedTill({
+      storeId: store.id,
+      registerId: currentRegister.id,
+      registerName: currentRegister.name,
+      toneIndex: registerToneIndex(currentRegister.id, registers),
+    });
+  }, [currentRegister?.id, currentRegister?.name, store.id, registers]);
+
+  function groupsForLine(line: TicketLine) {
+    return items.find((entry) => entry.variants.some((variant) => variant.id === line.variantId))?.modifierGroups;
   }
 
   async function toggleFullScreen() {
@@ -1191,227 +2004,367 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
     }
   }
 
+  const needsPinBanner = Boolean(currentRegister && pinnedId !== registerId);
+  const showHintRow = hintLevel !== "hidden";
+
   return (
-    <div className={`app-shell till-${tillPhase}`}>
+    <div
+      className={`app-shell till-${tillPhase} till-hint-${hintLevel}${needsPinBanner ? " till-hint-pinning" : ""}`}
+    >
+      <header className="till-chrome">
       <div className="toolbar-dark">
-        <div className={`toolbar-identity${pinnedId !== registerId ? " is-choosing" : ""}`}>
-          <strong className="store-name">{store.name}</strong>
-          <span className="who">{user.name}</span>
-          {currentRegister && (
-            <span
-              className="register-badge"
-              data-register-name={currentRegister.name}
-              style={{ background: registerTone(currentRegister.id, registers).bg, color: registerTone(currentRegister.id, registers).ink }}
-            >
-              {currentRegister.name}
-            </span>
-          )}
-          {pinnedId !== registerId && (
-            <select
-              aria-label="Register"
-              value={registerId}
-              onChange={(e) => onRegisterChange(e.target.value)}
-            >
-              {registers.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
-          )}
-          {pinnedId !== registerId && currentRegister && (
-            <button type="button" className="pin-till-btn" onClick={pinThisIpad}>
-              Use this iPad as…
+        <div className="toolbar-status">
+          <div className="toolbar-identity">
+            {currentRegister ? (
+              <span
+                className="register-badge register-title"
+                data-register-name={currentRegister.name}
+                title="Till name from Back office → Stores & tills"
+                style={{ background: registerTone(currentRegister.id, registers).bg, color: registerTone(currentRegister.id, registers).ink }}
+              >
+                {currentRegister.name}
+              </span>
+            ) : (
+              <strong className="store-name">{store.name}</strong>
+            )}
+            <span className="who">{currentRegister ? store.name : user.name}</span>
+            {currentRegister && <span className="who who-staff">{user.name}</span>}
+            <button type="button" className="lock-btn" onClick={onLogout}>
+              Lock
             </button>
-          )}
-          <button type="button" className="lock-btn" onClick={onLogout}>
-            Lock
-          </button>
-        </div>
-        <button
-          type="button"
-          className={`offline-badge${!offline.online ? " is-offline" : ""}${offline.pendingSales ? " has-queue" : ""}`}
-          title={
-            offline.online
-              ? offline.pendingSales
-                ? `${offline.pendingSales} sale(s) waiting to sync — click to sync, or Export backup`
-                : "Online · items follow server · storage persistence requested"
-              : "Offline · sales queue locally; items from cache"
-          }
-          onClick={() => {
-            if (offline.online && offline.pendingSales) void syncQueuedSales();
-            else void refreshOfflineBadge();
-          }}
-        >
-          {!offline.online ? "Offline" : offline.syncing ? "Syncing…" : offline.pendingSales ? `Sync ${offline.pendingSales}` : "Online"}
-        </button>
-        {offline.pendingSales > 0 ? (
+          </div>
           <button
             type="button"
-            className="offline-export"
-            title="Download unsynced sales JSON in case this device is wiped before sync"
+            className={`offline-badge${!offline.online ? " is-offline" : ""}${offline.pendingSales ? " has-queue" : ""}`}
+            title={
+              offline.online
+                ? offline.pendingSales
+                  ? `${offline.pendingSales} sale(s) waiting to sync — click to sync, or Export backup`
+                  : "Online · items follow server · storage persistence requested"
+                : "Offline · sales queue locally; items from cache"
+            }
             onClick={() => {
-              void exportPendingSalesBackup().then((result) => {
-                if (result) setCatalogError(`Saved backup of ${result.count} unsynced sale(s) — keep that file until Sync clears`);
-              });
+              if (offline.online && offline.pendingSales) void syncQueuedSales();
+              else void refreshOfflineBadge();
             }}
           >
-            Export
+            {!offline.online ? "Offline" : offline.syncing ? "Syncing…" : offline.pendingSales ? `Sync ${offline.pendingSales}` : "Online"}
           </button>
-        ) : null}
-        <div className={`toolbar-actions${tillPhase === "options" || tillPhase === "pay" || tillPhase === "done" ? " is-quiet" : ""}`}>
-        <button type="button" onClick={() => void openTicketsBoard()}>
+          <span className="till-version-badge" title="Till build / live API release">
+            v{tillVersionLabel}
+          </span>
+          {offline.pendingSales > 0 ? (
+            <button
+              type="button"
+              className="offline-export"
+              title="Download unsynced sales JSON in case this device is wiped before sync"
+              onClick={() => {
+                void exportPendingSalesBackup().then((result) => {
+                  if (result) setCatalogError(`Saved backup of ${result.count} unsynced sale(s) — keep that file until Sync clears`);
+                });
+              }}
+            >
+              Export
+            </button>
+          ) : null}
+        </div>
+        <div className="toolbar-actions">
+        <button type="button" className="toolbar-keep toolbar-desk" onClick={() => void openOpenTicketsList()}>
           Tickets{openTickets.length ? ` · ${openTickets.length}` : ""}
         </button>
-        <button type="button" onClick={() => void openPhoneOrder()}>
-          Phone order
+        <button type="button" className="toolbar-desk toolbar-aux" onClick={() => void openRecentSales()}>
+          Receipts
         </button>
-        <button type="button" onClick={() => void openKitchenBoard()}>
+        <button type="button" className="toolbar-desk toolbar-aux" onClick={() => void openKitchenBoard()}>
           Kitchen
         </button>
-        <button type="button" className={clockedIn ? "is-live" : ""} onClick={() => void toggleClock()}>
+        <button type="button" className={`toolbar-desk toolbar-aux${clockedIn ? " is-live" : ""}`} onClick={() => void toggleClock()}>
           {clockedIn ? "Clock out" : "Clock in"}
         </button>
-        <button type="button" className={shift ? "is-live" : ""} onClick={() => setModal({ type: "shift" })}>
+        <button type="button" className={`toolbar-desk${shift ? " is-live" : ""}`} onClick={() => setModal({ type: "shift" })}>
           {shift ? "Close shift" : "Open shift"}
         </button>
-        <button type="button" onClick={() => void openDrawer()}>
+        <button type="button" className="toolbar-desk toolbar-aux" onClick={() => void openDrawer()}>
           Drawer
+        </button>
+        {hintLevel === "hidden" ? (
+          <button type="button" className="toolbar-desk toolbar-hint-restore" onClick={showTillHintAgain}>
+            Tips
+          </button>
+        ) : null}
+        <button type="button" className="toolbar-phone-more" onClick={() => setModal({ type: "more" })}>
+          More
         </button>
         </div>
       </div>
-      <p className="guided-note">
-        <button type="button" className="fullscreen-btn" onClick={() => void toggleFullScreen()}>
-          {fullScreen ? "Exit full screen" : "Full screen"}
-        </button>
-        <span>
-          Full screen only fills this window. To keep an iPad on this till, use Guided Access: Settings, Accessibility,
-          Guided Access, then triple-click the side button. This page cannot lock the iPad.
-        </span>
-      </p>
-
-      <div className={`register pane-${mobilePane}`}>
-        <section className="panel catalog-panel">
-          <div className="topbar">
-            {modifierItem ? (
-              <>
-                <button type="button" className="chip" onClick={() => setModifierItem(null)}>
-                  ← Menu
-                </button>
-                <div className="brand-mini">{modifierItem.name}</div>
-              </>
-            ) : (
-              <>
-                <div className="brand-mini">PurePOS</div>
-                <input
-                  className="search"
-                  placeholder="Search or scan barcode / SKU"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => void onSearchKey(e)}
-                />
-              </>
+      {showHintRow ? (
+        <div className="guided-note-slot">
+          <p
+            className={`guided-note${needsPinBanner ? " is-pinning" : ""}${hintLevel === "compact" ? " is-compact" : ""}`}
+          >
+            {needsPinBanner && currentRegister && (
+              <button type="button" className="pin-till-btn" onClick={pinThisIpad}>
+                Use this iPad as {currentRegister.name}
+              </button>
             )}
-          </div>
-          <div className="chip-row" role="tablist" aria-label={modifierItem ? "Modifier options" : "Item groups"}>
-            {modifierItem ? (
-              modifierItem.modifierGroups.map((group) => (
-                <button
-                  key={group.id}
-                  type="button"
-                  className={`chip ${activeModGroup?.id === group.id ? "active" : ""}`}
-                  onClick={() => setModifierGroupId(group.id)}
-                >
-                  {group.name}
-                  {group.minSelect > 0 ? " *" : ""}
-                </button>
-              ))
-            ) : (
-              <>
-                <button
-                  type="button"
-                  className={`chip ${showFavorites ? "active" : ""}`}
-                  onClick={() => {
-                    setShowFavorites(true);
-                    setCategoryId("all");
-                  }}
-                >
-                  ★ Quick keys
-                </button>
-                <button
-                  type="button"
-                  className={`chip ${!showFavorites && categoryId === "all" ? "active" : ""}`}
-                  onClick={() => {
-                    setShowFavorites(false);
-                    setCategoryId("all");
-                  }}
-                >
-                  All groups
-                </button>
+            <button type="button" className="fullscreen-btn" onClick={() => void toggleFullScreen()}>
+              {fullScreen ? "Exit full screen" : "Full screen"}
+            </button>
+            <span className="guided-note-copy">
+              {needsPinBanner && currentRegister
+                ? hintLevel === "compact"
+                  ? `Pin this iPad to ${currentRegister.name}. Lock → Change till to swap.`
+                  : `Tap Use this iPad as ${currentRegister.name} to pin this device. Change till from Lock → Change till. Guided Access keeps Safari on this page.`
+                : hintLevel === "compact"
+                  ? "Full screen fills this window. Pin the iPad with Guided Access (Settings → Accessibility → triple-click side button)."
+                  : "Full screen only fills this window. To keep an iPad on this till, use Guided Access: Settings, Accessibility, Guided Access, then triple-click the side button."}
+            </span>
+            <button type="button" className="hint-dismiss" onClick={dismissTillHint} title="Hide till tips">
+              Hide
+            </button>
+          </p>
+        </div>
+      ) : null}
+      </header>
+
+      <div className={`register register-shell pane-${mobilePane}`}>
+        <section
+          className={`panel catalog-panel${modifierItem ? " catalog-panel--options" : ""}`}
+        >
+          {showHalfAndHalfWizard && modifierItem ? (
+            <HalfAndHalfWizard
+              key={editingLineKey ?? `new-${modifierItem.id}`}
+              item={modifierItem}
+              visibleGroups={visibleModifierGroups}
+              selectedMods={selectedMods}
+              modifierPreview={modifierPreview}
+              modifierTotal={modifierTotal}
+              editingLineKey={editingLineKey}
+              initialSauceLinked={hhSauceLinked}
+              chargedByModifierId={chargedByModifierId}
+              onChoose={chooseModifier}
+              onChooseRemove={chooseHalfAndHalfRemove}
+              onSetMods={applySelectedMods}
+              onClose={leavePizzaOptionsToGroups}
+              onConfirm={() => void confirmModifiers()}
+              onSauceLinkedChange={setHhSauceLinked}
+            />
+          ) : modifierItem ? (
+            <div className="options-picker">
+              <div className="options-picker-head till-options-head">
+                <div className="topbar">
+                  <button
+                    type="button"
+                    className="chip chip-back till-options-back"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (isConsolidatedPizzaItem(modifierItem.name)) leavePizzaOptionsToGroups();
+                      else closeModifierPicker();
+                    }}
+                  >
+                    ← {editingLineKey ? "Sale" : "Groups"}
+                  </button>
+                  <div className="brand-mini">{editingLineKey ? `Edit · ${modifierItem.name}` : modifierItem.name}</div>
+                </div>
+                <div className="chip-row modifier-tabs" role="tablist" aria-label="Modifier options">
+                  {visibleModifierGroups.map((group) => (
+                    <button
+                      key={group.id}
+                      type="button"
+                      className={`chip ${activeModGroup?.id === group.id ? "active" : ""}`}
+                      onClick={() => setModifierGroupId(group.id)}
+                    >
+                      {isConsolidatedPizzaItem(modifierItem.name)
+                        ? tillPizzaModGroupLabel(group.name)
+                        : group.name.replace(/^(\d+)\s*(?:”|")\s*/gi, "").trim() || group.name}
+                      {group.minSelect > 0 ? " *" : ""}
+                      {(group.freeSelect ?? 0) > 0 ? ` · ${group.freeSelect} free` : ""}
+                    </button>
+                  ))}
+                </div>
+                {catalogError && <p className="banner">{catalogError}</p>}
+              </div>
+              <div className="options-picker-body">
+                {activeModGroup ? (
+                  <div className="grid modifier-options-grid">
+                    {activeModGroup.modifiers.map((option) => {
+                      const selected = (selectedMods[activeModGroup.id] ?? []).some((picked) => picked.id === option.id);
+                      const sizeInches = isConsolidatedPizzaItem(modifierItem.name)
+                        ? pizzaSizeInchesFromSelection(modifierItem.modifierGroups, selectedMods)
+                        : null;
+                      const listPrice = modifierListPriceCents(
+                        option.priceCents,
+                        activeModGroup.name,
+                        modifierItem.name,
+                        sizeInches
+                      );
+                      let priceLabel = "Included";
+                      if (listPrice) {
+                        if (selected) {
+                          const charged = chargedByModifierId.get(option.id);
+                          if (charged === 0) priceLabel = "Included";
+                          else if (charged !== undefined) priceLabel = `+${money(charged)}`;
+                          else priceLabel = `+${money(listPrice)}`;
+                        } else {
+                          priceLabel = `+${money(listPrice)}`;
+                        }
+                      }
+                      return (
+                        <ModifierOptionButton
+                          key={option.id}
+                          name={option.name}
+                          selected={selected}
+                          priceLabel={priceLabel}
+                          onPick={() => chooseModifier(activeModGroup, option)}
+                        />
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="empty">Loading options…</p>
+                )}
+              </div>
+              <div className="options-picker-footer">
+                <OptionsPickerBottomBar
+                  itemName={modifierItem.name}
+                  mods={modifierPreview}
+                  totalCents={modifierTotal}
+                  editingLineKey={editingLineKey}
+                  onConfirm={() => void confirmModifiers()}
+                />
+              </div>
+            </div>
+          ) : (
+          <>
+          <header className="catalog-head">
+            <div className="topbar catalog-nav">
+              <button
+                type="button"
+                className={`chip chip-back${showGroupHome ? " is-reserved" : ""}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  openGroupHome();
+                }}
+                disabled={showGroupHome}
+                tabIndex={showGroupHome ? -1 : 0}
+                aria-hidden={showGroupHome}
+              >
+                ← Groups
+              </button>
+              <div className="brand-mini catalog-title">
+                {showFavorites
+                  ? "Quick keys"
+                  : categoryId === "all"
+                    ? "All groups"
+                    : categoryId === "home"
+                      ? "PurePOS"
+                      : categoryId === "__none__"
+                        ? "Ungrouped"
+                        : categories.find((c) => c.id === categoryId)?.name ?? "PurePOS"}
+              </div>
+              <input
+                className="search"
+                placeholder="Search or scan barcode / SKU"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => void onSearchKey(e)}
+              />
+            </div>
+            <div
+              className={`chip-row catalog-filters${showGroupHome ? " chip-row--home" : ""}`}
+              role="tablist"
+              aria-label="Item groups"
+            >
+              <button
+                type="button"
+                className={`chip ${showFavorites ? "active" : ""}`}
+                onClick={() => {
+                  setShowFavorites(true);
+                  setCategoryId("home");
+                  setQuery("");
+                }}
+              >
+                ★ Quick keys
+              </button>
+              <button
+                type="button"
+                className={`chip ${!showFavorites && categoryId === "all" ? "active" : ""}`}
+                onClick={() => openAllGroupsMenu()}
+              >
+                All groups
+              </button>
+              <div className="chip-row-extra" aria-hidden={showGroupHome}>
                 {categories.map((c) => (
                   <button
                     key={c.id}
                     type="button"
                     className={`chip ${!showFavorites && categoryId === c.id ? "active" : ""}`}
-                    onClick={() => {
-                      setShowFavorites(false);
-                      setCategoryId(c.id);
-                    }}
+                    onClick={() => openCategory(c.id)}
                   >
                     {c.name}
                   </button>
                 ))}
-              </>
-            )}
-          </div>
-          {catalogError && <p className="banner">{catalogError}</p>}
-          <div className="grid">
-            {modifierItem && activeModGroup ? (
-              activeModGroup.modifiers.map((option) => {
-                const selected = (selectedMods[activeModGroup.id] ?? []).some((picked) => picked.id === option.id);
-                return (
+              </div>
+            </div>
+          </header>
+          {catalogError ? <p className="banner catalog-banner">{catalogError}</p> : null}
+          {showGroupHome ? (
+            <div className="grid group-picker-grid">
+              {!menuReady && <p className="empty">Loading menu…</p>}
+              {menuReady &&
+                categories.map((cat) => (
                   <button
-                    key={option.id}
+                    key={cat.id}
                     type="button"
-                    className={`item-tile ${selected ? "is-selected" : ""}`}
-                    style={{ backgroundColor: modifierItem.color }}
-                    onClick={() => chooseModifier(activeModGroup, option)}
+                    className="item-tile group-tile"
+                    style={{ backgroundColor: cat.color }}
+                    onClick={() => openCategory(cat.id)}
                   >
-                    <span className="name">{option.name}</span>
-                    <span className="price">{option.priceCents ? `+${money(option.priceCents)}` : "Included"}</span>
-                  </button>
-                );
-              })
-            ) : (
-              <>
-                {!menuReady && <p className="empty">Loading menu…</p>}
-                {menuReady && visibleItems.length === 0 && <p className="empty">Nothing in this group.</p>}
-                {visibleItems.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="item-tile"
-                    style={{ backgroundColor: item.color }}
-                    onClick={() => void addItem(item)}
-                  >
-                    <span className="name">{item.name}</span>
-                    <span className="price">{money(item.variants[0]?.priceCents ?? 0)}</span>
+                    <span className="name">{cat.name}</span>
+                    <span className="price">{itemCountByCategory.get(cat.id) ?? 0} items</span>
                   </button>
                 ))}
-              </>
-            )}
-          </div>
-          {modifierItem && (
-            <div className="modifier-bar">
-              <div>
-                <p className="step-kicker">Step 2 · Options</p>
-                <strong>{modifierItem.name}</strong>
-                {modifierPreview.length > 0 ? <ModifierList mods={modifierPreview} /> : <div className="meta">Choose options</div>}
-              </div>
-              <button type="button" className="pay-btn" onClick={() => void confirmModifiers()}>
-                Add {money(modifierTotal)}
-              </button>
+              {menuReady && ungroupedItemCount > 0 && (
+                <button
+                  type="button"
+                  className="item-tile group-tile"
+                  style={{ backgroundColor: "#4b5563" }}
+                  onClick={() => openCategory("__none__")}
+                >
+                  <span className="name">Ungrouped</span>
+                  <span className="price">{ungroupedItemCount} items</span>
+                </button>
+              )}
             </div>
+          ) : sectionedAllGroups ? (
+            <div className="menu-sections" role="list">
+              {!menuReady && <p className="empty">Loading menu…</p>}
+              {menuReady && menuSections.length === 0 && <p className="empty">Nothing in this group.</p>}
+              {menuSections.map((section) => {
+                const groupColor = categories.find((c) => c.id === section.id)?.color;
+                return (
+                  <section key={section.id} className="menu-section" role="listitem" aria-label={section.name}>
+                    <h3
+                      className="menu-section-title"
+                      style={groupColor ? { borderLeftColor: groupColor } : undefined}
+                    >
+                      {section.name}
+                    </h3>
+                    <div className="menu-section-grid">{section.items.map((item) => renderItemTile(item))}</div>
+                  </section>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="grid">
+              {!menuReady && <p className="empty">Loading menu…</p>}
+              {menuReady && visibleItems.length === 0 && <p className="empty">Nothing in this group.</p>}
+              {visibleItems.map((item) => renderItemTile(item))}
+            </div>
+          )}
+          </>
           )}
         </section>
 
@@ -1424,8 +2377,8 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             <div>
               <h2>{ticket?.name ?? "New sale"}</h2>
               <div className="ticket-sub" style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
+                {currentRegister ? `${currentRegister.name} · ` : ""}
                 {ticket?.customer ? `${ticket.customer.name} · ${ticket.customer.loyaltyPoints} pts` : "Walk-in"}
-                {ticket?.registerName ? ` · ${ticket.registerName}` : ""}
                 {offline.online ? " · live sync" : ""}
               </div>
             </div>
@@ -1434,50 +2387,70 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             </button>
           </div>
 
-          <div className="open-tickets-rail" aria-label="Open tickets across tills">
-            <div className="open-tickets-label">
-              <span>Open tills{offline.online ? " · live" : ""}</span>
-              <button type="button" className="linkish" onClick={() => void refreshOpenTickets()}>
-                Refresh
-              </button>
-            </div>
-            {openTickets.length === 0 ? (
-              <p className="open-tickets-empty">No open tickets on any till — start a sale anytime.</p>
-            ) : (
-              <div className="open-tickets-chips">
-                {openTickets.map((t) => {
-                  const active = ticket?.id === t.id;
-                  return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      className={`open-ticket-chip${active ? " active" : ""}`}
-                      onClick={() => {
-                        if (active) return;
-                        void adoptTicket(t.id);
-                      }}
-                    >
-                      <strong>{t.name}</strong>
-                      <span>
-                        {t.registerName || "Till"} · {t.lines.length} item{t.lines.length === 1 ? "" : "s"} ·{" "}
-                        {money(t.totalCents)}
-                      </span>
-                    </button>
-                  );
-                })}
+          <div className="ticket-body">
+            <div className="open-tickets-rail" aria-label="Open tickets across tills">
+              <div className="open-tickets-label">
+                <span>Open tills{offline.online ? " · live" : ""}</span>
+                <button type="button" className="linkish" onClick={() => void refreshOpenTickets()}>
+                  Refresh
+                </button>
               </div>
-            )}
-          </div>
+              {openTickets.length === 0 ? (
+                <p className="open-tickets-empty">No open tickets on any till — start a sale anytime.</p>
+              ) : (
+                <div className="open-tickets-chips">
+                  {openTickets.map((t) => {
+                    const active = ticket?.id === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        className={`open-ticket-chip${active ? " active" : ""}`}
+                        onClick={() => {
+                          if (active) return;
+                          void adoptTicket(t.id);
+                        }}
+                      >
+                        <strong>{t.name}</strong>
+                        <span>
+                          {t.registerName || "Till"} · {t.lines.length} item{t.lines.length === 1 ? "" : "s"} ·{" "}
+                          {money(t.totalCents)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
-          <div className="ticket-lines">
+            <div className="ticket-lines">
             {(ticket?.lines ?? []).map((line) => {
               const modSum = line.modifiers.reduce((s, m) => s + m.priceCents, 0);
               const lineTotal = Math.round((line.unitPriceCents + modSum) * line.quantity) - line.discountCents;
+              const canEditOptions = items.some(
+                (entry) =>
+                  entry.variants.some((variant) => variant.id === line.variantId) &&
+                  entry.modifierGroups.length > 0
+              );
               return (
-                <div key={line.key} className="line">
+                <div key={line.key} className={`line${canEditOptions ? " line-editable" : ""}`}>
                   <div>
-                    <div style={{ fontWeight: 600 }}>{line.name}</div>
-                    {line.modifiers.length > 0 && <ModifierList mods={line.modifiers} />}
+                    {canEditOptions ? (
+                      <button type="button" className="line-edit-hit" onClick={() => openLineEditor(line)}>
+                        <span className="line-edit-name">{line.name}</span>
+                        {line.modifiers.length > 0 && (
+                          <ModifierList mods={line.modifiers} groups={groupsForLine(line)} itemName={line.name} />
+                        )}
+                        <span className="line-edit-hint">Edit options</span>
+                      </button>
+                    ) : (
+                      <>
+                        <div style={{ fontWeight: 600 }}>{line.name}</div>
+                        {line.modifiers.length > 0 && (
+                          <ModifierList mods={line.modifiers} groups={groupsForLine(line)} itemName={line.name} />
+                        )}
+                      </>
+                    )}
                     <div className="qty-controls" style={{ marginTop: 6 }}>
                       <button type="button" onClick={() => void updateQty(line, line.quantity - 1)}>
                         −
@@ -1499,6 +2472,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
                   : "No open orders — tap an item to start a new sale."}
               </p>
             )}
+            </div>
           </div>
 
           <div className="totals">
@@ -1535,11 +2509,15 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             <button type="button" onClick={() => void openHeld()}>
               Recall
             </button>
-            <button type="button" disabled={!hasLines} onClick={() => ticket && setModal({ type: "discount" })}>
+            <button type="button" className="action-secondary" onClick={() => void openRecentSales()}>
+              Receipts
+            </button>
+            <button type="button" className="action-secondary" disabled={!hasLines} onClick={() => ticket && setModal({ type: "discount" })}>
               Discount
             </button>
             <button
               type="button"
+              className="action-secondary"
               disabled={!hasLines}
               onClick={() =>
                 void api<{ suggestions: { label: string; tipCents: number; percent: number | null }[] }>(
@@ -1560,7 +2538,7 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             <button type="button" onClick={() => void openCustomers()}>
               Customer
             </button>
-            <button type="button" disabled={!ticket} onClick={() => void openPhoneOrder()}>
+            <button type="button" className="action-secondary" disabled={!ticket} onClick={() => void openPhoneOrder()}>
               Phone order
             </button>
             <button type="button" disabled={!unsentCount || !offline.online} onClick={openKitchenSend}>
@@ -1574,14 +2552,134 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
       </div>
 
       <div className={`mobile-dock${modifierItem ? " is-hidden" : ""}`}>
-        <button type="button" className="dock-ticket" onClick={() => setMobilePane("ticket")}>
-          <span>{lineCount === 0 ? "Ticket empty" : `${lineCount} ${lineCount === 1 ? "item" : "items"}`}</span>
-          <strong>{money(ticket?.totalCents ?? 0)}</strong>
-        </button>
+        {mobilePane === "ticket" ? (
+          <button type="button" className="dock-ticket" onClick={() => setMobilePane("items")}>
+            <span>← Items</span>
+            <strong>{lineCount === 0 ? "Empty" : `${lineCount} ${lineCount === 1 ? "item" : "items"}`}</strong>
+          </button>
+        ) : (
+          <button type="button" className="dock-ticket" onClick={() => setMobilePane("ticket")}>
+            <span>{lineCount === 0 ? "Ticket empty" : `${lineCount} ${lineCount === 1 ? "item" : "items"}`}</span>
+            <strong>{money(ticket?.totalCents ?? 0)}</strong>
+          </button>
+        )}
         <button type="button" className="dock-pay" onClick={openPay} disabled={lineCount === 0}>
-          Charge
+          Charge{lineCount > 0 ? ` ${money(ticket?.totalCents ?? 0)}` : ""}
         </button>
       </div>
+
+      {modal?.type === "more" && (
+        <div className="modal-backdrop till-overlay" onClick={() => setModal(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <p className="step-kicker">Till</p>
+            <h3>More</h3>
+            <div className="more-sheet">
+              <button
+                type="button"
+                onClick={() => {
+                  setModal(null);
+                  void openOpenTicketsList();
+                }}
+              >
+                Tickets
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setModal(null);
+                  void openRecentSales();
+                }}
+              >
+                Receipts
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setModal(null);
+                  void openKitchenBoard();
+                }}
+              >
+                Kitchen
+              </button>
+              <button
+                type="button"
+                className={clockedIn ? "is-live" : ""}
+                onClick={() => {
+                  setModal(null);
+                  void toggleClock();
+                }}
+              >
+                {clockedIn ? "Clock out" : "Clock in"}
+              </button>
+              <button
+                type="button"
+                className={shift ? "is-live" : ""}
+                onClick={() => setModal({ type: "shift" })}
+              >
+                {shift ? "Close shift" : "Open shift"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setModal(null);
+                  void openDrawer();
+                }}
+              >
+                Drawer
+              </button>
+              {hintLevel === "hidden" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    showTillHintAgain();
+                    setModal(null);
+                  }}
+                >
+                  Show iPad tips
+                </button>
+              ) : null}
+              <button
+                type="button"
+                disabled={!ticket}
+                onClick={() => void openPhoneOrder()}
+              >
+                Phone order
+              </button>
+              <button
+                type="button"
+                disabled={!hasLines}
+                onClick={() => {
+                  setModal(null);
+                  if (ticket) setModal({ type: "discount" });
+                }}
+              >
+                Discount
+              </button>
+              <button
+                type="button"
+                disabled={!hasLines}
+                onClick={() => {
+                  void api<{ suggestions: { label: string; tipCents: number; percent: number | null }[] }>(
+                    `/extras/tip-suggestions?subtotalCents=${ticket?.subtotalCents ?? 0}`
+                  )
+                    .then((r) => {
+                      setTipSuggestions(r.suggestions);
+                      setModal({ type: "tip" });
+                    })
+                    .catch((error) => fail("Tip", error));
+                }}
+              >
+                Tip
+              </button>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn ghost" onClick={() => setModal(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {modal?.type === "phoneOrder" && (
         <div className="modal-backdrop till-overlay" onClick={() => setModal(null)}>
@@ -1589,21 +2687,38 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             <p className="step-kicker">Phone order</p>
             <h3>Take order → send pay link</h3>
             <ol className="hint" style={{ margin: "0 0 12px", paddingLeft: 18, lineHeight: 1.45 }}>
-              <li>Ring the caller’s items on the till</li>
-              <li>Enter their mobile (optional name)</li>
+              <li>Enter caller ID (their number) and optional name</li>
+              <li>Ring their items on the till</li>
               <li>
-                <strong>Send pay link</strong> — SMS when Twilio is set; otherwise copy the link
+                <strong>Send pay link</strong> — SMS when set up; otherwise copy the link
               </li>
             </ol>
             <p className="pay-summary">
               <span>
                 Due <strong>{money(ticket?.totalCents ?? 0)}</strong>
               </span>
-              <span>{ticket?.name || "Phone order"}</span>
+              <span>
+                {ticket?.customer
+                  ? ticket.customer.name
+                  : ticket?.name || "Phone order"}
+              </span>
             </p>
             {!ticket?.lines.length && (
               <p className="hint">Add items first, then send the link. This ticket is marked as a phone order.</p>
             )}
+            <div className="field">
+              <label>Caller ID (phone)</label>
+              <input
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="07… — the number calling in"
+                value={textPayPhone}
+                onChange={(e) => {
+                  setTextPayPhone(e.target.value);
+                  void lookupCallerId(e.target.value);
+                }}
+              />
+            </div>
             <div className="field">
               <label>Caller name (optional)</label>
               <input
@@ -1612,16 +2727,32 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
                 onChange={(e) => setTextPayName(e.target.value)}
               />
             </div>
-            <div className="field">
-              <label>Mobile</label>
-              <input
-                inputMode="tel"
-                placeholder="07… — leave blank to copy the link"
-                value={textPayPhone}
-                onChange={(e) => setTextPayPhone(e.target.value)}
-              />
-            </div>
+            {callerMatches.length > 0 && (
+              <div style={{ display: "grid", gap: 6, marginBottom: 8 }}>
+                {callerMatches.slice(0, 4).map((match) => (
+                  <button
+                    key={match.id}
+                    type="button"
+                    className="list-btn"
+                    onClick={() => void attachCustomer(match, { closeModal: false })}
+                  >
+                    <strong>{match.name}</strong>
+                    <div style={{ color: "var(--muted)" }}>
+                      {match.phone || "No number"} · tap to attach
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="tender-row" style={{ marginTop: 8 }}>
+              <button
+                type="button"
+                className="btn secondary"
+                disabled={busy || (!textPayPhone.trim() && !textPayName.trim())}
+                onClick={() => void saveCallerAsCustomer()}
+              >
+                {callerMatches[0] ? "Attach caller" : "Save caller as customer"}
+              </button>
               <button
                 type="button"
                 className="btn primary"
@@ -1639,10 +2770,24 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
                   Copy link
                 </button>
               )}
+              {textPayLink?.smsBody && (
+                <button
+                  type="button"
+                  className="btn ghost"
+                  onClick={() => void navigator.clipboard?.writeText(textPayLink.smsBody ?? "")}
+                >
+                  Copy text
+                </button>
+              )}
             </div>
             {textPayLink && (
               <p className="hint" style={{ marginTop: 10, wordBreak: "break-all" }}>
                 {textPayLink.status === "paid" ? "Paid" : "Waiting for customer…"} · {textPayLink.payUrl}
+              </p>
+            )}
+            {textPayLink?.smsBody && (
+              <p className="hint" style={{ whiteSpace: "pre-wrap" }}>
+                {textPayLink.smsBody}
               </p>
             )}
             {textPayMsg && <p className="hint">{textPayMsg}</p>}
@@ -1672,7 +2817,23 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
               <span>{paidSum > ticket.totalCents ? `Change ${money(paidSum - ticket.totalCents)}` : `Tendered ${money(paidSum)}`}</span>
             </p>
             {!shift && <p className="hint">Open a shift if you are taking cash. Card sales still go through.</p>}
-            {paymentTypes.map((pt) => (
+            {chargeMethods.length === 0 ? (
+              <p className="hint">No payment methods are turned on. Add one in back office Settings.</p>
+            ) : (
+              <div className="pay-grid" aria-label="Payment methods">
+                {chargeMethods.map((pt) => (
+                  <button
+                    key={pt.id}
+                    type="button"
+                    className={(payAmounts[pt.id] ?? 0) > 0 ? "active" : ""}
+                    onClick={() => takeOnMethod(pt.id)}
+                  >
+                    {pt.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            {chargeMethods.map((pt) => (
               <div key={pt.id} className="field">
                 <label>
                   {pt.name}
@@ -1720,8 +2881,8 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             <div className="field pay-text-to-pay" style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--line, #dce5e1)" }}>
               <label>Phone order · text to pay</label>
               <p className="hint" style={{ marginTop: 0 }}>
-                For phone orders: send an SMS pay link (Twilio) or copy the link. Prefer the till{" "}
-                <strong>Phone order</strong> button for the guided flow.
+                For phone orders: text the pay link, or copy it. The wording is set in back office Settings. Prefer{" "}
+                <strong>Phone order</strong> on the ticket pane for the guided flow.
               </p>
               <input
                 inputMode="tel"
@@ -1742,10 +2903,24 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
                     Copy link
                   </button>
                 )}
+                {textPayLink?.smsBody && (
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    onClick={() => void navigator.clipboard?.writeText(textPayLink.smsBody ?? "")}
+                  >
+                    Copy text
+                  </button>
+                )}
               </div>
               {textPayLink && (
                 <p className="hint" style={{ marginTop: 8, wordBreak: "break-all" }}>
                   {textPayLink.status === "paid" ? "Paid" : "Waiting for customer…"} · {textPayLink.payUrl}
+                </p>
+              )}
+              {textPayLink?.smsBody && (
+                <p className="hint" style={{ whiteSpace: "pre-wrap" }}>
+                  {textPayLink.smsBody}
                 </p>
               )}
               {textPayMsg && <p className="hint">{textPayMsg}</p>}
@@ -1789,14 +2964,182 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
         </div>
       )}
 
+      {modal?.type === "recentSales" && (
+        <div className="modal-backdrop till-overlay" onClick={() => setModal(null)}>
+          <div className="modal tender-modal" onClick={(e) => e.stopPropagation()}>
+            <p className="step-kicker">Paid sales</p>
+            <h3>Receipts</h3>
+            <p className="hint" style={{ marginTop: 0 }}>
+              Open again copies items onto a new till ticket. The original payment stays unless you void or refund.
+            </p>
+            <div className="field">
+              <label>Search</label>
+              <input
+                placeholder="Receipt or customer"
+                value={recentSaleQuery}
+                onChange={(e) => void searchRecentSales(e.target.value)}
+              />
+            </div>
+            {recentSaleMsg && <p className="hint">{recentSaleMsg}</p>}
+            {selectedRecentSale ? (
+              <div style={{ display: "grid", gap: 10 }}>
+                <button type="button" className="btn ghost" onClick={() => setSelectedRecentSale(null)}>
+                  ← All receipts
+                </button>
+                <div>
+                  <strong>{selectedRecentSale.receiptNumber}</strong>
+                  <div style={{ color: "var(--muted)" }}>
+                    {money(selectedRecentSale.totalCents)} · {selectedRecentSale.status} ·{" "}
+                    {new Date(selectedRecentSale.createdAt).toLocaleString("en-GB", {
+                      timeZone: "Europe/London",
+                    })}
+                  </div>
+                  {selectedRecentSale.customerName && (
+                    <div style={{ color: "var(--muted)" }}>{selectedRecentSale.customerName}</div>
+                  )}
+                </div>
+                <ul className="kitchen-send-list">
+                  {selectedRecentSale.lines.map((line, index) => (
+                    <li key={`${selectedRecentSale.id}-${index}`}>
+                      <strong>{line.quantity}×</strong> {line.name}
+                    </li>
+                  ))}
+                </ul>
+                <div className="tender-row">
+                  <button
+                    type="button"
+                    className="btn primary"
+                    disabled={busy || selectedRecentSale.status !== "completed"}
+                    onClick={() => void reopenRecentSale(selectedRecentSale)}
+                  >
+                    Open on till
+                  </button>
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    disabled={busy}
+                    onClick={() => void reprintRecentSale(selectedRecentSale, "billing")}
+                  >
+                    Reprint billing
+                  </button>
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    disabled={busy}
+                    onClick={() => void reprintRecentSale(selectedRecentSale, "kitchen")}
+                  >
+                    Reprint kitchen
+                  </button>
+                </div>
+                {(user.role === "owner" || user.role === "manager") &&
+                  selectedRecentSale.status === "completed" && (
+                    <div className="tender-row">
+                      <button
+                        type="button"
+                        className="btn secondary"
+                        disabled={busy}
+                        onClick={() => void voidOrRefundRecentSale(selectedRecentSale, "refund")}
+                      >
+                        Refund
+                      </button>
+                      <button
+                        type="button"
+                        className="btn ghost"
+                        disabled={busy}
+                        onClick={() => void voidOrRefundRecentSale(selectedRecentSale, "void")}
+                      >
+                        Void
+                      </button>
+                    </div>
+                  )}
+              </div>
+            ) : (
+              <>
+                {recentSales.length === 0 && (
+                  <p style={{ color: "var(--muted)" }}>No receipts found.</p>
+                )}
+                {recentSales.map((sale) => (
+                  <button
+                    key={sale.id}
+                    type="button"
+                    className="list-btn"
+                    onClick={() => {
+                      setRecentSaleMsg("");
+                      setSelectedRecentSale(sale);
+                    }}
+                  >
+                    <strong>
+                      {sale.receiptNumber}
+                      {sale.status !== "completed" ? ` · ${sale.status}` : ""}
+                    </strong>
+                    <div style={{ color: "var(--muted)" }}>
+                      {money(sale.totalCents)}
+                      {sale.customerName ? ` · ${sale.customerName}` : ""} ·{" "}
+                      {new Date(sale.createdAt).toLocaleTimeString("en-GB", {
+                        timeZone: "Europe/London",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </div>
+                  </button>
+                ))}
+              </>
+            )}
+            <div className="modal-actions">
+              <button type="button" className="btn ghost" onClick={() => setModal(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {modal?.type === "customers" && (
         <div className="modal-backdrop" onClick={() => setModal(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h3>Customers</h3>
+            <div className="field">
+              <label>Search</label>
+              <input
+                placeholder="Name or phone"
+                value={customerQuery}
+                onChange={(e) => void searchCustomers(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label>Add new customer</label>
+              <input
+                placeholder="Name"
+                value={newCustomerName}
+                onChange={(e) => setNewCustomerName(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label>Phone / caller ID (optional)</label>
+              <input
+                inputMode="tel"
+                placeholder="07…"
+                value={newCustomerPhone}
+                onChange={(e) => setNewCustomerPhone(e.target.value)}
+              />
+            </div>
+            <div className="tender-row" style={{ marginBottom: 10 }}>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={busy || !newCustomerName.trim()}
+                onClick={() => void createCustomerFromTill()}
+              >
+                Add &amp; attach to sale
+              </button>
+            </div>
+            {customerFormMsg && <p className="hint">{customerFormMsg}</p>}
+            {customers.length === 0 && <p style={{ color: "var(--muted)" }}>No customers yet — add one above.</p>}
             {customers.map((c) => (
               <button key={c.id} type="button" className="list-btn" onClick={() => void attachCustomer(c)}>
                 <strong>{c.name}</strong>
                 <div style={{ color: "var(--muted)" }}>
+                  {c.phone ? `${c.phone} · ` : ""}
                   {c.loyaltyPoints} pts · credit {money(c.storeCreditCents)}
                 </div>
               </button>
@@ -1825,7 +3168,9 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
               {unsentLines.map(({ line, quantity }) => (
                 <li key={line.key}>
                   <strong>{quantity}×</strong> {line.name}
-                  {line.modifiers.length > 0 && <ModifierList mods={line.modifiers} />}
+                  {line.modifiers.length > 0 && (
+                    <ModifierList mods={line.modifiers} groups={groupsForLine(line)} itemName={line.name} />
+                  )}
                 </li>
               ))}
             </ul>
@@ -1885,6 +3230,58 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
           onClose={() => setModal(null)}
           onApply={(cents) => void applyTip(cents)}
         />
+      )}
+
+      {modal?.type === "openTickets" && (
+        <div className="modal-backdrop till-overlay" onClick={() => setModal(null)}>
+          <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head-row">
+              <h3>Open tickets</h3>
+              <button type="button" className="btn ghost" onClick={() => void refreshOpenTickets()}>
+                Refresh
+              </button>
+            </div>
+            <p style={{ color: "var(--muted)", marginTop: 0 }}>
+              Open sales across the store. Tap a ticket to continue it on this till.
+            </p>
+            {openTickets.length === 0 ? (
+              <p style={{ color: "var(--muted)" }}>No open tickets — add an item to start a new sale.</p>
+            ) : (
+              openTickets.map((t) => {
+                const active = ticket?.id === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={`list-btn${active ? " active" : ""}`}
+                    onClick={() => {
+                      if (active) {
+                        setModal(null);
+                        return;
+                      }
+                      void adoptTicket(t.id);
+                    }}
+                  >
+                    <strong>
+                      {t.name}
+                      {active ? " · on this till" : ""}
+                    </strong>
+                    <div style={{ color: "var(--muted)" }}>
+                      {t.registerName || "Till"} · {t.lines.length} item{t.lines.length === 1 ? "" : "s"} ·{" "}
+                      {money(t.totalCents)}
+                      {t.customer?.name ? ` · ${t.customer.name}` : ""}
+                    </div>
+                  </button>
+                );
+              })
+            )}
+            <div className="modal-actions">
+              <button type="button" className="btn ghost" onClick={() => setModal(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {modal?.type === "board" && (
@@ -1986,10 +3383,65 @@ export function Register({ user, store, registers, registerId, onRegisterChange,
             <p className="step-kicker">Step 4 · Done</p>
             <h3>Sale complete</h3>
             {modal.changeCents > 0 && <p className="change-due">Change due: {money(modal.changeCents)}</p>}
+            <p style={{ color: "var(--muted)", marginTop: 0 }}>
+              Billing receipt and kitchen ticket both include the modifiers from this sale.
+            </p>
+            <p className="step-kicker">Billing receipt</p>
             <pre className="receipt">{modal.text}</pre>
+            {modal.kitchenText && (
+              <>
+                <p className="step-kicker">Kitchen ticket</p>
+                <pre className="receipt">{modal.kitchenText}</pre>
+              </>
+            )}
             <div className="modal-actions">
               <button type="button" className="btn primary" onClick={() => setModal(null)}>
                 New sale
+              </button>
+              <button
+                type="button"
+                className="btn secondary"
+                disabled={busy}
+                onClick={() =>
+                  void reopenRecentSale({
+                    id: modal.saleId,
+                    receiptNumber: "this sale",
+                    employeeName: "",
+                    customerName: null,
+                    totalCents: 0,
+                    status: "completed",
+                    createdAt: new Date().toISOString(),
+                    lines: [],
+                  })
+                }
+              >
+                Open again on till
+              </button>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() =>
+                  void api("/printers/print-receipt", {
+                    method: "POST",
+                    body: JSON.stringify({ saleId: modal.saleId }),
+                  }).catch((error) => fail("Billing receipt", error))
+                }
+              >
+                Reprint billing
+              </button>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() =>
+                  void api<{ preview: string }>("/printers/print-kitchen", {
+                    method: "POST",
+                    body: JSON.stringify({ saleId: modal.saleId }),
+                  })
+                    .then((r) => setModal({ ...modal, kitchenText: r.preview }))
+                    .catch((error) => fail("Kitchen ticket", error))
+                }
+              >
+                Reprint kitchen
               </button>
               <button
                 type="button"

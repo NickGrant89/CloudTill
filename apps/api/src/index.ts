@@ -26,9 +26,17 @@ import { textPayRouter, publicTextPayRouter } from "./routes/textpay.js";
 import { prisma } from "./db.js";
 import { backfillCompanyKeys } from "./company.js";
 import { migrateBillingEntitlements } from "./routes/billing.js";
+import { syncModifierGroupSortOrders } from "./modifierFolders.js";
 import { orderingHostMiddleware } from "./orderingHost.js";
+import { installAsyncHandlers } from "./expressAsync.js";
 
 const app = express();
+
+/** Express 4 does not forward rejections from async handlers to the error middleware. */
+process.on("unhandledRejection", (reason) => {
+  console.error("unhandledRejection", reason);
+});
+
 const PORT = Number(process.env.PORT || 4000);
 const HOST = process.env.HOST || "0.0.0.0";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -73,7 +81,7 @@ app.get("/api/health", async (_req, res) => {
     product: process.env.PRODUCT_NAME || "PurePOS",
     legalName: process.env.PRODUCT_LEGAL || "PurePOS UK",
     domain: process.env.PRODUCT_DOMAIN || "purepos.co.uk",
-    version: "0.10.14",
+    version: "0.10.129",
     database,
     storeCount,
     time: new Date().toISOString(),
@@ -99,6 +107,10 @@ app.get("/api/health", async (_req, res) => {
 });
 
 app.get(["/pricing", "/pricing/"], (_req, res) => {
+  res.redirect(302, "/#pricing");
+});
+
+app.get(["/signup", "/signup/"], (_req, res) => {
   res.redirect(302, "/#pricing");
 });
 
@@ -130,6 +142,35 @@ mountSpa("/pos", "pos");
 mountSpa("/bo", "bo");
 mountSpa("/order", "order");
 app.use(express.static(path.join(webRoot, "marketing")));
+
+const apiRouters = [
+  authRouter,
+  catalogRouter,
+  posRouter,
+  shiftsRouter,
+  inventoryRouter,
+  customersRouter,
+  employeesRouter,
+  salesRouter,
+  reportsRouter,
+  settingsRouter,
+  giftCardsRouter,
+  timeClockRouter,
+  publicOrderingRouter,
+  publicBillingRouter,
+  publicDeliveryRouter,
+  publicTextPayRouter,
+  billingRouter,
+  adminRouter,
+  backupRouter,
+  kitchenRouter,
+  deliveryRouter,
+  textPayRouter,
+  printersRouter,
+  extrasRouter,
+  importRouter,
+];
+for (const r of apiRouters) installAsyncHandlers(r);
 
 app.use("/api/auth", authRouter);
 app.use("/api/catalog", catalogRouter);
@@ -168,6 +209,12 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 
 backfillCompanyKeys()
   .then(() => migrateBillingEntitlements())
+  .then(async () => {
+    const stores = await prisma.store.findMany({ select: { id: true } });
+    for (const store of stores) {
+      await syncModifierGroupSortOrders(store.id);
+    }
+  })
   .catch((err) => console.error("startup backfill failed", err));
 
 app.listen(PORT, HOST, () => {
