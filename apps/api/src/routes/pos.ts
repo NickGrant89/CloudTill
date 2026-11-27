@@ -7,6 +7,7 @@ import { ensureKitchenTicketForSale } from "../kitchenTicket.js";
 import { owned, rejectForeign } from "../tenant.js";
 import { requireAuth, type AuthedRequest } from "../auth.js";
 import { calcTax, lineSubtotal } from "../money.js";
+import { sortPaymentMethods, turnedOffTenderName } from "../paymentMethods.js";
 
 export const posRouter = Router();
 posRouter.use(requireAuth);
@@ -389,6 +390,12 @@ posRouter.post("/tickets/:id/pay", owned("ticket"), async (req: AuthedRequest, r
     where: { id: { in: body.payments.map((p) => p.paymentTypeId) }, storeId: ticket.storeId },
   });
   const ptMap = new Map(paymentTypes.map((p) => [p.id, p]));
+  const turnedOff = turnedOffTenderName(body.payments, ptMap);
+  if (turnedOff) {
+    return res.status(400).json({
+      error: `${turnedOff} is turned off. Turn it on in Settings → Payment methods.`,
+    });
+  }
 
   // Store credit + gift card deduction (validate first)
   const { redeemGiftCard } = await import("./giftcards.js");
@@ -593,7 +600,7 @@ posRouter.get("/payment-types", async (req: AuthedRequest, res) => {
   const pts = await prisma.paymentType.findMany({
     where: { storeId: req.user!.storeId, enabled: true },
   });
-  res.json(pts);
+  res.json(sortPaymentMethods(pts));
 });
 
 posRouter.get("/taxes", async (req: AuthedRequest, res) => {

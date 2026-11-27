@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import { checkPin, requireAuth, requireRole, signToken, type AuthedRequest } from "../auth.js";
-import type { Role } from "@cloudtill/shared";
+import { TEXT_PAY_MESSAGE_KEY, type Role } from "@cloudtill/shared";
 import { companyStoreIds, DEMO_COMPANY, sameCompany } from "../company.js";
 import { parseBody } from "../parse.js";
 import {
@@ -163,10 +163,13 @@ authRouter.post("/stores", requireAuth, requireRole("owner"), async (req: Authed
   }
 
   const parent = await prisma.store.findUniqueOrThrow({ where: { id: parentId } });
-  const [taxes, paymentTypes, billing] = await Promise.all([
+  const [taxes, paymentTypes, billing, textPayMessage] = await Promise.all([
     prisma.tax.findMany({ where: { storeId: parentId } }),
     prisma.paymentType.findMany({ where: { storeId: parentId } }),
     prisma.setting.findMany({ where: { storeId: parentId, key: { in: COPIED_BILLING_KEYS } } }),
+    prisma.setting.findUnique({
+      where: { storeId_key: { storeId: parentId, key: TEXT_PAY_MESSAGE_KEY } },
+    }),
   ]);
 
   if (!parent.companyKey) {
@@ -211,6 +214,9 @@ authRouter.post("/stores", requireAuth, requireRole("owner"), async (req: Authed
     data: [
       ...billing.map((s) => ({ storeId: branch.id, key: s.key, value: s.value })),
       { storeId: branch.id, key: "receipt.header", value: `${parent.name} · ${branch.name}` },
+      ...(textPayMessage
+        ? [{ storeId: branch.id, key: textPayMessage.key, value: textPayMessage.value }]
+        : []),
     ],
   });
 

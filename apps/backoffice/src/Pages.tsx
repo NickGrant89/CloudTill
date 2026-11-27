@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, getToken, money, setToken } from "./api";
-import { getPlan, sortItemGroups, sortTillMenuItems, upgradeBillingHint } from "@cloudtill/shared";
+import {
+  DEFAULT_TEXT_PAY_MESSAGE,
+  getPlan,
+  renderTextPayMessage,
+  sortItemGroups,
+  sortTillMenuItems,
+  upgradeBillingHint,
+} from "@cloudtill/shared";
 import { BoEditSheet } from "./BoEditSheet";
 import { applyReorder, DragGrip, GiftCardsPage, ModifierEditor, ModifierLibrary, TimeClockPage } from "./MorePages";
 import { KitchenPage, PrintersPage } from "./KitchenPrinters";
@@ -3124,6 +3131,8 @@ function SettingsPage() {
     receipt: { header: string; footer: string; showTaxBreakdown: boolean; printCustomer: boolean };
     taxes: { id: string; name: string; rateBps: number; enabled: boolean; inclusive: boolean }[];
     paymentTypes: { id: string; name: string; type: string; enabled: boolean; opensDrawer: boolean }[];
+    currencySymbol: string;
+    textPay: { message: string };
   } | null>(null);
   const [billing, setBilling] = useState<{
     planId: string;
@@ -3168,6 +3177,8 @@ function SettingsPage() {
   const [textPayRecent, setTextPayRecent] = useState<
     { id: string; amountCents: number; status: string; payUrl: string; phone: string | null; createdAt: string }[]
   >([]);
+  const [textPayMessage, setTextPayMessage] = useState(DEFAULT_TEXT_PAY_MESSAGE);
+  const [textPayMessageMsg, setTextPayMessageMsg] = useState("");
 
   async function load() {
     const [s, b, tp, links] = await Promise.all([
@@ -3185,6 +3196,7 @@ function SettingsPage() {
       footer: s.receipt.footer,
       printCustomer: s.receipt.printCustomer !== false,
     });
+    setTextPayMessage(s.textPay?.message?.trim() || DEFAULT_TEXT_PAY_MESSAGE);
   }
 
   useEffect(() => {
@@ -3265,16 +3277,17 @@ function SettingsPage() {
     e.preventDefault();
     setSettingsMsg("");
     if (!payEditForm.name.trim()) {
-      setSettingsMsg("Payment type name is required.");
+      setSettingsMsg("Payment method name is required.");
       return;
     }
     try {
       if (editingPay === "new") {
+        const type = payEditForm.type === "store_credit" || payEditForm.type === "gift_card" ? payEditForm.type : "other";
         await api("/settings/payment-types", {
           method: "POST",
           body: JSON.stringify({
             name: payEditForm.name.trim(),
-            type: payEditForm.type,
+            type,
             enabled: payEditForm.enabled,
             opensDrawer: payEditForm.opensDrawer,
           }),
@@ -3292,20 +3305,34 @@ function SettingsPage() {
       setEditingPay(null);
       await load();
     } catch (err) {
-      setSettingsMsg(err instanceof Error ? err.message : "Could not save payment type");
+      setSettingsMsg(err instanceof Error ? err.message : "Could not save payment method");
+    }
+  }
+
+  async function setPayEnabled(p: NonNullable<typeof settings>["paymentTypes"][number], enabled: boolean) {
+    setSettingsMsg("");
+    try {
+      await api(`/settings/payment-types/${p.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ enabled }),
+      });
+      await load();
+    } catch (err) {
+      setSettingsMsg(err instanceof Error ? err.message : "Could not update payment method");
     }
   }
 
   async function deletePay() {
     if (!editingPay || editingPay === "new") return;
-    if (!window.confirm(`Delete payment type ${editingPay.name}?`)) return;
+    if (editingPay.type === "cash" || editingPay.type === "card") return;
+    if (!window.confirm(`Delete ${editingPay.name}? Past sales keep the name they were paid with.`)) return;
     setSettingsMsg("");
     try {
       await api(`/settings/payment-types/${editingPay.id}`, { method: "DELETE" });
       setEditingPay(null);
       await load();
     } catch (err) {
-      setSettingsMsg(err instanceof Error ? err.message : "Could not delete payment type");
+      setSettingsMsg(err instanceof Error ? err.message : "Could not delete payment method");
     }
   }
 
@@ -3316,7 +3343,7 @@ function SettingsPage() {
       <div className="page-head">
         <div>
           <h2>Settings</h2>
-          <p>Taxes, payment types, receipt, currency, billing</p>
+          <p>Taxes, payment methods, receipt, currency, billing</p>
         </div>
       </div>
 
@@ -3431,6 +3458,62 @@ function SettingsPage() {
             messages: {textPayStatus.twilio.configured ? "on" : "off, so copy the link and send it yourself"}
           </p>
         )}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const message = textPayMessage.trim();
+            if (!message) {
+              setTextPayMessageMsg("Write the text the customer is sent.");
+              return;
+            }
+            setTextPayMessageMsg("");
+            void api("/settings/text-pay", { method: "PATCH", body: JSON.stringify({ message }) })
+              .then(() => {
+                setTextPayMessage(message);
+                setTextPayMessageMsg("Saved");
+                return load();
+              })
+              .catch((err) =>
+                setTextPayMessageMsg(err instanceof Error ? err.message : "Could not save the text")
+              );
+          }}
+        >
+          <div className="field">
+            <label htmlFor="text-pay-message">Text the customer is sent</label>
+            <textarea
+              id="text-pay-message"
+              rows={3}
+              maxLength={320}
+              autoComplete="off"
+              value={textPayMessage}
+              onChange={(e) => {
+                setTextPayMessage(e.target.value);
+                setTextPayMessageMsg("");
+              }}
+            />
+          </div>
+          <p style={{ color: "var(--muted)", fontSize: "0.88rem", marginTop: 0 }}>
+            Saved for this business and used when a pay link is texted. {"{store}"}, {"{amount}"}, {"{name}"} and{" "}
+            {"{link}"} are filled in for each customer. The pay link is included even if {"{link}"} is left out. Card
+            payments and texting stay set up for the shop — nothing to paste here.
+          </p>
+          <p style={{ fontSize: "0.88rem", whiteSpace: "pre-wrap" }}>
+            <strong>Example. </strong>
+            {renderTextPayMessage(textPayMessage, {
+              store: settings.store.name,
+              amount: `${settings.currencySymbol || "£"}10.00`,
+              link: `${textPayStatus?.publicPayBase ?? "https://purepos.co.uk/pay"}/example`,
+              name: "Alex",
+            })}
+          </p>
+          <div className="toolbar">
+            <button type="submit">Save text</button>
+            <button type="button" className="secondary" onClick={() => setTextPayMessage(DEFAULT_TEXT_PAY_MESSAGE)}>
+              Use standard text
+            </button>
+            {textPayMessageMsg && <span style={{ color: "var(--muted)" }}>{textPayMessageMsg}</span>}
+          </div>
+        </form>
         <div className="toolbar" style={{ alignItems: "flex-end" }}>
           <div className="field" style={{ margin: 0 }}>
             <label>Amount (£)</label>
@@ -3714,31 +3797,46 @@ function SettingsPage() {
 
         <div className="panel-box">
           <div className="page-head" style={{ marginBottom: 8 }}>
-            <h3 style={{ margin: 0 }}>Payment types</h3>
+            <h3 style={{ margin: 0 }}>Payment methods</h3>
             <button type="button" onClick={openPayAdd}>
-              Add payment type
+              Add payment method
             </button>
           </div>
+          <p style={{ color: "var(--muted)", marginTop: 0, fontSize: "0.9rem" }}>
+            These show on the till Charge screen. Add your own, rename them, or turn one off. Cash and Card stay in the
+            list so existing sales keep working.
+          </p>
           <table>
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Type</th>
-                <th>Drawer</th>
-                <th>Enabled</th>
+                <th>On till</th>
                 <th />
               </tr>
             </thead>
             <tbody>
               {settings.paymentTypes.map((p) => (
                 <tr key={p.id}>
-                  <td>{p.name}</td>
-                  <td>{p.type}</td>
-                  <td>{p.opensDrawer ? "Yes" : "No"}</td>
-                  <td>{p.enabled ? "Yes" : "No"}</td>
+                  <td>
+                    {p.name}
+                    {(p.type === "cash" || p.type === "card") && (
+                      <span className="badge" style={{ marginLeft: 6 }}>Built-in</span>
+                    )}
+                  </td>
+                  <td>
+                    <label className="check-row" style={{ margin: 0 }}>
+                      <input
+                        type="checkbox"
+                        checked={p.enabled}
+                        aria-label={`${p.enabled ? "Turn off" : "Turn on"} ${p.name}`}
+                        onChange={(e) => void setPayEnabled(p, e.target.checked)}
+                      />
+                      <span>{p.enabled ? "On" : "Off"}</span>
+                    </label>
+                  </td>
                   <td>
                     <button type="button" className="secondary" onClick={() => openPayEdit(p)}>
-                      Edit
+                      Rename
                     </button>
                   </td>
                 </tr>
@@ -3802,41 +3900,44 @@ function SettingsPage() {
       <BoEditSheet
         open={editingPay !== null}
         onClose={() => setEditingPay(null)}
-        title={editingPay === "new" ? "Add payment type" : editingPay ? `Edit · ${editingPay.name}` : ""}
+        title={editingPay === "new" ? "Add payment method" : editingPay ? `Rename · ${editingPay.name}` : ""}
       >
         {editingPay !== null && (
           <form onSubmit={(e) => void savePayEdit(e)}>
             <div className="field">
-              <label>Name</label>
+              <label htmlFor="pay-method-name">Name</label>
               <input
+                id="pay-method-name"
                 required
+                maxLength={40}
                 value={payEditForm.name}
                 onChange={(e) => setPayEditForm({ ...payEditForm, name: e.target.value })}
               />
             </div>
-            <div className="field">
-              <label>Type</label>
-              {editingPay === "new" ? (
+            {editingPay === "new" ? (
+              <div className="field">
+                <label htmlFor="pay-method-behaviour">Behaviour</label>
                 <select
-                  value={payEditForm.type}
-                  onChange={(e) => {
-                    const type = e.target.value;
-                    setPayEditForm({
-                      ...payEditForm,
-                      type,
-                      opensDrawer: type === "cash" ? true : payEditForm.opensDrawer,
-                    });
-                  }}
+                  id="pay-method-behaviour"
+                  value={payEditForm.type === "gift_card" || payEditForm.type === "store_credit" ? payEditForm.type : "other"}
+                  onChange={(e) => setPayEditForm({ ...payEditForm, type: e.target.value })}
                 >
-                  <option value="cash">Cash</option>
-                  <option value="card">Card</option>
-                  <option value="other">Other</option>
+                  <option value="other">Normal payment</option>
                   <option value="store_credit">Store credit</option>
+                  <option value="gift_card">Gift card</option>
                 </select>
-              ) : (
-                <input value={payEditForm.type} readOnly aria-readonly />
-              )}
-            </div>
+              </div>
+            ) : (
+              <p style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
+                {payEditForm.type === "cash" || payEditForm.type === "card"
+                  ? "Built-in tender. Rename it or turn it off. It is not deleted, so older sales stay intact."
+                  : payEditForm.type === "gift_card"
+                    ? "The till asks for a gift card code when this is used."
+                    : payEditForm.type === "store_credit"
+                      ? "Uses the customer’s store credit."
+                      : "Shows on the till Charge screen while it is on."}
+              </p>
+            )}
             <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
               <input
                 type="checkbox"
@@ -3851,11 +3952,11 @@ function SettingsPage() {
                 checked={payEditForm.enabled}
                 onChange={(e) => setPayEditForm({ ...payEditForm, enabled: e.target.checked })}
               />
-              Enabled on till
+              On the till
             </label>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button type="submit">{editingPay === "new" ? "Add payment type" : "Save payment type"}</button>
-              {editingPay !== "new" && (
+              <button type="submit">{editingPay === "new" ? "Add payment method" : "Save"}</button>
+              {editingPay !== "new" && editingPay.type !== "cash" && editingPay.type !== "card" && (
                 <button type="button" className="danger" onClick={() => void deletePay()}>
                   Delete
                 </button>

@@ -251,6 +251,21 @@ interface PaymentType {
   opensDrawer: boolean;
 }
 
+function chargeMethodRank(type: string) {
+  if (type === "cash") return 0;
+  if (type === "card") return 1;
+  if (type === "other") return 2;
+  if (type === "store_credit") return 3;
+  if (type === "gift_card") return 4;
+  return 9;
+}
+
+function sortChargeMethods(types: PaymentType[]) {
+  return [...types].sort(
+    (a, b) => chargeMethodRank(a.type) - chargeMethodRank(b.type) || a.name.localeCompare(b.name, "en")
+  );
+}
+
 interface Customer {
   id: string;
   name: string;
@@ -370,6 +385,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
     payUrl: string;
     status: string;
     hostedPayUrl?: string;
+    smsBody?: string;
   } | null>(null);
   const [selectedMods, setSelectedMods] = useState<Record<string, Modifier[]>>({});
   const [busy, setBusy] = useState(false);
@@ -1469,18 +1485,44 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
     setPayText((prev) => ({ ...prev, [id]: (safe / 100).toFixed(2) }));
   }
 
-  function openPay() {
-    if (!ticket || ticket.lines.length === 0) return;
-    const cash = paymentTypes.find((p) => p.type === "cash");
+  function fillPayAmounts(types: PaymentType[], totalCents: number) {
+    const cash = types.find((p) => p.type === "cash");
     const amounts: Record<string, number> = {};
     const text: Record<string, string> = {};
-    for (const type of paymentTypes) {
-      const cents = cash && type.id === cash.id ? ticket.totalCents : 0;
+    for (const type of types) {
+      const cents = cash && type.id === cash.id ? totalCents : 0;
       amounts[type.id] = cents;
       text[type.id] = (cents / 100).toFixed(2);
     }
     setPayAmounts(amounts);
     setPayText(text);
+  }
+
+  function takeOnMethod(id: string) {
+    if (!ticket) return;
+    const amounts: Record<string, number> = {};
+    const text: Record<string, string> = {};
+    for (const type of paymentTypes) {
+      const cents = type.id === id ? ticket.totalCents : 0;
+      amounts[type.id] = cents;
+      text[type.id] = (cents / 100).toFixed(2);
+    }
+    setPayAmounts(amounts);
+    setPayText(text);
+  }
+
+  async function openPay() {
+    if (!ticket || ticket.lines.length === 0) return;
+    let types = paymentTypes;
+    if (offline.online) {
+      try {
+        types = await api<PaymentType[]>("/pos/payment-types");
+        setPaymentTypes(types);
+      } catch {
+        /* keep the methods already on the till */
+      }
+    }
+    fillPayAmounts(types, ticket.totalCents);
     setTextPayPhone(ticket.customer?.phone ?? textPayPhone);
     setTextPayName(ticket.customer?.name ?? textPayName);
     setTextPayMsg("");
@@ -1534,6 +1576,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
         message: string;
         link: { id: string; payUrl: string; status: string };
         hostedPayUrl: string;
+        smsBody?: string;
         smsError?: string | null;
       }>("/text-pay/links", {
         method: "POST",
@@ -1550,6 +1593,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
         payUrl: result.link.payUrl,
         status: result.link.status,
         hostedPayUrl: result.hostedPayUrl,
+        smsBody: result.smsBody,
       });
       setTextPayMsg(result.message);
     } catch (e) {
@@ -1771,6 +1815,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
   }
 
   const paidSum = Object.values(payAmounts).reduce((a, b) => a + b, 0);
+  const chargeMethods = sortChargeMethods(paymentTypes);
   const lineCount = (ticket?.lines ?? []).reduce((n, line) => n + line.quantity, 0);
   const hasLines = lineCount > 0;
   const kitchenSent = ticket ? sentToKitchen[ticket.id] ?? {} : {};
@@ -2742,10 +2787,24 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                   Copy link
                 </button>
               )}
+              {textPayLink?.smsBody && (
+                <button
+                  type="button"
+                  className="btn ghost"
+                  onClick={() => void navigator.clipboard?.writeText(textPayLink.smsBody ?? "")}
+                >
+                  Copy text
+                </button>
+              )}
             </div>
             {textPayLink && (
               <p className="hint" style={{ marginTop: 10, wordBreak: "break-all" }}>
                 {textPayLink.status === "paid" ? "Paid" : "Waiting for customer…"} · {textPayLink.payUrl}
+              </p>
+            )}
+            {textPayLink?.smsBody && (
+              <p className="hint" style={{ whiteSpace: "pre-wrap" }}>
+                {textPayLink.smsBody}
               </p>
             )}
             {textPayMsg && <p className="hint">{textPayMsg}</p>}
@@ -2775,7 +2834,23 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
               <span>{paidSum > ticket.totalCents ? `Change ${money(paidSum - ticket.totalCents)}` : `Tendered ${money(paidSum)}`}</span>
             </p>
             {!shift && <p className="hint">Open a shift if you are taking cash. Card sales still go through.</p>}
-            {paymentTypes.map((pt) => (
+            {chargeMethods.length === 0 ? (
+              <p className="hint">No payment methods are turned on. Add one in back office Settings.</p>
+            ) : (
+              <div className="pay-grid" aria-label="Payment methods">
+                {chargeMethods.map((pt) => (
+                  <button
+                    key={pt.id}
+                    type="button"
+                    className={(payAmounts[pt.id] ?? 0) > 0 ? "active" : ""}
+                    onClick={() => takeOnMethod(pt.id)}
+                  >
+                    {pt.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            {chargeMethods.map((pt) => (
               <div key={pt.id} className="field">
                 <label>
                   {pt.name}
@@ -2823,7 +2898,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
             <div className="field pay-text-to-pay" style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--line, #dce5e1)" }}>
               <label>Phone order · text to pay</label>
               <p className="hint" style={{ marginTop: 0 }}>
-                For phone orders: send an SMS pay link (Twilio) or copy the link. Prefer{" "}
+                For phone orders: text the pay link, or copy it. The wording is set in back office Settings. Prefer{" "}
                 <strong>Phone order</strong> on the ticket pane for the guided flow.
               </p>
               <input
@@ -2845,10 +2920,24 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
                     Copy link
                   </button>
                 )}
+                {textPayLink?.smsBody && (
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    onClick={() => void navigator.clipboard?.writeText(textPayLink.smsBody ?? "")}
+                  >
+                    Copy text
+                  </button>
+                )}
               </div>
               {textPayLink && (
                 <p className="hint" style={{ marginTop: 8, wordBreak: "break-all" }}>
                   {textPayLink.status === "paid" ? "Paid" : "Waiting for customer…"} · {textPayLink.payUrl}
+                </p>
+              )}
+              {textPayLink?.smsBody && (
+                <p className="hint" style={{ whiteSpace: "pre-wrap" }}>
+                  {textPayLink.smsBody}
                 </p>
               )}
               {textPayMsg && <p className="hint">{textPayMsg}</p>}

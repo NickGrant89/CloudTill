@@ -140,10 +140,16 @@ shiftsRouter.post("/:id/close", owned("shift"), async (req: AuthedRequest, res) 
     include: { payments: true },
   });
 
+  const cashTypes = await prisma.paymentType.findMany({
+    where: { storeId: shift.storeId, type: "cash" },
+    select: { id: true },
+  });
+  const cashIds = new Set(cashTypes.map((row) => row.id));
   let cashSales = 0;
   for (const sale of sales) {
     for (const p of sale.payments) {
-      if (p.paymentTypeName.toLowerCase() === "cash") {
+      const countedAsCash = cashIds.has(p.paymentTypeId) || p.paymentTypeName.trim().toLowerCase() === "cash";
+      if (countedAsCash) {
         cashSales += p.amountCents - (sale.changeCents || 0);
       }
     }

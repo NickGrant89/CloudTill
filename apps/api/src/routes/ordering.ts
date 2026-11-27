@@ -182,9 +182,13 @@ publicOrderingRouter.post("/stores/:slug/orders", async (req, res) => {
   if ("error" in card) return res.status(400).json({ error: card.error });
 
   const employee = await attributionEmployee(store.id);
-  const cardType = await prisma.paymentType.findFirst({
-    where: { storeId: store.id, type: "card", enabled: true },
-  });
+  const cardType =
+    (await prisma.paymentType.findFirst({
+      where: { storeId: store.id, type: "card", enabled: true },
+    })) ??
+    (await prisma.paymentType.findFirst({
+      where: { storeId: store.id, type: "card" },
+    }));
   if (!employee || !cardType) {
     return res.status(400).json({ error: "Card payments aren't set up for this café." });
   }
