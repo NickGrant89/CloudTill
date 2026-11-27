@@ -290,6 +290,7 @@ type Modal =
   | { type: "recentSales" }
   | { type: "shift" }
   | { type: "board" }
+  | { type: "openTickets" }
   | { type: "kitchen" }
   | { type: "kitchenSend" }
   | { type: "message"; title: string; body: string };
@@ -402,6 +403,16 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
   const offlineRef = useRef<OfflineStatus>(offline);
   offlineRef.current = offline;
   const [taxRateBps, setTaxRateBps] = useState(825);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    void fetch("/api/health")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body: { version?: string } | null) => {
+        if (body?.version?.trim()) setAppVersion(body.version.trim());
+      })
+      .catch(() => {});
+  }, []);
 
   function setCurrentTicket(next: Ticket | null) {
     ticketRef.current = next;
@@ -1223,6 +1234,16 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
     }
   }
 
+  async function openOpenTicketsList() {
+    try {
+      await refreshOpenTickets();
+      setModal({ type: "openTickets" });
+      setMobilePane("ticket");
+    } catch (error) {
+      fail("Tickets", error);
+    }
+  }
+
   async function openTicketsBoard() {
     try {
       const b = await api<BoardTicket[]>("/extras/tickets-board");
@@ -1971,6 +1992,11 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
         >
           {!offline.online ? "Offline" : offline.syncing ? "Syncing…" : offline.pendingSales ? `Sync ${offline.pendingSales}` : "Online"}
         </button>
+        {appVersion ? (
+          <span className="till-version-badge" title="Live API release">
+            v{appVersion}
+          </span>
+        ) : null}
         {offline.pendingSales > 0 ? (
           <button
             type="button"
@@ -1986,7 +2012,7 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
           </button>
         ) : null}
         <div className={`toolbar-actions${tillPhase === "options" || tillPhase === "pay" || tillPhase === "done" ? " is-quiet" : ""}`}>
-        <button type="button" className="toolbar-keep" onClick={() => void openTicketsBoard()}>
+        <button type="button" className="toolbar-keep" onClick={() => void openOpenTicketsList()}>
           Tickets{openTickets.length ? ` · ${openTickets.length}` : ""}
         </button>
         <button type="button" className="toolbar-desk toolbar-aux" onClick={() => void openRecentSales()}>
@@ -3119,6 +3145,58 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
           onClose={() => setModal(null)}
           onApply={(cents) => void applyTip(cents)}
         />
+      )}
+
+      {modal?.type === "openTickets" && (
+        <div className="modal-backdrop till-overlay" onClick={() => setModal(null)}>
+          <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head-row">
+              <h3>Open tickets</h3>
+              <button type="button" className="btn ghost" onClick={() => void refreshOpenTickets()}>
+                Refresh
+              </button>
+            </div>
+            <p style={{ color: "var(--muted)", marginTop: 0 }}>
+              Open sales across the store. Tap a ticket to continue it on this till.
+            </p>
+            {openTickets.length === 0 ? (
+              <p style={{ color: "var(--muted)" }}>No open tickets — add an item to start a new sale.</p>
+            ) : (
+              openTickets.map((t) => {
+                const active = ticket?.id === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={`list-btn${active ? " active" : ""}`}
+                    onClick={() => {
+                      if (active) {
+                        setModal(null);
+                        return;
+                      }
+                      void adoptTicket(t.id);
+                    }}
+                  >
+                    <strong>
+                      {t.name}
+                      {active ? " · on this till" : ""}
+                    </strong>
+                    <div style={{ color: "var(--muted)" }}>
+                      {t.registerName || "Till"} · {t.lines.length} item{t.lines.length === 1 ? "" : "s"} ·{" "}
+                      {money(t.totalCents)}
+                      {t.customer?.name ? ` · ${t.customer.name}` : ""}
+                    </div>
+                  </button>
+                );
+              })
+            )}
+            <div className="modal-actions">
+              <button type="button" className="btn ghost" onClick={() => setModal(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {modal?.type === "board" && (
