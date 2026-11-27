@@ -61,16 +61,18 @@ for (const [item, mods] of [
   const iRightHalf = roleIndex(ordered, (g) => /right/i.test(g) && /half/i.test(g) && !/extra/i.test(g) && !/sauce/i.test(g) && !/remove/i.test(g));
   const iRightExtras = roleIndex(ordered, (g) => /extras \(RIGHT half\)/i.test(g));
 
+  // Size → Base → Sauce L → Left half → Left removes → Left extras →
+  // Sauce R → Right half → Right removes → Right extras
   const chain = [
     iSize,
     iBase,
-    iLeftRem,
     iSauceL,
     iLeftHalf,
+    iLeftRem,
     iLeftExtras,
-    iRightRem,
     iSauceR,
     iRightHalf,
+    iRightRem,
     iRightExtras,
   ];
   for (let i = 1; i < chain.length; i++) {

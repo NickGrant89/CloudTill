@@ -609,7 +609,10 @@ function halfAndHalfTicketBlockAndKind(groupName: string): {
   if (removeSide) return { block: removeSide, kind: "remove" };
   if (isHalfAndHalfRemoveGroup(gn)) {
     const side = halfAndHalfColumnTailSide(halfAndHalfRemoveCatalogGroupName(gn));
-    return { block: side === "right" ? "right" : "left", kind: "remove" };
+    return {
+      block: side === "right" ? "right" : side === "left" ? "left" : "shared",
+      kind: "remove",
+    };
   }
 
   const extrasSide = halfAndHalfExtrasTicketSideFromGroupName(gn);
@@ -631,18 +634,22 @@ function halfAndHalfTicketBlockAndKind(groupName: string): {
 }
 
 const HALF_TICKET_BLOCK_RANK: Record<HalfAndHalfTicketBlock, number> = { shared: 0, left: 1, right: 2 };
+/** Within each half: sauce → pizza → removes → extras (kitchen make order). */
 const HALF_TICKET_KIND_RANK: Record<HalfAndHalfTicketKind, number> = {
   size: 0,
   base: 1,
-  remove: 2,
-  sauce: 3,
-  half: 4,
+  sauce: 2,
+  half: 3,
+  remove: 4,
   extras: 5,
   other: 9,
 };
 
 /**
- * Size, base, then full left half (removes → sauce → half → extras), then full right half.
+ * Sale / kitchen / receipt order for half-and-half:
+ * Size → Base → Sauce L → Left half → Left removes → Left extras →
+ * Sauce R → Right half → Right removes → Right extras.
+ * (Mirrored sauce collapses to a single Sauce line before the left half.)
  */
 export function halfAndHalfModifierDisplayRank(groupName: string): number {
   const { block, kind } = halfAndHalfTicketBlockAndKind(groupName);
