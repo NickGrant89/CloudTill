@@ -31,6 +31,7 @@ import { HalfAndHalfWizard } from "./HalfAndHalfWizard";
 import { ModifierOptionButton } from "./ModifierOptionButton";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, getToken, loadCatalogSnapshot, money, OfflineError, saveCatalogSnapshot } from "./api";
+import { TILL_BUILD_VERSION } from "./tillVersion";
 import type { SessionRegister, SessionStore, SessionUser } from "./App";
 import { nanoid } from "./offline/id";
 import type { OfflineStatus } from "./offline/sync";
@@ -403,15 +404,18 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
   const offlineRef = useRef<OfflineStatus>(offline);
   offlineRef.current = offline;
   const [taxRateBps, setTaxRateBps] = useState(825);
-  const [appVersion, setAppVersion] = useState<string | null>(null);
+  const [liveApiVersion, setLiveApiVersion] = useState<string | null>(null);
+  const tillVersionLabel = liveApiVersion?.trim() || TILL_BUILD_VERSION;
 
   useEffect(() => {
-    void fetch("/api/health")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((body: { version?: string } | null) => {
-        if (body?.version?.trim()) setAppVersion(body.version.trim());
-      })
-      .catch(() => {});
+    void (async () => {
+      try {
+        const body = await api<{ version?: string }>("/health");
+        if (body?.version?.trim()) setLiveApiVersion(body.version.trim());
+      } catch {
+        /* badge still shows TILL_BUILD_VERSION */
+      }
+    })();
   }, []);
 
   function setCurrentTicket(next: Ticket | null) {
@@ -1237,11 +1241,11 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
   async function openOpenTicketsList() {
     try {
       await refreshOpenTickets();
-      setModal({ type: "openTickets" });
-      setMobilePane("ticket");
-    } catch (error) {
-      fail("Tickets", error);
+    } catch {
+      /* still open the sheet */
     }
+    setModal({ type: "openTickets" });
+    setMobilePane("ticket");
   }
 
   async function openTicketsBoard() {
@@ -1992,11 +1996,9 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
         >
           {!offline.online ? "Offline" : offline.syncing ? "Syncing…" : offline.pendingSales ? `Sync ${offline.pendingSales}` : "Online"}
         </button>
-        {appVersion ? (
-          <span className="till-version-badge" title="Live API release">
-            v{appVersion}
-          </span>
-        ) : null}
+        <span className="till-version-badge" title="Till build / live API release">
+          v{tillVersionLabel}
+        </span>
         {offline.pendingSales > 0 ? (
           <button
             type="button"
@@ -2011,8 +2013,8 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
             Export
           </button>
         ) : null}
-        <div className={`toolbar-actions${tillPhase === "options" || tillPhase === "pay" || tillPhase === "done" ? " is-quiet" : ""}`}>
-        <button type="button" className="toolbar-keep" onClick={() => void openOpenTicketsList()}>
+        <div className="toolbar-actions">
+        <button type="button" className="toolbar-keep toolbar-desk" onClick={() => void openOpenTicketsList()}>
           Tickets{openTickets.length ? ` · ${openTickets.length}` : ""}
         </button>
         <button type="button" className="toolbar-desk toolbar-aux" onClick={() => void openRecentSales()}>
@@ -2542,6 +2544,15 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
             <p className="step-kicker">Till</p>
             <h3>More</h3>
             <div className="more-sheet">
+              <button
+                type="button"
+                onClick={() => {
+                  setModal(null);
+                  void openOpenTicketsList();
+                }}
+              >
+                Tickets
+              </button>
               <button
                 type="button"
                 onClick={() => {

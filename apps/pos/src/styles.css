@@ -1080,15 +1080,17 @@ select:focus-visible {
 
 .toolbar-dark {
   display: flex;
-  flex: 0 0 var(--till-chrome-toolbar-h);
-  max-height: var(--till-chrome-toolbar-h);
+  flex: 0 0 auto;
+  max-height: none;
+  flex-wrap: wrap;
+  align-content: flex-start;
   gap: 8px;
   align-items: center;
   margin: 8px 8px 0;
   padding: 6px 8px;
   min-width: 0;
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: visible;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   color: #d7e0da;
@@ -1102,9 +1104,7 @@ select:focus-visible {
   display: none;
 }
 
-.toolbar-actions.is-quiet {
-  opacity: 0.45;
-}
+/* is-quiet removed — keep full till bar visible in pay/options (0.10.122). */
 
 .till-version-badge {
   flex: 0 0 auto;
@@ -1579,10 +1579,21 @@ select:focus-visible {
 
 .toolbar-actions {
   display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   margin-left: auto;
+  min-width: 0;
+  max-width: 100%;
   scrollbar-width: none;
+}
+
+.toolbar-actions .toolbar-desk,
+.toolbar-actions .toolbar-keep {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .toolbar-phone-more {
@@ -2349,10 +2360,6 @@ select:focus-visible {
     font-size: 0.7rem;
   }
 
-  .toolbar-actions.is-quiet {
-    display: none;
-  }
-
   /* Phone: full desk actions beside Tickets — wrap to a second line instead of More. */
   .toolbar-actions {
     flex: 1 1 100%;
@@ -2735,6 +2742,13 @@ select:focus-visible {
 
   .till-chrome .toolbar-phone-more {
     display: none !important;
+  }
+
+  .till-chrome .till-version-badge,
+  .till-chrome .offline-badge,
+  .till-chrome .lock-btn {
+    display: inline-flex !important;
+    flex: 0 0 auto;
   }
 }
 

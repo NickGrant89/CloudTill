@@ -1,5 +1,5 @@
 /* PurePOS till service worker — app shell cache + background sync of offline sales */
-const SHELL_CACHE = "purepos-pos-shell-v1";
+const SHELL_CACHE = "purepos-pos-shell-v2";
 const DB_NAME = "purepos-pos";
 const DB_VERSION = 1;
 const SYNC_TAG = "purepos-sync-sales";
@@ -59,16 +59,20 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     (async () => {
       const cache = await caches.open(SHELL_CACHE);
-      const cached = await cache.match(request);
-      if (cached) return cached;
+      const isTillChunk =
+        url.origin === self.location.origin &&
+        (url.pathname.includes("/assets/") || url.pathname.endsWith(".js") || url.pathname.endsWith(".css"));
       try {
         const fresh = await fetch(request);
-        if (fresh.ok && (url.origin === self.location.origin)) {
+        if (fresh.ok && url.origin === self.location.origin) {
           void cache.put(request, fresh.clone());
         }
         return fresh;
       } catch {
-        return cached || Response.error();
+        const cached = await cache.match(request);
+        if (cached) return cached;
+        if (!isTillChunk) return Response.error();
+        return Response.error();
       }
     })()
   );
