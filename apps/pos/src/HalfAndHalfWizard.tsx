@@ -2,6 +2,7 @@ import {
   HALF_AND_HALF_WIZARD_STEPS,
   halfAndHalfFirstIncompleteStepIndex,
   halfAndHalfHasExplicitSizeSelection,
+  halfAndHalfStepSatisfied,
   halfAndHalfColumnGroupsForSide,
   halfAndHalfColumnTailGroupsForSide,
   halfAndHalfRemoveGroupsForSide,
@@ -111,8 +112,20 @@ export function HalfAndHalfWizard(props: {
     const sizeIdx = stepIds.indexOf("size");
     return sizeIdx >= 0 ? sizeIdx : 0;
   });
-  /** User tapped ← Groups or a step tab — do not auto-advance until they pick another step. */
+  /** User tapped ← Groups or a step tab — hold step until they pick or open another step. */
   const manualStepUntilPickRef = useRef<number | null>(null);
+  const stepPinMetaRef = useRef<{ index: number; wasSatisfied: boolean } | null>(null);
+
+  function stepWasSatisfied(stepIdx: number): boolean {
+    const stepId = stepIds[stepIdx];
+    if (!stepId) return false;
+    return halfAndHalfStepSatisfied({
+      stepId,
+      visibleGroups,
+      selected: selectedMods,
+      sauceLinked,
+    });
+  }
   const [sauceLinked, setSauceLinked] = useState(initialSauceLinked);
   const [sauceEditSide, setSauceEditSide] = useState<"left" | "right" | null>(null);
 
@@ -121,11 +134,13 @@ export function HalfAndHalfWizard(props: {
     const sizeIdx = stepIds.indexOf("size");
     if (sizeIdx < 0) return;
     manualStepUntilPickRef.current = sizeIdx;
+    stepPinMetaRef.current = { index: sizeIdx, wasSatisfied: stepWasSatisfied(sizeIdx) };
     setStepIndex(sizeIdx);
   }, [editingLineKey, item.id, stepIds]);
 
   function goToStep(index: number) {
     manualStepUntilPickRef.current = index;
+    stepPinMetaRef.current = { index, wasSatisfied: stepWasSatisfied(index) };
     setStepIndex(index);
   }
 
@@ -158,11 +173,19 @@ export function HalfAndHalfWizard(props: {
         !halfAndHalfHasExplicitSizeSelection(item.modifierGroups, selectedMods)
       ) {
         manualStepUntilPickRef.current = sizeIdx;
+        stepPinMetaRef.current = { index: sizeIdx, wasSatisfied: false };
         return sizeIdx;
       }
-      if (pinned !== null) {
-        if (i === pinned) return i;
+      if (pinned !== null && i === pinned) {
+        const meta = stepPinMetaRef.current;
+        const satisfiedNow = stepWasSatisfied(pinned);
+        const completedPickOnPin = meta?.index === pinned && !meta.wasSatisfied && satisfiedNow;
+        if (!completedPickOnPin) return i;
         manualStepUntilPickRef.current = null;
+        stepPinMetaRef.current = null;
+      } else if (pinned !== null && i !== pinned) {
+        manualStepUntilPickRef.current = null;
+        stepPinMetaRef.current = null;
       }
       const need = halfAndHalfFirstIncompleteStepIndex(stepIds, visibleGroups, selectedMods, sauceLinked);
       return need > i ? need : i;
