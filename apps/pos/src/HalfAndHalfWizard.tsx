@@ -1,6 +1,7 @@
 import {
   HALF_AND_HALF_WIZARD_STEPS,
   halfAndHalfFirstIncompleteStepIndex,
+  halfAndHalfHasExplicitSizeSelection,
   halfAndHalfColumnGroupsForSide,
   halfAndHalfColumnTailGroupsForSide,
   halfAndHalfRemoveGroupsForSide,
@@ -20,7 +21,7 @@ import {
   withLinkedHalfAndHalfSauces,
   type HalfAndHalfWizardStepId,
 } from "@cloudtill/shared";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { money } from "./api";
 import { ModifierOptionButton } from "./ModifierOptionButton";
 
@@ -97,9 +98,9 @@ export function HalfAndHalfWizard(props: {
 
   const activeSteps = useMemo(() => {
     return HALF_AND_HALF_WIZARD_STEPS.filter((step) =>
-      visibleGroups.some((g) => halfAndHalfWizardStepForGroup(g.name) === step.id)
+      item.modifierGroups.some((g) => halfAndHalfWizardStepForGroup(g.name) === step.id)
     );
-  }, [visibleGroups]);
+  }, [item.modifierGroups]);
 
   const stepIds = useMemo(() => activeSteps.map((s) => s.id), [activeSteps]);
 
@@ -114,6 +115,14 @@ export function HalfAndHalfWizard(props: {
   const manualStepUntilPickRef = useRef<number | null>(null);
   const [sauceLinked, setSauceLinked] = useState(initialSauceLinked);
   const [sauceEditSide, setSauceEditSide] = useState<"left" | "right" | null>(null);
+
+  useLayoutEffect(() => {
+    if (editingLineKey) return;
+    const sizeIdx = stepIds.indexOf("size");
+    if (sizeIdx < 0) return;
+    manualStepUntilPickRef.current = sizeIdx;
+    setStepIndex(sizeIdx);
+  }, [editingLineKey, item.id, stepIds]);
 
   function goToStep(index: number) {
     manualStepUntilPickRef.current = index;
@@ -140,8 +149,17 @@ export function HalfAndHalfWizard(props: {
 
   /* Advance forward only when picks change — never override a tab/back navigation. */
   useEffect(() => {
+    const sizeIdx = stepIds.indexOf("size");
     const pinned = manualStepUntilPickRef.current;
     setStepIndex((i) => {
+      if (
+        !editingLineKey &&
+        sizeIdx >= 0 &&
+        !halfAndHalfHasExplicitSizeSelection(item.modifierGroups, selectedMods)
+      ) {
+        manualStepUntilPickRef.current = sizeIdx;
+        return sizeIdx;
+      }
       if (pinned !== null) {
         if (i === pinned) return i;
         manualStepUntilPickRef.current = null;
@@ -149,7 +167,7 @@ export function HalfAndHalfWizard(props: {
       const need = halfAndHalfFirstIncompleteStepIndex(stepIds, visibleGroups, selectedMods, sauceLinked);
       return need > i ? need : i;
     });
-  }, [visibleGroups, selectedMods, stepIds, sauceLinked]);
+  }, [editingLineKey, item.modifierGroups, visibleGroups, selectedMods, stepIds, sauceLinked]);
 
   const currentStep = activeSteps[stepIndex];
 

@@ -3,6 +3,8 @@ import {
   HALF_AND_HALF_PRESET_ITEM,
   HALF_AND_HALF_WIZARD_STEPS,
   halfAndHalfFirstIncompleteStepIndex,
+  halfAndHalfStepSatisfied,
+  halfAndHalfHasExplicitSizeSelection,
   halfAndHalfTicketGroupHeading,
   prepareHalfAndHalfLineModifiers,
   groupHalfAndHalfModifierLines,
@@ -124,6 +126,21 @@ const need = halfAndHalfFirstIncompleteStepIndex(
 );
 if (need !== 0) {
   console.error("FAIL: new wizard must start on Size (index 0), got", need);
+  process.exit(1);
+}
+
+const baseSatisfiedWithoutSize = halfAndHalfStepSatisfied({
+  stepId: "base",
+  visibleGroups: visible,
+  selected: emptySelected,
+  sauceLinked: true,
+});
+if (baseSatisfiedWithoutSize) {
+  console.error("FAIL: base step must not be satisfied before size pick");
+  process.exit(1);
+}
+if (halfAndHalfHasExplicitSizeSelection(visible, emptySelected)) {
+  console.error("FAIL: empty state must not count as size selected");
   process.exit(1);
 }
 

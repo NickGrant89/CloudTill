@@ -330,10 +330,24 @@ function halfAndHalfWizardMinPicks(group: { minSelect: number }, stepId: HalfAnd
   return Math.max(0, group.minSelect);
 }
 
+export function halfAndHalfSizeGroups<T extends { id: string; name: string }>(groups: T[]): T[] {
+  return groups.filter((g) => halfAndHalfWizardStepForGroup(g.name) === "size");
+}
+
+/** True after the customer taps a size (not satisfied by minSelect 0 alone). */
+export function halfAndHalfHasExplicitSizeSelection(
+  groups: { id: string; name: string }[],
+  selected: Record<string, { name?: string }[] | undefined>
+): boolean {
+  const sizeGroups = halfAndHalfSizeGroups(groups);
+  if (!sizeGroups.length) return true;
+  return sizeGroups.every((g) => (selected[g.id] ?? []).some((p) => Boolean(p?.name?.trim())));
+}
+
 export function halfAndHalfStepSatisfied(check: HalfAndHalfStepCheck): boolean {
   const { stepId, visibleGroups, selected, sauceLinked } = check;
   const groups = visibleGroups.filter((g) => halfAndHalfWizardStepForGroup(g.name) === stepId);
-  if (!groups.length) return stepId !== "size";
+  if (!groups.length) return false;
 
   if (stepId === "size") {
     return groups.every((g) => (selected[g.id] ?? []).length >= halfAndHalfWizardMinPicks(g, stepId));
