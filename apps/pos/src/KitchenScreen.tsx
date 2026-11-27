@@ -589,6 +589,7 @@ export function KitchenScreen({
                                   {(isHalfAndHalfWizardItem(l.name)
                                     ? groupHalfAndHalfModifierLines(l.name, mods, { mirroredSauces })
                                     : groupModifierLines(mods).map((b) => ({
+                                        groupName: b.groupName,
                                         heading: b.groupName ?? "",
                                         names: b.names,
                                       }))

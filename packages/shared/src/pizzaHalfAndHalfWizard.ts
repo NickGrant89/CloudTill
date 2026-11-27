@@ -390,7 +390,7 @@ export function halfAndHalfStepSatisfied(check: HalfAndHalfStepCheck): boolean {
 export function halfAndHalfFirstIncompleteStepIndex(
   steps: HalfAndHalfWizardStepId[],
   visibleGroups: { id: string; name: string; minSelect: number }[],
-  selected: Record<string, { length: number }[] | undefined>,
+  selected: Record<string, unknown[] | undefined>,
   sauceLinked: boolean
 ): number {
   for (let i = 0; i < steps.length; i++) {
