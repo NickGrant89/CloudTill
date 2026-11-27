@@ -2,11 +2,10 @@ import {
   displayModifierGroupLabel,
   groupModifierLines,
   isConsolidatedPizzaItem,
-  halfAndHalfColumnTailSide,
-  halfAndHalfRemoveCatalogGroupName,
   halfAndHalfRemoveSelectionGroupId,
   halfAndHalfRemoveSelectionKey,
-  halfAndHalfRemoveTicketSideFromGroupName,
+  halfAndHalfSaucesMirrored,
+  pickerStateFromLineModifiers,
   halfAndHalfSelectedModifierPicks,
   halfAndHalfSauceGroups,
   normalizeHalfAndHalfRemoveSelectionState,
@@ -873,49 +872,15 @@ export function Register({ user, store, registers, registerId, onLogout }: Props
       fail(line.name, new Error("This item has no options to edit"));
       return;
     }
-    const initial: Record<string, Modifier[]> = {};
-    for (const group of item.modifierGroups) {
-      if (isHalfAndHalfWizardItem(item.name) && isHalfAndHalfRemoveGroup(group.name)) {
-        initial[group.id] = [];
-        continue;
-      }
-      initial[group.id] = group.modifiers.filter((option) =>
-        line.modifiers.some(
-          (picked) =>
-            (picked.modifierId && picked.modifierId === option.id) ||
-            (!picked.modifierId && picked.name === option.name)
-        )
-      );
-    }
+    const initial = pickerStateFromLineModifiers(item.name, item.modifierGroups, line.modifiers) as Record<
+      string,
+      Modifier[]
+    >;
     if (isHalfAndHalfWizardItem(item.name)) {
-      for (const picked of line.modifiers) {
-        const gn = picked.groupName;
-        if (!gn || !isHalfAndHalfRemoveGroup(gn)) continue;
-        const catalog = halfAndHalfRemoveCatalogGroupName(gn);
-        const group = item.modifierGroups.find((g) => halfAndHalfRemoveCatalogGroupName(g.name) === catalog);
-        if (!group) continue;
-        const option = group.modifiers.find(
-          (m) => (picked.modifierId && m.id === picked.modifierId) || m.name === picked.name
-        );
-        if (!option) continue;
-        let side = halfAndHalfRemoveTicketSideFromGroupName(gn);
-        if (!side) {
-          const tail = halfAndHalfColumnTailSide(catalog);
-          side = tail === "right" ? "right" : "left";
-        }
-        const key = halfAndHalfRemoveSelectionKey(group.id, side);
-        const list = initial[key] ?? [];
-        if (!list.some((m) => m.id === option.id)) list.push(option);
-        initial[key] = list;
-      }
+      setHhSauceLinked(halfAndHalfSaucesMirrored(line.modifiers));
     }
     setEditingLineKey(line.key);
-    setSelectedMods(
-      normalizeHalfAndHalfRemoveSelectionState(item.name, item.modifierGroups, initial) as Record<
-        string,
-        Modifier[]
-      >
-    );
+    setSelectedMods(initial);
     setModifierGroupId(item.modifierGroups[0]?.id ?? "");
     setModifierItem(item);
     setMobilePane("items");

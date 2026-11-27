@@ -2,8 +2,10 @@ import {
   halfAndHalfRemoveSelectionKey,
   halfAndHalfSelectedModifierPicks,
   normalizeHalfAndHalfRemoveSelectionState,
+  pickerStateFromLineModifiers,
   HALF_AND_HALF_PRESET_ITEM,
 } from "../dist/pizzaHalfAndHalfWizard.js";
+import { priceModifierPicks } from "../dist/modifierPricing.js";
 
 const group = { id: "grp-remove", name: '12" Remove Toppings' };
 const mod = { id: "mod-pepperoni", name: "No Pepperoni" };
@@ -43,6 +45,31 @@ if (picks2.length !== 2) {
 }
 if (!picks2.some((p) => p.groupName.includes("LEFT")) || !picks2.some((p) => p.groupName.includes("RIGHT"))) {
   console.error("FAIL: ticket group names must encode side", picks2);
+  process.exit(1);
+}
+
+const pricedGroup = {
+  id: group.id,
+  name: group.name,
+  freeSelect: 0,
+  modifiers: [mod, { id: "mod-ham", name: "No Ham", priceCents: 0 }],
+};
+const priced = priceModifierPicks(HALF_AND_HALF_PRESET_ITEM, [pricedGroup], picks);
+if (!priced[0]?.groupName?.includes("LEFT half")) {
+  console.error("FAIL: priced ticket row must keep LEFT half groupName", priced);
+  process.exit(1);
+}
+
+const hydrated = pickerStateFromLineModifiers(
+  HALF_AND_HALF_PRESET_ITEM,
+  [pricedGroup],
+  [
+    { name: mod.name, modifierId: mod.id, groupName: picks[0].groupName },
+    { name: "12\"", groupName: "Size", modifierId: "sz" },
+  ]
+);
+if ((hydrated[leftKey] ?? []).length !== 1) {
+  console.error("FAIL: edit hydrate must restore left remove", hydrated);
   process.exit(1);
 }
 

@@ -1,4 +1,4 @@
-import { isConsolidatedPizzaItem, tillPizzaModGroupLabel } from "./pizzaTill.js";
+import { isConsolidatedPizzaItem, modifierGroupInchSize, tillPizzaModGroupLabel } from "./pizzaTill.js";
 
 export const HALF_AND_HALF_PRESET_ITEM = "Pizza — Half & half";
 export const HALF_AND_HALF_CYO_ITEM = "Pizza — Half & half (CYO)";
@@ -127,6 +127,90 @@ export function normalizeHalfAndHalfRemoveSelectionState<T>(
 
 export function isHalfAndHalfRemoveGroup(groupName: string): boolean {
   return isPizzaRemoveToppingGroup(halfAndHalfRemoveCatalogGroupName(groupName));
+}
+
+/** Match a persisted ticket modifier row to a catalog modifier group. */
+export function catalogGroupNameMatchesLineModifier(
+  itemName: string,
+  catalogGroupName: string,
+  lineGroupName: string
+): boolean {
+  const line = lineGroupName.trim();
+  const catalog = catalogGroupName.trim();
+  if (line.toLowerCase() === catalog.toLowerCase()) return true;
+  if (isHalfAndHalfWizardItem(itemName) && isHalfAndHalfRemoveGroup(line)) {
+    return (
+      halfAndHalfRemoveCatalogGroupName(line).toLowerCase() ===
+      halfAndHalfRemoveCatalogGroupName(catalog).toLowerCase()
+    );
+  }
+  if (normRole(line) !== normRole(catalog)) return false;
+  const lineInch = modifierGroupInchSize(line);
+  const catalogInch = modifierGroupInchSize(catalog);
+  if (lineInch === null && catalogInch === null) return true;
+  return lineInch === catalogInch;
+}
+
+/** Rebuild till picker state from ticket line modifiers (edit flow). */
+export function pickerStateFromLineModifiers<
+  G extends { id: string; name: string; modifiers: { id: string; name: string }[] }
+>(
+  itemName: string,
+  groups: G[],
+  lineMods: { groupName?: string; name: string; modifierId?: string }[]
+): Record<string, G["modifiers"][number][]> {
+  const initial: Record<string, G["modifiers"][number][]> = {};
+  for (const group of groups) {
+    if (isHalfAndHalfWizardItem(itemName) && isHalfAndHalfRemoveGroup(group.name)) {
+      initial[halfAndHalfRemoveSelectionKey(group.id, "left")] = [];
+      initial[halfAndHalfRemoveSelectionKey(group.id, "right")] = [];
+    }
+  }
+
+  for (const picked of lineMods) {
+    const gn = picked.groupName?.trim();
+    if (!gn) continue;
+
+    if (isHalfAndHalfWizardItem(itemName) && isHalfAndHalfRemoveGroup(gn)) {
+      const catalog = halfAndHalfRemoveCatalogGroupName(gn);
+      const group = groups.find(
+        (g) => isHalfAndHalfRemoveGroup(g.name) && catalogGroupNameMatchesLineModifier(itemName, g.name, gn)
+      );
+      if (!group) continue;
+      const option = group.modifiers.find(
+        (m) => (picked.modifierId && m.id === picked.modifierId) || m.name === picked.name
+      );
+      if (!option) continue;
+      let side = halfAndHalfRemoveTicketSideFromGroupName(gn);
+      if (!side) {
+        const tail = halfAndHalfColumnTailSide(catalog);
+        side = tail === "right" ? "right" : "left";
+      }
+      const key = halfAndHalfRemoveSelectionKey(group.id, side);
+      const list = initial[key] ?? [];
+      if (!list.some((m) => m.id === option.id)) list.push(option);
+      initial[key] = list;
+      continue;
+    }
+
+    const group = groups.find((g) => catalogGroupNameMatchesLineModifier(itemName, g.name, gn));
+    if (!group) continue;
+    const option = group.modifiers.find(
+      (m) => (picked.modifierId && m.id === picked.modifierId) || m.name === picked.name
+    );
+    if (!option) continue;
+    const list = initial[group.id] ?? [];
+    if (!list.some((m) => m.id === option.id)) list.push(option);
+    initial[group.id] = list;
+  }
+
+  if (isHalfAndHalfWizardItem(itemName)) {
+    return normalizeHalfAndHalfRemoveSelectionState(itemName, groups, initial) as Record<
+      string,
+      G["modifiers"][number][]
+    >;
+  }
+  return initial;
 }
 
 export function isHalfAndHalfHalvesColumnGroup(groupName: string): boolean {
@@ -348,8 +432,8 @@ export function halfAndHalfSelectedModifierPicks(
   itemName: string,
   groups: { id: string; name: string }[],
   selected: Record<string, { id: string; name: string }[] | undefined>
-): { modifierId: string; name: string; groupId: string; groupName: string }[] {
-  const rows: { modifierId: string; name: string; groupId: string; groupName: string }[] = [];
+): { modifierId: string; name: string; groupId?: string; groupName: string }[] {
+  const rows: { modifierId: string; name: string; groupId?: string; groupName: string }[] = [];
   for (const group of groups) {
     if (isHalfAndHalfWizardItem(itemName) && isHalfAndHalfRemoveGroup(group.name)) {
       for (const side of ["left", "right"] as const) {
@@ -358,7 +442,6 @@ export function halfAndHalfSelectedModifierPicks(
           rows.push({
             modifierId: option.id,
             name: option.name,
-            groupId: group.id,
             groupName: halfAndHalfRemoveTicketGroupName(group.name, side),
           });
         }
